@@ -26,8 +26,8 @@ messages remain encrypted end-to-end and are never stored in plaintext.
 
 ##### Setup Dockerfiles for:
 
-- [] Chat Server
-- [] Addressing Server
-- [] Client Stub
-- [] The SQL Database?
+- [ ] Chat Server
+- [ ] Addressing Server
+- [ ] Client Stub
+- [ ] The SQL Database?
 
