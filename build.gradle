@@ -1,0 +1,131 @@
+plugins {
+    id("java")
+    id("com.bmuschko.docker-remote-api") version "9.4.0" // Actively maintained Docker plugin
+}
+
+java {
+    sourceSets {
+        named("main") {
+            java.setSrcDirs(listOf("src"))  // Redirecting Gradle to use the current directory structure
+        }
+        named("test") {
+            java.setSrcDirs(listOf("tests"))  // Redirecting for tests
+        }
+    }
+}
+
+repositories {
+    mavenCentral() // Repository used for Java dependencies. Actively maintained
+}
+
+dependencies {
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2") // JSON support (most recent version)
+    testImplementation("org.junit.jupiter:junit-jupiter:5.12.0") // JUnit 5.12 for testing
+}
+
+// Ensuring Gradle uses the most recent version of JUnit
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+}
+
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerStartContainer
+
+
+
+
+// ---------- Chat Server ----------
+
+// Gradle task to automate removal of previous Docker Images.
+// Docker does not automatically garbage collect deprecated Images.
+tasks.register("removeOldChatServerImage") {
+    doLast {
+        exec {
+            commandLine("docker", "rmi", "-f", "cpsc559/team16-chatserver:latest")
+        }
+    }
+}
+
+// Gradle Task to build the Chat Server Docker image
+tasks.register<DockerBuildImage>("buildChatServerDockerImage") {
+    dependsOn("removeOldChatServerImage")
+    inputDir.set(file("."))  // Docker context (root of the project)
+    dockerFile.set(file("docker/chatserver/Dockerfile"))  // Path to Dockerfile
+    tags.add("cpsc559/team16-chatserver:latest")  // Docker image name
+}
+
+// Task to create a Docker container for the Chat Server
+tasks.register<DockerCreateContainer>("createChatServerContainer") {
+    dependsOn("buildChatServerDockerImage")
+    targetImageId.set("cpsc559/team16-chatserver:latest")
+    hostConfig.portBindings.set(listOf("8080:8080")) // Exposing Chat Server on port 8080
+}
+
+// Task to start the Chat Server Docker container
+tasks.register<DockerStartContainer>("startChatServerContainer") {
+    dependsOn("createChatServerContainer")
+    targetContainerId.set(tasks.named<DockerCreateContainer>("createChatServerContainer").get().containerId)
+}
+
+// ---------- Addressing Server ----------
+
+tasks.register("removeOldAddrsServerImage") {
+    doLast {
+        exec {
+            commandLine("docker", "rmi", "-f", "cpsc559/team16-chatserver:latest")
+        }
+    }
+}
+
+// Gradle Task to build the Addressing Server Docker image
+tasks.register<DockerBuildImage>("buildAddressingServerDockerImage") {
+    dependsOn("removeOldAddrsServerImage")
+    inputDir.set(file("."))  // Docker context (root of the project)
+    dockerFile.set(file("docker/addressingserver/Dockerfile"))  // Path to Dockerfile
+    tags.add("cpsc559/team16-addressingserver:latest")  // Docker image name
+}
+
+// Task to create a Docker container for the Addressing Server
+tasks.register<DockerCreateContainer>("createAddressingServerContainer") {
+    dependsOn("buildAddressingServerDockerImage")
+    targetImageId.set("cpsc559/team16-addressingserver:latest")
+    hostConfig.portBindings.set(listOf("5353:5353")) // Exposing Addressing Server on port 5353 (example)
+}
+
+// Task to start the Addressing Server Docker container
+tasks.register<DockerStartContainer>("startAddressingServerContainer") {
+    dependsOn("createAddressingServerContainer")
+    targetContainerId.set(tasks.named<DockerCreateContainer>("createAddressingServerContainer").get().containerId)
+}
+
+// ---------- Client ----------
+
+tasks.register("removeOldClientImage") {
+    doLast {
+        exec {
+            commandLine("docker", "rmi", "-f", "cpsc559/team16-chatserver:latest")
+        }
+    }
+}
+
+// Gradle Task to build the Client Docker image
+tasks.register<DockerBuildImage>("buildClientDockerImage") {
+    dependsOn("removeOldClientImage")
+    inputDir.set(file("."))  // Docker context (root of the project)
+    dockerFile.set(file("docker/client/Dockerfile"))  // Path to Dockerfile
+    tags.add("cpsc559/team16-client:latest")  // Docker image name
+}
+
+// Task to create a Docker container for the Client
+tasks.register<DockerCreateContainer>("createClientContainer") {
+    dependsOn("buildClientDockerImage")
+    targetImageId.set("cpsc559/team16-client:latest")
+    hostConfig.portBindings.set(listOf("8081:8081")) // Exposing Client on port 8081 (example)
+}
+
+// Task to start the Client Docker container
+tasks.register<DockerStartContainer>("startClientContainer") {
+    dependsOn("createClientContainer")
+    targetContainerId.set(tasks.named<DockerCreateContainer>("createClientContainer").get().containerId)
+}
