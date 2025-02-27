@@ -34,12 +34,9 @@ echo. > tests\chatserver\TestChatServer.java
 echo. > tests\addressingserver\TestAddressingServer.java
 echo. > tests\client\TestClient.java
 
-echo. > data\chat_history.dat
 echo. > config\application.properties
 echo. > scripts\deploy.sh
 echo. > scripts\run_tests.sh
-echo. > Makefile
-echo. > .gitignore
-echo. > README.md
 
-echo ✅ Project structure has been created successfully!
+
+echo Done

@@ -33,6 +33,10 @@ messages remain encrypted end-to-end and are never stored in plaintext.
 
 #### Gradle
  - The Gradle build file is written in Kotlin
+ - Ensure you have the most recent version of Gradle installed (8.13) as versions < 8.10 do not support JDK23
+ - We are using a Gradle Wrapper to ensure consistency across team projects
+		- Use the command "gradlew" instead of "gradle"
+ 
 [Build Script Explanation](https://docs.gradle.org/current/userguide/writing_build_scripts.html)
 [Create "tasks" for build automation](https://docs.gradle.org/current/userguide/tutorial_using_tasks.html)
 
@@ -43,6 +47,8 @@ messages remain encrypted end-to-end and are never stored in plaintext.
  - Docker containers are isolated runtime environments that include our compiled Java source files and dependencies.
  - Dockerfiles are placed within a dedicated directory in our repository.
  - Dockerfiles can be modified — the Gradle tasks should not need to be modified unless the build process changes.
+ - 
+ 
  
 ###### We currently have three main Docker containers:
 
@@ -51,9 +57,16 @@ Addressing Server (cpsc559/team16-addressingserver)
 Client (cpsc559/team16-client)
 
 Gradle automatically builds the Docker images for each component when we run:
- - gradle buildChatServerDockerImage
- - gradle buildAddressingServerDockerImage
- - gradle buildClientDockerImage
+ - gradle buildChatServerImage
+ - gradle buildAddressingServerImage
+ - gradle buildClientImage
+
+To create the Containers:
+
+    gradle createChatServerContainer
+    gradle createAddressingServerContainer
+    gradle createClientContainer
+
 
 To start the Containers:
  - gradle startChatServerContainer
