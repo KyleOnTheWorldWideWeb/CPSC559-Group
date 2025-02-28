@@ -1,14 +1,22 @@
-// ✅ Declare plugins at the root level but do not apply them globally
+// Declare plugins at the root level but do not apply them globally
 plugins {
     id("com.bmuschko.docker-remote-api") version "9.4.0" apply false // Each module applies it as needed
 }
+
+
 
 subprojects {
     repositories {
         mavenCentral() // Ensures dependencies are pulled from Maven Central
     }
+    // Ensure that JDK23 is used across ALL modules
+    plugins.withType<JavaPlugin>().configureEach {
+        extensions.configure<JavaPluginExtension> {
+            toolchain.languageVersion.set(JavaLanguageVersion.of(23))
+        }
+    }
 
-    // ✅ Only apply this to Java-based subprojects
+    // Only apply this to Java-based subprojects
     plugins.withId("java") {
         dependencies {
             add("implementation", "com.fasterxml.jackson.core:jackson-databind:2.18.2") // JSON support
