@@ -123,3 +123,35 @@ tasks.register<com.bmuschko.gradle.docker.tasks.container.DockerStartContainer>(
     targetContainerId.set(tasks.named<com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer>("createClientContainer").map { it.containerId.get() }) // ✅ Fixed
 }
 
+
+
+// Apply the Gradle Docker Compose Plugin
+plugins {
+    id("java") // If you are using Java
+    id("com.avast.gradle.docker-compose") version "0.17.6" // Docker Compose Plugin
+}
+
+// Import necessary classes
+import com.avast.gradle.dockercompose.ComposeExtension
+        import java.time.Duration
+
+
+// Configure Docker Compose Plugin
+        dockerCompose {
+            useComposeFiles.set(listOf("docker-compose.yml")) // Specify your compose file(s)
+
+            // Ensures Docker Compose is executed before tests
+            isRequiredBy(tasks.test)
+
+            // Additional configurations
+            waitForTcpPorts.set(true) // Wait for ports before proceeding
+            waitForTcpPortsTimeout.set(Duration.ofMinutes(10)) // ✅ Fix: No `java.` prefix needed
+            stopContainers.set(true) // Stop containers after task execution
+            removeContainers.set(true) // Remove stopped containers
+        }
+
+// Task to bring up Docker services before running tests
+tasks.test {
+    dependsOn("composeUp")
+    finalizedBy("composeDown")
+}

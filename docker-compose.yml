@@ -1,0 +1,34 @@
+services:  # Defines the services (Docker containers) that will be run.
+  
+  chatserver:  # Name of the chat server service
+    image: chatserver:latest  # The Docker image name and tag used to run this service
+    build:
+      context: ./chatserver  # The directory containing the Dockerfile for building this service
+      dockerfile: Dockerfile  # The specific Dockerfile to use for building the image
+    networks:
+      - chat_network  # Connects this service to the 'chat_network' for communication
+    ports:
+      - "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication)
+
+  client:  # Name of the client service
+    image: client:latest  # The Docker image name and tag for the client service
+    build:
+      context: ./client  # The directory where the Dockerfile is located for this service
+      dockerfile: Dockerfile  # Specifies the Dockerfile to use for building the client image
+    networks: # NOT ACCEPTABLE LONG TERM COMMUNICATION METHOD
+      - chat_network  # Connects the client to the 'chat_network' for communication
+
+  addressingserver:  # Name of the addressing server service
+    image: addressingserver:latest  # The Docker image name and tag for this service
+    build:
+      context: ./addressingserver  # The directory where the Dockerfile is located for this service
+      dockerfile: Dockerfile  # Specifies the Dockerfile to use for building the image
+    networks:
+      - chat_network  # Connects this service to the 'chat_network' for inter-service communication
+
+networks:
+  chat_network:  # Defines a custom network for communication between services
+    driver: bridge  # Uses a bridge network, allowing containers to communicate with each other
+
+volumes:
+  db-data:  # Defines a named volume (currently unused in this config but can be used for persistent storage)
