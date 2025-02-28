@@ -7,21 +7,25 @@ import io.github.cpsc559.team16.utilities.ProcessUtils;
  */
 
  import java.net.Socket;
- import javax.net.ssl.SSLSocket; 
+import java.security.MessageDigest;
+
+import javax.net.ssl.SSLSocket; 
  import java.io.*;
+ import java.util.ArrayList;
  import java.util.Scanner;
  import org.json.simple.JSONObject;
 
-import com.fasterxml.jackson.databind.util.JSONPObject;
+ import java.util.Queue;
 
 import java.util.logging.*;
 
  public class Client {
-    private String username; // the name that the Client will use with the Server
-    // something to store messages with?
+    // user data
+    private String username; 
 
-
-    
+    // messaging data
+    private Queue<AbstractMessage> messagQueue; 
+    private AbstractChatLog messageLog; // multiple copies for multiple chats? what defines a chat?    
 
     private static final Logger logger = Logger.getLogger("Client");
 
@@ -35,7 +39,6 @@ import java.util.logging.*;
     public Client(String username, String serverName, int serverPort){
         // sets up client data 
         this.username = username; 
-        // probably needs to establish local copies of message objects? maybe?
 
         // spawns threads and links them
         ConnectionThread connectionThread = new ConnectionThread(serverName, serverPort);
@@ -59,7 +62,6 @@ import java.util.logging.*;
         private InputStream readStream;
         private OutputStream writeStream;
         private int buffSize = 1000 * 32; // size of buffers used by this class for read and write operations
-    
 
         /**
          * Thread constructor
@@ -88,8 +90,31 @@ import java.util.logging.*;
 
         @Override
         public void run(){
+            while(true){
+                // check for new messages in the message queue 
+                // if a message exists:
+                if( !messagQueue.isEmpty()){
+                    // send next message in the queue to the server
+                    this.sendMessage(username, messagQueue.pull());
+                    // should do something to make sure the message is actually sent but idk what
+                }
+                
+                // check for updates from the server (???)
+                // if an update exists:
+                        // pull update
+                        //pass to
 
+            }
         }
+
+        /**
+         * Attempts to reconnect to the address server, should be tried if connection is disconnected
+         * Might still fail.
+         */
+        private void reconnect(){
+            return;
+        }
+
 
         /**
          * Sends a message to the server.
