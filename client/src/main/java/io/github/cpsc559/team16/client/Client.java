@@ -27,6 +27,13 @@ import java.util.logging.*;
     private Queue<AbstractMessage> messagQueue; 
     private AbstractChatLog messageLog; // multiple copies for multiple chats? what defines a chat?    
 
+    // threads
+    private ConnectionThread connectionThread;
+    private InputThread inputThread; 
+    private OutputThread outputThread;
+
+
+    // logging utilities
     private static final Logger logger = Logger.getLogger("Client");
 
     /**
@@ -41,7 +48,13 @@ import java.util.logging.*;
         this.username = username; 
 
         // spawns threads and links them
-        ConnectionThread connectionThread = new ConnectionThread(serverName, serverPort);
+        connectionThread = new ConnectionThread(serverName, serverPort);
+        inputThread = new InputThread();
+        outputThread = new OutputThread();
+
+        // link threads that need to be linked
+        // link input thread and connection thread
+        // link output thread and connection thread
 
     }
 
@@ -62,6 +75,9 @@ import java.util.logging.*;
         private InputStream readStream;
         private OutputStream writeStream;
         private int buffSize = 1000 * 32; // size of buffers used by this class for read and write operations
+
+        // tracks
+        private OutputThread output; // track and inform
 
         /**
          * Thread constructor
@@ -84,6 +100,21 @@ import java.util.logging.*;
         }
 
         /**
+         * Connects this thread to an output thread
+         * @param outputThread
+         */
+        public void link(OutputThread outputThread){
+            this.output = outputThread;
+        }
+
+        /**
+         * Informs the output thread about a new message on the message log (???)
+         */
+        private void notifyOutput(){
+            
+        }
+
+        /**
         * Method that runs when a thread is spawned. 
         * Overwrites the Threads.run() method.
         **/
@@ -95,10 +126,25 @@ import java.util.logging.*;
                 // if a message exists:
                 if( !messagQueue.isEmpty()){
                     // send next message in the queue to the server
-                    this.sendMessage(username, messagQueue.pull());
-                    // should do something to make sure the message is actually sent but idk what
+                    // this section needs to be in a mutex 
+                    AbstractMessage nextMessage = messagQueue.pull();
+                    try{
+                        this.sendMessage(username, messagQueue.pull());
+                        // should do something to make sure the message is actually sent but idk what
+                    }
+                    catch(IOException e){
+                        // help
+                    }
+
+                    // end mutex 
+                    
+                    // add message to local message log
+                    messageLog.add(nextMessage);
+                    // notify the output about a new message on the messageLog
+                    this.notifyOutput();
                 }
-                
+                // else: no new messages to send
+
                 // check for updates from the server (???)
                 // if an update exists:
                         // pull update
@@ -123,7 +169,7 @@ import java.util.logging.*;
          * @param username
          * @param message
          */
-        public void sendMessage(String username, String message){
+        public void sendMessage(String username, String message) throws IOException{
             // help???
             writeStream.write(message);
             writeStream.flush();
@@ -144,10 +190,12 @@ import java.util.logging.*;
      */
     private class InputThread extends Thread{
         private Scanner reader;
-
+       
         public InputThread(){
             this.reader = new Scanner(System.in); // get user input via standred in        
+
         }
+
 
         /**
          * Method that runs when this thread is created.
@@ -156,15 +204,13 @@ import java.util.logging.*;
         public void run(){
             // continually checks for input
             // when input comes in, formats a message `
+            while(true){
+                String messageContent = reader.nextLine(); 
+                // mutext this section
+                messagQueue.add(new Message(username, messageContent)); // add the
+                // end mutext
+            }
         }
-
-        private void getInput(){
-
-        }
-
-
-
-
     }
 
     /**
@@ -172,8 +218,10 @@ import java.util.logging.*;
      */
     private class OutputThread extends Thread{
 
+
         /**
          * Method that runs when this thread is created.
+         * Idk what to put here. Help
          */
         @Override
         public void run(){
