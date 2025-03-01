@@ -27,7 +27,7 @@ import java.util.logging.*;
     private Queue<AbstractMessage> messagQueue; 
     private AbstractChatLog messageLog; // multiple copies for multiple chats? what defines a chat?    
 
-    // threads
+    // threads; grouped to help with shutdown
     private ConnectionThread connectionThread;
     private InputThread inputThread; 
     private OutputThread outputThread;
@@ -53,9 +53,14 @@ import java.util.logging.*;
         outputThread = new OutputThread();
 
         // link threads that need to be linked
-        // link input thread and connection thread
-        // link output thread and connection thread
+        connectionThread.link(outputThread);
 
+        // start threads
+        connectionThread.start();
+        inputThread.start();
+        outputThread.start();
+
+        // client now has very little to do
     }
 
     /**
@@ -63,6 +68,22 @@ import java.util.logging.*;
      * Shuts down threads.
      */
     public void shutdown(){
+        try{
+            connectionThread.join();
+            inputThread.join();
+            outputThread.join();
+        }
+        catch(InterruptedException e){
+            // if the main thread is interupted while waiting on threads
+            // try to close them again
+            if(connectionThread.isAlive()){ connectionThread.interrupt();}
+            if(inputThread.isAlive()){ inputThread.interrupt();}
+            if(outputThread.isAlive()){ outputThread.interrupt();}
+ 
+        }
+        // threads are all closed
+        
+        // do something to save user data here? i guess?
 
     }
     
@@ -72,8 +93,8 @@ import java.util.logging.*;
      */
     private class ConnectionThread extends Thread {
         private Socket cs;
-        private InputStream readStream;
-        private OutputStream writeStream;
+        private InputStream inStream;
+        private OutputStream outStream;
         private int buffSize = 1000 * 32; // size of buffers used by this class for read and write operations
 
         // tracks
@@ -88,12 +109,11 @@ import java.util.logging.*;
             // creates a socket that connects to the server
             try{
                 this.cs = Socket(hostname, portnum);
-                this.readStream = cs.getInputStream();
-                this.writeStream = cs.getOutputStream();
+                this.inStream = cs.getInputStream();
+                this.outStream = cs.getOutputStream();
 
             } catch(IOException e){
                 // handle this error later; Logger
-                //logger.log(null, hostname, e);
                 return; 
             }
             // thread was created correctly?
@@ -134,10 +154,11 @@ import java.util.logging.*;
                     }
                     catch(IOException e){
                         // help
+                        // try reconnect? idk!
                     }
 
                     // end mutex 
-                    
+
                     // add message to local message log
                     messageLog.add(nextMessage);
                     // notify the output about a new message on the messageLog
@@ -182,6 +203,51 @@ import java.util.logging.*;
                       // help!  
         }
 
+        /*
+		* Runs when this thread is interrupted.
+		* Closes socket connection, closes the Input and Output Streams as well as the file object if it exists
+		* After this method runs this thread will kill itself (end)
+		*/
+	   public void interrupt(){
+        // clean up
+        try{
+            // clean up socket and the streams
+            closeSocketStreams();
+
+            // try to close the file related objects (assuming they exist)
+            if(fileReader != null){ // if the file exists
+                fileReader.close(); // close it
+            }
+        }
+        catch(IOException e){
+            e.printStackTrace();
+        }
+        return; // kill self 
+    }
+
+    /**
+     * Wrapper method for closing the connected socket and the associated input-output streams
+     */
+    private void closeSocketStreams() {
+        try{
+            // close the InputStream
+            this.inStream.close();
+
+            // close the OutputStream
+            this.outStream.close();
+
+            // close the socket
+            this.cs.close();
+        }
+        catch(IOException e){
+            e.printStackTrace(); // something went wrong closeing the sockets
+                                 // this thread is already closing itself up
+                                 // so no elegent handling will be done
+            return;
+        }
+    }
+
+
 
     }
 
@@ -211,6 +277,15 @@ import java.util.logging.*;
                 // end mutext
             }
         }
+
+        /**
+         * interupts this thread, performs clean up, and ends itself
+         */
+        public void interrupt(){
+            // clean up
+            reader.close(); // close the Scanner
+            return;
+        }
     }
 
     /**
@@ -227,6 +302,15 @@ import java.util.logging.*;
         public void run(){
 
         }
+
+        /**
+         * interupts this thread, performs clean up, and ends itself
+         */
+        public void interrupt(){
+            // clean up
+            return;
+        }
+
     }
 
 
