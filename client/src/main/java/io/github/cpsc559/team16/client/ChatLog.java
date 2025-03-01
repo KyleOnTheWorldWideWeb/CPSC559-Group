@@ -1,3 +1,6 @@
+package io.github.cpsc559.team16.client;
+import java.util.ArrayList;
+
 /**
  * Simple stub class for what a chatlog should contain
  */

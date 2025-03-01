@@ -1,5 +1,6 @@
 package io.github.cpsc559.team16.client; // this will need to be changed when we restructure things later!
 
+import java.util.Date;
 /**
  * Wrapper class to abstract away what a message even is
  */

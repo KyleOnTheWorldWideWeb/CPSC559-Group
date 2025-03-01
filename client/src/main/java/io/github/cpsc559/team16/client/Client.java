@@ -6,14 +6,13 @@ import io.github.cpsc559.team16.utilities.ProcessUtils;
  * 
  */
 
- import java.net.Socket;
+import java.net.Socket;
 import java.security.MessageDigest;
 
-import javax.net.ssl.SSLSocket; 
- import java.io.*;
- import java.util.ArrayList;
- import java.util.Scanner;
- import org.json.simple.JSONObject;
+import javax.net.ssl.SSLSocket;  
+import java.io.*;
+import java.util.ArrayList;
+import java.util.Scanner;
 
  import java.util.Queue;
 
@@ -108,7 +107,7 @@ import java.util.logging.*;
         public ConnectionThread(String hostname, int portnum)  {
             // creates a socket that connects to the server
             try{
-                this.cs = Socket(hostname, portnum);
+                this.cs = new Socket(hostname, portnum);
                 this.inStream = cs.getInputStream();
                 this.outStream = cs.getOutputStream();
 
@@ -147,9 +146,9 @@ import java.util.logging.*;
                 if( !messagQueue.isEmpty()){
                     // send next message in the queue to the server
                     // this section needs to be in a mutex 
-                    AbstractMessage nextMessage = messagQueue.pull();
+                    AbstractMessage nextMessage = messagQueue.remove();
                     try{
-                        this.sendMessage(username, messagQueue.pull());
+                        this.sendMessage(username, messagQueue.remove());
                         // should do something to make sure the message is actually sent but idk what
                     }
                     catch(IOException e){
@@ -160,7 +159,7 @@ import java.util.logging.*;
                     // end mutex 
 
                     // add message to local message log
-                    messageLog.add(nextMessage);
+                    messageLog.addMessage(nextMessage);
                     // notify the output about a new message on the messageLog
                     this.notifyOutput();
                 }
@@ -190,10 +189,10 @@ import java.util.logging.*;
          * @param username
          * @param message
          */
-        public void sendMessage(String username, String message) throws IOException{
+        public void sendMessage(String username, AbstractMessage message) throws IOException{
             // help???
-            writeStream.write(message);
-            writeStream.flush();
+            //outStream.write();
+            outStream.flush();
         }
         
         /**
@@ -210,18 +209,9 @@ import java.util.logging.*;
 		*/
 	   public void interrupt(){
         // clean up
-        try{
-            // clean up socket and the streams
-            closeSocketStreams();
+        // clean up socket and the streams
+        closeSocketStreams();
 
-            // try to close the file related objects (assuming they exist)
-            if(fileReader != null){ // if the file exists
-                fileReader.close(); // close it
-            }
-        }
-        catch(IOException e){
-            e.printStackTrace();
-        }
         return; // kill self 
     }
 
