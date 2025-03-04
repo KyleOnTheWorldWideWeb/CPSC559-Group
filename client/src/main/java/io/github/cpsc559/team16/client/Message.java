@@ -14,5 +14,11 @@ public class Message extends AbstractMessage{
         this.content = content;
         this.timeSent = new Date();// get current time and date
     }
-    
+
+    @Override
+    public void addMessage(AbstractMessage message) {
+        // TODO: Implement the desired behavior.
+        // Remove throw declaration after method body has been declared
+        throw new UnsupportedOperationException("addMessage is not supported for Message.");
+    }
 }
