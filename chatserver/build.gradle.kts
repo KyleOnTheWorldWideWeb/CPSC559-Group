@@ -4,7 +4,7 @@ import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
 import org.gradle.api.tasks.TaskAction
-
+import java.io.File
 
 // Applying necessary plugins for Java application dev. and Docker support
 plugins {
@@ -167,6 +167,19 @@ val chatserverContainer = tasks.register<DockerCreateContainer>("buildChatServer
     dependsOn("safeRemoveChatServerContainer")
     imageId.set("chatserver:latest")
     containerName.set("chatserver_container")
+
+    // Add environment variables from the .env file
+    val envFile = File(".env")
+    if (envFile.exists()) {
+        envFile.forEachLine { line ->
+            val (key, value) = line.split("=")
+            envVars.put(key, value)
+        }
+    }
+
+    // Map the port from the environment variable
+    val port = envVars.get().getOrDefault("PORT", "2424")
+    hostConfig.portBindings.set(listOf("$port:$port"))
 
     doLast {
         println("ChatServer Container Built - Name: ${containerName.get()}")
