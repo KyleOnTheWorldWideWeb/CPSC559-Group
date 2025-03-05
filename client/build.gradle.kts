@@ -2,6 +2,9 @@
 import com.bmuschko.gradle.docker.tasks.container.*
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
+import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
+import org.gradle.api.tasks.TaskAction
+
 
 // Applying necessary plugins for Java application dev. and Docker support
 plugins {
@@ -29,13 +32,18 @@ application {
 
 // Configure the default jar task to build the client JAR file
 tasks.jar {
+
     // Set the output file name for the JAR
     archiveFileName.set("client.jar")
 
     // Set the directory where the JAR file will be placed
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
 
-    // Configure the manifest file of the JAR
+    /*
+     Configure the manifest file of the JAR.
+     This is how we set the "Main-Class" in the "Manifest" which tells the JVM which class contains the main...
+     ...method that we want the client.jar (fat jar containing all Client module classes) to call when executed.
+     */
     manifest {
         // Add the Main-Class attribute to the manifest.
         // This tells the JVM which class contains the main method to run.
@@ -54,10 +62,12 @@ tasks.register<Jar>("clientFatJar") {
     // Place the JAR in the build/libs directory
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
 
-    // Include the compiled classes of this module (client)
+    // Include the compiled classes of this module (client).
+    // Gradle compiles all the classes in the directory client/src/main/java automatically.
     from(sourceSets.main.get().output)
 
     // *** Explicitly include the compiled classes from the utilities module ***
+    // This is where we must include any other dependencies Classes in this module have - e.g. JSON, Junit, other modules, etc.
     from(project(":utilities").sourceSets.main.get().output)
 
     // Include all runtime dependencies by unpacking their JARs
@@ -73,7 +83,6 @@ tasks.register<Jar>("clientFatJar") {
         attributes("Main-Class" to "io.github.cpsc559.team16.client.ClientTest")
     }
 }
-
 
 
 /*
@@ -94,6 +103,15 @@ tasks.register("buildClientJar") {
     doLast {
         val libsDir = layout.buildDirectory.dir("libs").get().asFile
         println("Client JAR successfully created: ${libsDir}/client.jar")
+    }
+}
+
+abstract class CustomDockerTask : AbstractDockerRemoteApiTask() {
+    @TaskAction
+    fun performTask() {
+        // You have access to dockerClient here.
+        val imageInfo = dockerClient.inspectImageCmd("client:latest").exec()
+        println("Image info: $imageInfo")
     }
 }
 
@@ -137,7 +155,6 @@ tasks.register<DockerRemoveImage>("safeRemoveClientImage") {
         println("Docker image client:latest removed.")
     }
 }
-
 
 
 // Task to remove client_container if it is running.
@@ -191,7 +208,7 @@ tasks.register<DockerRemoveContainer>("removeClientContainer") {
 /*
     Part of a task chain that builds the Docker image from the client module's Dockerfile and runs the corresponding container.
     Composite task: When executed, it will depend on both tasks, but only one of them will actually run because of their onlyIf conditions.
- */
+*/
 tasks.register("safeRemoveClientContainer") {
     group = "docker-client"
     description = "Kills the client container if running; otherwise removes it if it exists."
@@ -202,34 +219,11 @@ tasks.register("safeRemoveClientContainer") {
  Helper function to execute shell commands and return their output as a String.
  This is used to interact with the Docker CLI from within Gradle.
  */
-fun String.runCommand(): String {
-    return ProcessBuilder(*this.split(" ").toTypedArray())
-            .redirectErrorStream(true)
-            .start()
-            .inputStream.bufferedReader().readText()
-}
-
-/*
-    Task to safely remove an existing Docker container named "client_container" if it exists.
-    This prevents conflicts by ensuring a clean state before creating a new container.
-*/
-//tasks.register("safeRemoveClientContainer") {
-//    group = "docker-client"
-//    description = "Removes the client container (client_container) if it exists, otherwise does nothing."
-//
-//    doLast {
-//        // Execute a Docker command to list containers matching the name "client_container"
-//        val result = "docker ps -a --filter \"name=^/client_container\$\" --format \"{{.ID}}\"".runCommand()
-//        if (result.trim().isNotEmpty()) {
-//            dependsOn("killClientContainer")
-////            println("Container 'client_container' exists. Removing it...")
-////            // Force removal of the container, even if it is running
-////            val removeResult = "docker rm -f client_container".runCommand()
-////            println("Removal output: $removeResult")
-//        } else {
-//            println("No container named 'client_container' found; nothing to remove.")
-//        }
-//    }
+//fun String.runCommand(): String {
+//    return ProcessBuilder(*this.split(" ").toTypedArray())
+//            .redirectErrorStream(true)
+//            .start()
+//            .inputStream.bufferedReader().readText()
 //}
 
 /*
@@ -290,31 +284,22 @@ tasks.register<DockerStartContainer>("startNewClientContainer") {
     targetContainerId("client_container")
 }
 
+
+
 /*
     Task to build a new Client Container from the last Client Docker Image and start it.
     Default behavior of this task is to delete any previous client containers.
 */
-tasks.register<DockerStartContainer>("runClientRetainImg") {
+tasks.register("runClientRetainImg") {
     group = "docker-client"
     description = "Builds a new container from the <client:latest> Image and starts it."
-
-    // Only execute if the image <client:latest> exists. If it doesn't, log an error and skip this task.
-    onlyIf {
-        try {
-            // Try to inspect the image. If it exists, exec() returns valid info.
-            val imageInfo = dockerClient.inspectImageCmd("client:latest").exec()
-            imageInfo != null
-        } catch (e: Exception) {
-            println("Image 'client:latest' does not exist: ${e.message}")
-            false
-        }
-    }
     // This wrapper task depends on starting the container and then telling gradle to stream its logs.
-    dependsOn("startNewClientContainer", "streamClientLogs")
+    dependsOn("safeRemoveClientContainer","buildClientImage", "startNewClientContainer","streamClientLogs")
     doLast {
         println("Client container started with image 'client:latest'.")
     }
 }
+
 
 /*
     Task to start a Client Container by first building a new Image from the Client Dockerfile.
