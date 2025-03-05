@@ -106,15 +106,6 @@ tasks.register("buildClientJar") {
     }
 }
 
-abstract class CustomDockerTask : AbstractDockerRemoteApiTask() {
-    @TaskAction
-    fun performTask() {
-        // You have access to dockerClient here.
-        val imageInfo = dockerClient.inspectImageCmd("client:latest").exec()
-        println("Image info: $imageInfo")
-    }
-}
-
 // Task to build the Docker image for the client application using the bmuschko Docker plugin.
 tasks.register<DockerBuildImage>("buildClientImage") {
     group = "docker-client"                          // Categorizes this task under the "docker" group when running `gradlew tasks` to see available tasks
@@ -123,8 +114,11 @@ tasks.register<DockerBuildImage>("buildClientImage") {
     dependsOn("buildClientJar")                // Ensures the JAR is built before Docker runs (compiling everything in the container isn't ideal, especially if we want to spin up many processes)
 
     inputDir.set(file("."))			            // Sets the build context to the current directory (client module)
-    dockerFile.set(file("Dockerfile"))              // Uses the `Dockerfile` located in this directory for building the image
-    images.add("client:latest")                         // Tags the built Docker image as "client:latest"
+    dockerFile.set(file("Dockerfile"))          // Uses the `Dockerfile` located in this directory for building the image
+    images.add("client:latest")                 // Tags the built Docker image as "client:latest"
+    // Print the old Image ID
+    val imageInfo = dockerClient.inspectImageCmd("client:latest").exec()
+    println("Previous client Image ID: ${imageInfo.id}\n")
 }
 
 /*
@@ -150,9 +144,8 @@ tasks.register<DockerRemoveImage>("safeRemoveClientImage") {
             false
         }
     }
-
-    doLast {
-        println("Docker image client:latest removed.")
+    doLast{
+        println("Successfully removed previous client:latest image.")
     }
 }
 
@@ -173,7 +166,7 @@ tasks.register<DockerKillContainer>("killClientContainer") {
             // The returned response includes a 'state' with a 'running' Boolean property.
             val containerInfo = dockerClient.inspectContainerCmd("client_container").exec()
             containerInfo.state.running
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -195,7 +188,7 @@ tasks.register<DockerRemoveContainer>("removeClientContainer") {
             val containerInfo = dockerClient.inspectContainerCmd("client_container").exec()
             // Only remove if the container is not running.
             !containerInfo.state.running
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // If the container does not exist at all, skip removal.
             false
         }
@@ -235,22 +228,21 @@ tasks.register("safeRemoveClientContainer") {
  */
 val clientContainer = tasks.register<DockerCreateContainer>("buildClientContainer") {
     group = "docker-client"
-    description = "Creates a Docker container using the latest client image (client:latest)"
-
-    dependsOn("safeRemoveClientContainer")   // Removes the client_container from the file system (if it exists)
-    imageId.set("client:latest")            // Uses the image built from the Dockerfile
-    containerName.set("client_container")   // Default docker behavior assigns a random container name
+    description = "Creates a Docker container using a new client image (client:latest)"
+    dependsOn("safeRemoveClientContainer", "buildClientImage")   // Removes the client_container from the file system (if it exists)
+    imageId.set("client:latest")                    // Uses the image built from the Dockerfile
+    containerName.set("client_container")           // Default docker behavior assigns a random container name
 
     // ---------- WE CAN DEFINE PORT BINDING HERE ----------------
     // hostConfig.portBindings.set(listOf("8080:8080")) // Port binding (if needed)
 
-    // Printing the container ID to console. Can be removed if desired.
+    // Printing the container name and image ID to console
     doLast {
         println("Client Container Built - Name: ${containerName.get()}")
     }
 }
 
-// Ensures that when both tasks are scheduled, buildClientImage always completes before buildClientContainer starts.
+// Ensures that when both tasks are scheduled, buildClientImage always completes before buildNewClientContainer starts.
 tasks.named("buildClientContainer") {
     mustRunAfter("buildClientImage")
 }
@@ -278,7 +270,6 @@ tasks.register<DockerLogsContainer>("streamClientLogs") {
 tasks.register<DockerStartContainer>("startNewClientContainer") {
     group = "docker-client"
     description = "Builds a new container <client_container> and starts it."
-
     dependsOn(clientContainer) // Ensure the container is created first
     // Since we will only need one client, it is unlikely we need multiple containers per machine.
     targetContainerId("client_container")
@@ -287,29 +278,33 @@ tasks.register<DockerStartContainer>("startNewClientContainer") {
 
 
 /*
-    Task to build a new Client Container from the last Client Docker Image and start it.
-    Default behavior of this task is to delete any previous client containers.
+    Task to delete the current client container and build a new one while retaining the client Image on disk.
+    If there have been any changes to classes in the module the container will be built from a NEW image.
 */
 tasks.register("runClientRetainImg") {
     group = "docker-client"
-    description = "Builds a new container from the <client:latest> Image and starts it."
+    description = "Builds and runs a new Client Container from the current image - deletes the current Container.\n" +
+            "\t\t\t(Dockerfile->Client Image->Client Container)"
     // This wrapper task depends on starting the container and then telling gradle to stream its logs.
-    dependsOn("safeRemoveClientContainer","buildClientImage", "startNewClientContainer","streamClientLogs")
+    dependsOn("safeRemoveClientContainer", "startNewClientContainer", "streamClientLogs")
     doLast {
-        println("Client container started with image 'client:latest'.")
+        println("Client container started from image 'client:latest'. Previous image remains on disk.")
     }
 }
 
 
 /*
-    Task to start a Client Container by first building a new Image from the Client Dockerfile.
-    Default behavior of this task is to delete the client:latest image (if it exists) as well as any client containers.
+This composite task builds a new container from scratch (Dockerfile -> client:latest Image -> client_container Container).
+This task always builds a new client Docker Image and removies the old one from disk.
 */
 tasks.register("runClientWipeImg") {
-    mustRunAfter("safeRemoveClientContainer","safeRemoveClientImage")
     group = "docker-client"
-    description = "Builds a new container from scratch (Dockerfile->Client Image->Client Container)"
+    description = "Builds and runs a new Client Container from a new Image - deletes the current Image and Container in the local directory.\n" +
+            "\t\t\t(Dockerfile->Client Image->Client Container)"
     // Images cannot be removed until the container relying on them is stopped.
     dependsOn("safeRemoveClientContainer","safeRemoveClientImage")
-    dependsOn("buildClientImage", "startNewClientContainer","streamClientLogs")
+    dependsOn("startNewClientContainer","streamClientLogs")
+    doLast {
+        println("Client container started from new image 'client:latest'. Previous image removed from disk.")
+    }
 }

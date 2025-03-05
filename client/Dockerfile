@@ -4,7 +4,8 @@ FROM eclipse-temurin:23-jdk
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy the compiled JAR file from Gradle into the Docker Image (assuming the JAR is built)
+# Copy the compiled JAR file from Gradle <build/libs/client.jar> into ...
+# ... the Docker Image </app/client.jar> (assuming the JAR is built)
 # The jar in this case is a "fat jar" which contains all the classes in the client module compiled into one (fat) jar file.
 COPY build/libs/client.jar /app/client.jar
 
