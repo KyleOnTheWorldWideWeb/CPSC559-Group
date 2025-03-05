@@ -1,4 +1,5 @@
 package io.github.cpsc559.team16.chatserver;
+
 import io.github.cpsc559.team16.utilities.ProcessUtils;
 
 public class ChatServer {
