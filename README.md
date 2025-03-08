@@ -22,14 +22,28 @@ messages remain encrypted end-to-end and are never stored in plaintext.
  - West, Kyle
  - Virdi, Parmeet
 
+###### We currently have four modules that constitute the project:
+- Chat Server (cpsc559/team16-chatserver)
+- Addressing Server (cpsc559/team16-addressingserver)
+- Client (cpsc559/team16-client)
+- Utilities
+
 #### To-Do List:
 
 ##### Setup Dockerfiles for:
+- [X] chatserver
+- [X] addressingserver
+- [X] client
+- [X] utilities
+- [ ] database
 
-- [ ] Chat Server
-- [ ] Addressing Server
-- [ ] Client Stub
-- [ ] The SQL Database?
+##### Setup Gradle Build Files for:
+- [X] Repository (root directory)
+- [X] client Module
+- [X] addressingserver Module
+- [X] chatserver Module
+- [X] utilities Module
+- [ ] database Module
 
 #### Gradle
  - The Gradle build file is written in Kotlin
@@ -51,6 +65,9 @@ messages remain encrypted end-to-end and are never stored in plaintext.
 	- Ensure that your device is registered with your Docker account so that you can use it.
  - Gradle tasks are used to build Docker images from Dockerfiles.
  - You can interact with Docker by:
+	- Using custom Gradlew tasks I (Aidan) made
+   		_- This should be all you need._
+   		_- Type gradlew tasks to see them: Gradle will initiate a build and display all available tasks_
 	- commands directly in the terminal -> docker <some_command>
 	- the Docker Desktop UI
  - Docker images are the blueprints used to create Docker containers.
@@ -63,36 +80,11 @@ messages remain encrypted end-to-end and are never stored in plaintext.
 
  
  
-###### We currently have three main Docker containers:
-
-Chat Server (cpsc559/team16-chatserver)
-Addressing Server (cpsc559/team16-addressingserver)
-Client (cpsc559/team16-client)
-
-Gradle automatically builds the Docker images for each component when we run:
-
-	gradle buildChatServerImage
-	gradle buildAddressingServerImage
-	gradle buildClientImage
-
-To create the Containers:
-
-    gradle createChatServerContainer
-    gradle createAddressingServerContainer
-    gradle createClientContainer
-
-
-To start the Containers:
-
-	gradle startChatServerContainer
-	gradle startAddressingServerContainer
-	gradle startClientContainer
- 
- Q: Where is our compiled Java code? 
- A: Inside the Docker container. Each container includes the necessary files to run the service.
+ Q: Where is our compiled Java code for each module? 
+ A: Inside the Docker container. Each container includes the necessary files to run the service. This is acheived by compiling all classes within a module into a single fat (uber) jar file, before copying the fat jar into a Docker Container.
 
  Q: What happens if a container crashes?
- A: We can restart it manually (gradle startChatServerContainer), or use Docker Compose to auto-restart.
+ A: We can restart it manually. 
  
  Q: Do we need to rebuild the images every time?
- A: Only if code changes. Otherwise, you can just restart the existing containers like any compiled program.
+ A: Only if you have changed the code and want to build a container that reflects those changes. Otherwise, you can just build a container from the current image tagged <module:latest>
