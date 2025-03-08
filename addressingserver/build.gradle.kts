@@ -40,12 +40,15 @@ tasks.register<Jar>("addressingserverFatJar") {
     group = "build"
     description = "Creates a runnable JAR for the AddressingServer application."
     archiveFileName.set("addressingserver.jar")
+    
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
 
     // Include the compiled classes of this module (addressingserver)
     from(sourceSets.main.get().output)
+    
     // Explicitly include the compiled classes from the utilities module
     from(project(":utilities").sourceSets.main.get().output)
+    
     // Include all runtime dependencies by unpacking their JARs
     from({
         configurations.runtimeClasspath.get().filter { it.exists() }.map { zipTree(it) }
@@ -74,13 +77,21 @@ tasks.register("buildAddrServerJar") {
 tasks.register<DockerBuildImage>("buildAddrServerImage") {
     group = "docker-addressing_server"
     description = "Builds the Docker image for the AddressingServer application."
+    
     dependsOn("buildAddrServerJar")
+    
     inputDir.set(file("."))           // Use the module directory as the Docker build context
     dockerFile.set(file("Dockerfile")) // Use the Dockerfile in this directory
     images.add("addrserver:latest") // Tag the image as addrserver:latest
-    // Print the old Image ID
-    val imageInfo = dockerClient.inspectImageCmd("addrserver:latest").exec()
-    println("Previous addressingserver Image ID: ${imageInfo.id}\n")
+    
+    doLast {
+        try {
+            val imageInfo = dockerClient.inspectImageCmd("addrserver:latest").exec()
+            println("Previous addressingserver Image ID: ${imageInfo.id}\n")
+        } catch (e: Exception) {
+            println("No previous image found for 'addrserver:latest'. A new image will be created.")
+        }
+    }
 }
 
 // Task to remove the Docker image if it exists.
@@ -164,7 +175,6 @@ val addrServerContainer = tasks.register<DockerCreateContainer>("buildAddrServer
     }
 }
 
-
 // Ensure the container is created after the image is built.
 tasks.named("buildAddrServerContainer") {
     mustRunAfter("buildAddrServerImage")
@@ -202,7 +212,6 @@ tasks.register("runAddrServerRetainImg") {
     }
 }
 
-
 /*
 This composite task builds a new container from scratch (Dockerfile -> addrserver:latest Image -> addrserver_container Container).
 This task always builds a new addressingserver Docker Image and removes the old one from disk.
@@ -217,14 +226,3 @@ tasks.register("runAddrServerWipeImg") {
         println("Addressing Server container started from new image 'addrserver:latest'. Previous image removed from disk.")
     }
 }
-
-/*
- Helper function to execute shell commands and return their output as a String.
- This is used to interact with the Docker CLI from within Gradle.
- */
-//fun String.runCommand(): String {
-//    return ProcessBuilder(*this.split(" ").toTypedArray())
-//            .redirectErrorStream(true)
-//            .start()
-//            .inputStream.bufferedReader().readText()
-//}
