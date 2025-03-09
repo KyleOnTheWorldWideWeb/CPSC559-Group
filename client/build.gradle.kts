@@ -116,9 +116,18 @@ tasks.register<DockerBuildImage>("buildClientImage") {
     inputDir.set(file("."))			            // Sets the build context to the current directory (client module)
     dockerFile.set(file("Dockerfile"))          // Uses the `Dockerfile` located in this directory for building the image
     images.add("client:latest")                 // Tags the built Docker image as "client:latest"
-    // Print the old Image ID
-    val imageInfo = dockerClient.inspectImageCmd("client:latest").exec()
-    println("Previous client Image ID: ${imageInfo.id}\n")
+    
+    doLast{
+        try{
+            // Print the old Image ID
+            val imageInfo = dockerClient.inspectImageCmd("client:latest").exec()
+            println("Previous client Image ID: ${imageInfo.id}\n")    
+        } catch (e:Exception){
+            println("No previous image found for 'client:latest'. A new image will be created")
+        }
+    }
+    
+    
 }
 
 /*
