@@ -1,10 +1,24 @@
 services:  # Defines the services (Docker containers) that will be run.
-  
+
+  #<name_of_service>: # This is how we declare the "service" aka process we want to create an image of
+    #image: chatserver:latest  # The Docker image name and tag used to run this service
+    #build:
+      #context: ./chatserver  # The directory containing the Dockerfile for building this service
+      #dockerfile: Dockerfile  # The specific Dockerfile to use for building the image
+    #volumes:
+      #- db_data:/var/lib/mysql
+    #networks:
+      #- chat_network  # Connects this service to the 'chat_network' for communication
+    #ports:
+      #- "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication)
+
+
   chatserver:  # Name of the chat server service
-    image: chatserver:latest  # The Docker image name and tag used to run this service
+    image: chatserver:latest  # The Docker image name and tag used to build this service
     build:
       context: ./chatserver  # The directory containing the Dockerfile for building this service
-      dockerfile: Dockerfile  # The specific Dockerfile to use for building the image
+      dockerfile: Dockerfile  # The specific Dockerfile to use for building the image (in the directory referenced above)
+    container_name: chatserver_container
     networks:
       - chat_network  # Connects this service to the 'chat_network' for communication
     ports:
@@ -30,5 +44,9 @@ networks:
   chat_network:  # Defines a custom network for communication between services
     driver: bridge  # Uses a bridge network, allowing containers to communicate with each other
 
+# This is different from the volume we define in a service. This is how we can ensure that any data...configs:
+# ... that is created during the build or execution of the container(s), IS NOT deleted when the container is removed.
+# This is very powerful because it allows us to update our repository (new version), and in turn build new containers...configs:
+# ... without losing the data (chat logs) from previous versions.
 volumes:
   db-data:  # Defines a named volume (currently unused in this config but can be used for persistent storage)
