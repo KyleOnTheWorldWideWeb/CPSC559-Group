@@ -21,8 +21,11 @@ public class ChatServer {
         System.out.printf("Chat Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
 
         // Start the message broadcasting thread
+        // This is in charge of handling outgoing recieved messages.
+        // We spray all messages out to all our clients
         new Thread(ChatServer::broadcastMessages).start();
 
+        // I think we should consider creating a threadpool for this instead of this implementation.
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("ChatServer is listening on port " + port);
 
