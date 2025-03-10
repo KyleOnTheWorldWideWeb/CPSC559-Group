@@ -13,6 +13,14 @@ COPY build/libs/addressingserver.jar /app/addressingserver.jar
 # "io.github.cpsc559.team16.client.Client" specifies which class contains the main method we want the container to launch at startup.
 #CMD ["java", "-cp", "/app/client.jar", "io.github.cpsc559.team16.client.Client"]
 
+# Expose the port the application runs on
+ENV CLIENT_PORT=49800
+ENV REPLICA_PORT=49801
+ENV CHAT_SERVER_PORT=49802
+EXPOSE ${CLIENT_PORT}
+EXPOSE ${REPLICA_PORT}
+EXPOSE ${CHAT_SERVER_PORT}
+
 
 # Defines the default program run by the Docker Container - this
 # You can override CMD by appending a new command to docker run, e.g. -docker run --rm -p 8080:8080 client:latest <relative_path.jar>

@@ -1,11 +1,19 @@
 package io.github.cpsc559.team16.addressingserver;
-import io.github.cpsc559.team16.common.utilities.ProcessUtils;
+// External Dependencies
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.SelectionKey;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional; // Used for conditionals that don't rely on non-null checks
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
 
+
+// Internal (Project) Dependencies
 import io.github.cpsc559.team16.addressingserver.ServerInfo.ServerStatus;
-
+import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
 public class AddressingServer {
@@ -18,27 +26,40 @@ public class AddressingServer {
 
     /**
      * The network address of this Addressing Server.
+     * TODO - Assign dynamically at runtime for replication.
      */
     private final String hostAddress;
 
     /**
      * The port used for client connections.
+     * TODO - Assign dynamically at runtime for replication.
      * Clients use this port to connect and send messages.
      */
-    private final int clientPort;
+    private int clientPort;
 
     /**
      * The port reserved for peer-to-peer communication amongst the
+     * TODO - Assign dynamically at runtime for replication.
      * Primary Addressing Server and it's backups.
      */
-    private final int peerPort;
+    private int replicaPort;
 
     /**
      * The port used for communicating with Chat Servers.
      * This should be the port the chat server used to register itself with the Addressing Server.
      */
-    private final int chatServerPort;
+    private int chatServerPort;
 
+    /**
+     *
+     */
+    private Selector selector;
+    /**
+     *
+     */
+    private ServerSocketChannel chatServerChannel;
+    private ServerSocketChannel clientChannel;
+    private ServerSocketChannel replicaChannel;
     /**
      * A mapping of unique chat server IDs to their corresponding {@link ServerInfo} records.
      * <p>
@@ -68,20 +89,18 @@ public class AddressingServer {
      * This constructor initializes a new, empty address log to track registered chat servers.
      * </p>
      *
-     * @param hostAddress    the network address of the Addressing Server.
-     * @param clientPort     the port used for client connections.
-     * @param peerPort       the port used for peer-to-peer addressing server communication .
-     * @param chatServerPort the port used for chat server communication.
-     *
      * @see #setAddressLog(Map) to assign an address log.
      *
      */
-    public AddressingServer(String hostAddress, int clientPort, int peerPort, int chatServerPort) {
-        this.hostAddress = hostAddress;
-        this.clientPort = clientPort;
-        this.peerPort = peerPort;
-        this.chatServerPort = chatServerPort;
-        addressLog = new HashMap<>();
+    public AddressingServer() {
+        // Print all environment variables for debugging
+        System.out.println("Addressing server network info dump:");
+        System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
+        // Read the network address from the environment variable
+        hostAddress = System.getenv("HOST_ADDRESS");
+        clientPort = Integer.parseInt(System.getenv().getOrDefault("CLIENT_PORT", "49800"));
+        replicaPort = Integer.parseInt(System.getenv().getOrDefault("REPLICA_PORT", "49801"));
+        clientPort = Integer.parseInt(System.getenv().getOrDefault("CHAT_SERVER_PORT", "49802"));
     }
 
     /**
@@ -187,8 +206,58 @@ public class AddressingServer {
 
     }
 
+    /**
+     * Helper method to open and bind a ServerSocketChannel.
+     *
+     * @param port the port number to bind the channel to
+     * @return the opened ServerSocketChannel
+     * @throws IOException if an I/O error occurs while opening or binding the channel
+     */
+    private ServerSocketChannel openServerChannel(int port) throws IOException {
+        ServerSocketChannel channel = ServerSocketChannel.open();
+        channel.configureBlocking(false); // NIO channel set to non-blocking
+        channel.register(selector, SelectionKey.OP_ACCEPT);
+        return channel;
+    }
+
+    /**
+     * FOR USE IN REPLICATION STAGE OF PROJECT
+     * // TODO - Implement methods for all three channels in the 559Project - Replication Iteration
+     *
+     * @param channel
+     */
+    private void setChatServerPort(ServerSocketChannel channel) {
+        try {
+            chatServerChannel.bind(new InetSocketAddress(0));
+            this.chatServerPort = ((InetSocketAddress) channel.getLocalAddress()).getPort();
+            System.out.println("Listening for Chat Servers on Port: " + this.chatServerPort);
+        } catch (IOException ioe) {
+            System.err.println("Chat server failed to bind: " + ioe.getMessage());
+        }
+    }
+
+    /**
+     * Initializes the AddressingServer network access by binding all required NIO channels.
+     *
+     * @throws IOException if binding any channel or opening the selector fails
+     */
+    public void initializeChannels() {
+        try {
+            selector = Selector.open();  // Initializing the selector used to access the multiplexed channels
+            clientChannel = openServerChannel(clientPort);
+            replicaChannel = openServerChannel(replicaPort);
+            chatServerChannel = openServerChannel(chatServerPort);
+        } catch (IOException ioe) {
+            System.err.println("Failed to establish Addressing Server connections: " + ioe.getMessage());
+        }
+
+    }
+
     public static void main(String[] args) {
         System.out.printf("Addressing Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
+
+        AddressingServer server = new AddressingServer();
+        server.initializeChannels();
     }
 
     /**

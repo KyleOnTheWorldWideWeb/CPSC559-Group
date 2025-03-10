@@ -3,6 +3,7 @@ import com.bmuschko.gradle.docker.tasks.container.*
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
+import java.util.Properties  // Used for loading .env file for port bindings
 import org.gradle.api.tasks.TaskAction
 
 // Applying necessary plugins for Java application development and Docker support
@@ -24,6 +25,11 @@ dependencies {
 // Configure the application plugin with the main class for launching the addressingserver.
 application {
     mainClass.set("io.github.cpsc559.team16.addressingserver.AddressingServer")
+}
+
+// Loading the port bindings from the addressingserver .env file
+val envProperties = Properties().apply {
+    file(".env").inputStream().use { load(it) }
 }
 
 // Configure the default jar task to build the addressingserver JAR file
@@ -167,13 +173,43 @@ val addrServerContainer = tasks.register<DockerCreateContainer>("buildAddrServer
     containerName.set("addrserver_container")
 
     // ---------- WE CAN DEFINE PORT BINDING HERE ----------------
-    // hostConfig.portBindings.set(listOf("8080:8080")) // Port binding (if needed)
-
+    hostConfig.portBindings.set(
+            listOf(
+                    "${envProperties.getProperty("CLIENT_PORT")}:${envProperties.getProperty("CLIENT_PORT")}",
+                    "${envProperties.getProperty("REPLICA_PORT")}:${envProperties.getProperty("REPLICA_PORT")}",
+                    "${envProperties.getProperty("CHAT_SERVER_PORT")}:${envProperties.getProperty("CHAT_SERVER_PORT")}"
+            )
+    )
     // Printing the container name and image ID to console
     doLast {
         println("addressingserver Container built - Name: ${containerName.get()}")
     }
 }
+
+// Ensures ll tasks that involve running a container (begin with `run`) are configured with the module specific .env file
+// TODO - We can remove this once/if we start using Docker Compose as it does it all for us!
+//tasks.matching { it.name.startsWith("run") }.configureEach {
+//    doFirst {
+//        def envFile = file('.env')
+//        if (envFile.exists()) {
+//            envFile.eachLine { line ->
+//                line = line.trim()
+//                if (!line || line.startsWith('#')) {
+//                    return
+//                }
+//                def parts = line.split('=', 2)
+//                if (parts.size() == 2) {
+//                    def key = parts[0].trim()
+//                    def value = parts[1].trim()
+//                    environment key, value
+//                }
+//            }
+//        } else {
+//            println ".env file not found, skipping environment variables load."
+//        }
+//    }
+//}
+
 
 // Ensure the container is created after the image is built.
 tasks.named("buildAddrServerContainer") {
@@ -187,6 +223,7 @@ tasks.register<DockerLogsContainer>("streamAddrServerLogs") {
     targetContainerId("addrserver_container")
     follow.set(true)
 }
+
 
 // Task to start the AddrServer container.
 tasks.register<DockerStartContainer>("startNewAddrServerContainer") {
