@@ -19,7 +19,7 @@ plugins {
 */
 
 dependencies {
-    implementation(project(":utilities"))                                   // Adds dependency on the utilities module
+    implementation(project(":common"))                                   // Adds dependency on the utilities module
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 testing framework
 }
@@ -66,9 +66,8 @@ tasks.register<Jar>("clientFatJar") {
     // Gradle compiles all the classes in the directory client/src/main/java automatically.
     from(sourceSets.main.get().output)
 
-    // *** Explicitly include the compiled classes from the utilities module ***
-    // This is where we must include any other dependencies Classes in this module have - e.g. JSON, Junit, other modules, etc.
-    from(project(":utilities").sourceSets.main.get().output)
+    // *** Explicitly include the compiled classes from the common module (Classes shared by several modules) ***
+    from(project(":common").sourceSets.main.get().output)
 
     // Include all runtime dependencies by unpacking their JARs
     from({

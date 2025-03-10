@@ -16,7 +16,7 @@ plugins {
     Declaring dependencies for the addressingserver module.
 */
 dependencies {
-    implementation(project(":utilities"))                                   // Dependency on the utilities module
+    implementation(project(":common"))                                   // Dependency on the common module (utilities, exceptions)
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 for testing
 }
@@ -46,8 +46,8 @@ tasks.register<Jar>("addressingserverFatJar") {
     // Include the compiled classes of this module (addressingserver)
     from(sourceSets.main.get().output)
     
-    // Explicitly include the compiled classes from the utilities module
-    from(project(":utilities").sourceSets.main.get().output)
+    // Explicitly include the compiled classes from the common module
+    from(project(":common").sourceSets.main.get().output)
     
     // Include all runtime dependencies by unpacking their JARs
     from({

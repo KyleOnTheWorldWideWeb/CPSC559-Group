@@ -19,7 +19,7 @@ plugins {
 */
 
 dependencies {
-    implementation(project(":utilities"))                                   // Adds dependency on the utilities module
+    implementation(project(":common"))                                   // Adds dependency on the utilities module
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 testing framework
 }
@@ -52,7 +52,8 @@ tasks.register<Jar>("chatserverFatJar") {
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
 
     from(sourceSets.main.get().output)
-    from(project(":utilities").sourceSets.main.get().output)
+    // Explicitly include the compiled classes from the common module
+    from(project(":common").sourceSets.main.get().output)
 
     from({
         configurations.runtimeClasspath.get().filter { it.exists() }.map { zipTree(it) }

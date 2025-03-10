@@ -1,4 +1,4 @@
-package io.github.cpsc559.team16.utilities;
+package io.github.cpsc559.team16.common.utilities;
 
 public class ProcessUtils {
     /**
@@ -9,7 +9,6 @@ public class ProcessUtils {
         return ProcessHandle.current().pid();
     }
 
-    public static void main(String[] args) {
-        System.out.println("Current PID: " + getPid());
+    public static void main(String[] args) { System.out.println("Current PID: " + getPid());
     }
 }

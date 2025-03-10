@@ -1,6 +1,6 @@
 package io.github.cpsc559.team16.chatserver;
 
-import io.github.cpsc559.team16.utilities.ProcessUtils;
+import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
