@@ -1,5 +1,8 @@
 package io.github.cpsc559.team16.client;
-import io.github.cpsc559.team16.utilities.ProcessUtils;
+import io.github.cpsc559.team16.utilities.ProcessUtils ; 
+import io.github.cpsc559.team16.utilities.BaseMessage ; 
+import io.github.cpsc559.team16.utilities.ClientServerMessage ; 
+
 
 /*
  * Base class for IRC-style application client. 
@@ -22,9 +25,10 @@ import java.util.logging.*;
     // user data
     private String username; 
 
-    // messaging data
-    private Queue<AbstractMessage> messagQueue; 
-    private AbstractChatLog messageLog; // multiple copies for multiple chats? what defines a chat?    
+    // chat messaging data
+    private Queue<AbstractMessage> messagQueue; // a queue for sending messages
+    private Queue<AbstractMessage> toPrintQueue; // a queue for printing messages to the 
+    private AbstractChatLog messageLog;     
 
     // threads; grouped to help with shutdown
     private ConnectionThread connectionThread;
@@ -49,10 +53,7 @@ import java.util.logging.*;
         // spawns threads and links them
         connectionThread = new ConnectionThread(serverName, serverPort);
         inputThread = new InputThread();
-        outputThread = new OutputThread();
-
-        // link threads that need to be linked
-        connectionThread.link(outputThread);
+        outputThread = new OutputThread();;
 
         // start threads
         connectionThread.start();
@@ -88,120 +89,73 @@ import java.util.logging.*;
     
 
     /*
-     * Spawns a thread for handling connection to the server. 
+     * Spawns a thread for handling connection to the server(s). 
      */
     private class ConnectionThread extends Thread {
-        private Socket cs;
+        private Socket css;
         private InputStream inStream;
         private OutputStream outStream;
-        private int buffSize = 1000 * 32; // size of buffers used by this class for read and write operations
+
+
+        // handles reconnection
+        private int reconnectTries = 0; // number of times the client has failed a reconnection
+        private static final int MAX_RECONNECT_TRIES = 5; // the maximum number of times the client can attempt to reconnect before failing.
+
 
         // tracks
         private OutputThread output; // track and inform
 
-        /**
-         * Thread constructor
-         * @param hostname
-         * @param portnum
-         */
-        public ConnectionThread(String hostname, int portnum)  {
-            // creates a socket that connects to the server
-            try{
-                this.cs = new Socket(hostname, portnum);
-                this.inStream = cs.getInputStream();
-                this.outStream = cs.getOutputStream();
+        public ConnectionThread(String address, int port){
 
-            } catch(IOException e){
-                // handle this error later; Logger
-                return; 
-            }
-            // thread was created correctly?
         }
 
         /**
-         * Connects this thread to an output thread
-         * @param outputThread
+         *  Running code for the thread
          */
-        public void link(OutputThread outputThread){
-            this.output = outputThread;
-        }
-
-        /**
-         * Informs the output thread about a new message on the message log (???)
-         */
-        private void notifyOutput(){
-            
-        }
-
-        /**
-        * Method that runs when a thread is spawned. 
-        * Overwrites the Threads.run() method.
-        **/
-
         @Override
         public void run(){
-            while(true){
-                // check for new messages in the message queue 
-                // if a message exists:
-                if( !messagQueue.isEmpty()){
-                    // send next message in the queue to the server
-                    // this section needs to be in a mutex 
-                    AbstractMessage nextMessage = messagQueue.remove();
-                    try{
-                        this.sendMessage(username, messagQueue.remove());
-                        // should do something to make sure the message is actually sent but idk what
-                    }
-                    catch(IOException e){
-                        // help
-                        // try reconnect? idk!
-                    }
 
-                    // end mutex 
-
-                    // add message to local message log
-                    messageLog.addMessage(nextMessage);
-                    // notify the output about a new message on the messageLog
-                    this.notifyOutput();
-                }
-                // else: no new messages to send
-
-                // check for updates from the server (???)
-                // if an update exists:
-                        // pull update
-                        //pass to
-
-            }
+            return;
         }
+        
+
+
 
         /**
-         * Attempts to reconnect to the address server, should be tried if connection is disconnected
-         * Might still fail.
+         * Connects to the addressing server via provided address. 
+         * Connects with a persistent chat server.
          */
-        private void reconnect(){
+        private void connectToAddress(String address, int port){
+
             return;
         }
 
+        /**
+         * Performs handshake with assosiated chat server.
+         * For demo 2 this just means passing a username
+         */
+        private void login(){
+
+        }
 
         /**
-         * Sends a message to the server.
-         * Will need to figure out how to format messages, i think?
-         * 
-         * @param username
-         * @param message
+         * sends a chat message to the associated chat server.
+         * @param message 
          */
-        public void sendMessage(String username, AbstractMessage message) throws IOException{
-            // help???
-            //outStream.write();
-            outStream.flush();
+        private void sendMessage(AbstractMessage message){
+
         }
+
+        /**
+         * Reads a clientServerMessage from the socket and packages it into a chat-Message type.
+         * Passes the parsed Message to the output writer 
+         */
+        private void parseMessage(){
+
+            return;
+        }
+
         
-        /**
-         * Fetches a message log from the server
-         */
-        public void getMessageLog(){
-                      // help!  
-        }
-
         /*
 		* Runs when this thread is interrupted.
 		* Closes socket connection, closes the Input and Output Streams as well as the file object if it exists
@@ -215,10 +169,10 @@ import java.util.logging.*;
         return; // kill self 
     }
 
-    /**
-     * Wrapper method for closing the connected socket and the associated input-output streams
-     */
-    private void closeSocketStreams() {
+        /**
+         * Wrapper method for closing the ChatServer socket and its associated file streams
+        */
+        private void closeSocketStreams() {
         try{
             // close the InputStream
             this.inStream.close();
@@ -227,7 +181,7 @@ import java.util.logging.*;
             this.outStream.close();
 
             // close the socket
-            this.cs.close();
+            this.css.close();
         }
         catch(IOException e){
             e.printStackTrace(); // something went wrong closeing the sockets
@@ -239,7 +193,7 @@ import java.util.logging.*;
 
 
 
-    }
+    } // end ConnectionThread
 
     /**
      *  Spawns a thread for geting user input from the UI (terminal?)
