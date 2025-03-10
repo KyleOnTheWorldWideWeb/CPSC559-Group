@@ -11,7 +11,7 @@ public class ServerInfo {
     /**
      * The network address of the chat server this instance of {@code ServerInfo} is tied to.
      */
-    private String hostAddress;
+    private final String hostAddress;
 
     /*
      * NOTE for team-members: I chose to make ports dynamic as using static port numbers
@@ -25,22 +25,21 @@ public class ServerInfo {
      * The port used for client connections.
      * Clients use this port to connect and send messages.
      */
-    private int clientPort;
+    private final int clientPort;
 
     /**
      * The port used for peer-to-peer gossip communication amongst chat servers.
      */
-    private int peerPort;
+    private final int peerPort;
 
     /**
-     * The port used for communicating with the Addressing Server.
-     * This should be the port the chat server used to register itself with the Addressing Server.
+     * The maximum number of client connections allowed for this server instance.
+     * <p>
+     * This value is dynamic and specifically chosen for each server, reflecting real-world
+     * scenarios where different servers may have different resource constraints.
+     * </p>
      */
-    private int addrServerPort;
-    /**
-     * The maximum number of client connections allowed for this server.
-     */
-    private int maxConnections; // Instance Variable to simulate real world scenarios where server resources are dynamic.
+    private final int maxClientCount;
     /**
      * The number of active client connections currently held by the chat server.
      */
@@ -55,45 +54,42 @@ public class ServerInfo {
      * </ul>
      */
     public enum ServerStatus {
-        ACTIVE, FULL, INACTIVE;
+        ACTIVE, FULL, INACTIVE
     }
     /**
-     * The current status of the server.
+     * The current availability status of the server.
      */
     private ServerStatus status;
 
     public String getHostAddress() { return hostAddress; }
     public int getPeerPort() { return peerPort; }
-    public int getAddrServerPort() { return addrServerPort; }
     public int getClientPort() { return clientPort; }
     public int getClientCount() { return clientCount; }
     public ServerStatus getStatus() { return status; }
 
     // TODO Decide if we are assigning a subset of chat servers to each chat server as its peers -> create instance record.
     /**
-     * Constructs a new {@code ServerInfo} instance with the specified parameters.
+     * Constructs a new {@code ServerInfo} instance with the specified parameters, a default
+     * {@code ACTIVE status} and a starting {@code clientCount} of zero.
      *
      * @param hostAddress The network address of the chat server (IP).
-     * @param addrServerPort The port on which the server listens for addressing server connections.
      * @param peerPort The port on which the server listens for chat server connections from its peers.
      * @param clientPort The port on which the server listens for client connections.
-     * @param clientCount The current number of active client connections.
-     * @param status The current {@link ServerStatus} of the server.
+     * @param maxClientCount The maximum amount of persistent client connections this server should be assigned.
      */
-    public ServerInfo(String hostAddress, int peerPort, int addrServerPort, int clientPort,
-                      int clientCount, ServerStatus status, int maxConnections) {
-        this.maxConnections = maxConnections;
+    public ServerInfo(String hostAddress, int peerPort, int clientPort, int maxClientCount) {
         this.hostAddress = hostAddress;
-        this.addrServerPort = addrServerPort;
         this.peerPort = peerPort;
         this.clientPort = clientPort;
-        this.clientCount = clientCount;
-        this.status = status;
+        this.clientCount = 0;
+        this.maxClientCount = maxClientCount;
+        this.status = ServerStatus.ACTIVE;
     }
 
 
     /**
      * Attempts to add a new client to the server.
+     * TODO - Decide if we want client ID's or addresses recorded in the ServerInfo class
      * Any calling code should perform its own capacity check prior to invocation of this method.
      * It exists as a secondary guard only.
      * <ul>
@@ -138,19 +134,19 @@ public class ServerInfo {
      * Checks if the server has reached its maximum client capacity.
      * <p>
      * This method returns {@code true} if the number of active clients
-     * ({@code clientCount}) is equal to or greater than {@code maxConnections}.
+     * ({@code clientCount}) is equal to or greater than {@code maxClientCount}.
      *
      * @return {@code true} if the server is full, {@code false} otherwise.
      */
     public boolean isFull() {
-        return clientCount >= maxConnections;
+        return clientCount >= maxClientCount;
     }
 
 
     /**
      * Updates the server's status based on the current number of active client connections.
      * <ul>
-     * <li> If {@code clientCount >= maxConnections}, the server is marked as "FULL".</li>
+     * <li> If {@code clientCount >= maxClientCount}, the server is marked as "FULL".</li>
      * <li> Otherwise, the server remains "ACTIVE".</li>
      * </ul>
      * <p>
@@ -165,7 +161,7 @@ public class ServerInfo {
      * @see #markAsActive() For reactivating server status.
      * @see #markAsInactive() For deactivating server during disruptions.
      */
-    public void updateStatus() throws IllegalStateException {
+    private void updateStatus() throws IllegalStateException {
         ServerStatus newStatus = isFull() ? ServerStatus.FULL : ServerStatus.ACTIVE;
         if (newStatus == ServerStatus.FULL && status != ServerStatus.ACTIVE) {
             throw new IllegalStateException("Cannot transition to FULL from " + status);
