@@ -6,15 +6,21 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.cpsc559.team16.utilities.BaseMessage;
+import io.github.cpsc559.team16.utilities.ClientServerMessage;
 
 public class ClientHandler implements Runnable {
     private Socket socket;
     private String username;
     private PrintWriter output;
-    private BlockingQueue<String> messageQueue;
+    private BlockingQueue<BaseMessage> messageQueue;
     private ConcurrentHashMap<String, ClientHandler> clients;
+    private ObjectMapper objectMapper = new ObjectMapper();
 
-    public ClientHandler(Socket socket, BlockingQueue<String> messageQueue, ConcurrentHashMap<String, ClientHandler> clients) {
+    public ClientHandler(Socket socket, BlockingQueue<BaseMessage> messageQueue,
+            ConcurrentHashMap<String, ClientHandler> clients) {
         this.socket = socket;
         this.messageQueue = messageQueue;
         this.clients = clients;
@@ -26,21 +32,38 @@ public class ClientHandler implements Runnable {
             output = new PrintWriter(socket.getOutputStream(), true);
 
             // Read the username
-            username = input.readLine();
-            if (clients.containsKey(username)) {
-                output.println("Username already taken. Connection closed.");
+
+            String loginJson = input.readLine();
+            BaseMessage loginMessage = BaseMessage.fromJson(loginJson, ClientServerMessage.class);
+
+            if (loginMessage instanceof ClientServerMessage) {
+                username = ((ClientServerMessage) loginMessage).getContent();
+
+                if (clients.containsKey(username)) {
+                    sendMessage(
+                            new ClientServerMessage("server", username, "Username already taken. Connection closed."));
+                    socket.close();
+                    return;
+                }
+
+                clients.put(username, this);
+                sendMessage(new ClientServerMessage("server", username, "Welcome, " + username + "!"));
+            } else {
+                sendMessage(new ClientServerMessage("server", "unknown", "Invalid login message."));
                 socket.close();
                 return;
             }
 
-            // Add the client to the list of connected clients
-            clients.put(username, this);
-            output.println("Welcome, " + username + "!");
-
             // Read messages from the client and add them to the message queue
-            String message;
-            while ((message = input.readLine()) != null) {
-                messageQueue.put(username + ": " + message);
+            String messageJson;
+            while ((messageJson = input.readLine()) != null) {
+                try {
+                    // Deserialize JSON to ClientServerMessage
+                    ClientServerMessage message = objectMapper.readValue(messageJson, ClientServerMessage.class);
+                    messageQueue.put(message);
+                } catch (JsonProcessingException e) {
+                    System.err.println("Error parsing message from client: " + e.getMessage());
+                }
             }
         } catch (Exception e) {
             System.err.println("Error handling client connection: " + e.getMessage());
@@ -57,7 +80,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    public void sendMessage(String message) {
+    public void sendMessage(BaseMessage message) {
         output.println(message);
     }
 }

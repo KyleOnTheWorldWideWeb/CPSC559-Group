@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.chatserver;
 
-import io.github.cpsc559.team16.common.utilities.ProcessUtils;
+import io.github.cpsc559.team16.utilities.BaseMessage;
+import io.github.cpsc559.team16.utilities.ProcessUtils;
 
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -10,7 +11,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class ChatServer {
     private static final ConcurrentHashMap<String, ClientHandler> clients = new ConcurrentHashMap<>();
-    private static final BlockingQueue<String> messageQueue = new LinkedBlockingQueue<>();
+    private static final BlockingQueue<BaseMessage> messageQueue = new LinkedBlockingQueue<>();
 
     public static void main(String[] args) {
         // Print all environment variables for debugging
@@ -25,7 +26,8 @@ public class ChatServer {
         // We spray all messages out to all our clients
         new Thread(ChatServer::broadcastMessages).start();
 
-        // I think we should consider creating a threadpool for this instead of this implementation.
+        // I think we should consider creating a threadpool for this instead of this
+        // implementation.
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("ChatServer is listening on port " + port);
 
@@ -51,7 +53,7 @@ public class ChatServer {
         try {
             while (true) {
                 // Take a message from the queue and broadcast it to all clients
-                String message = messageQueue.take();
+                BaseMessage message = messageQueue.take();
                 for (ClientHandler client : clients.values()) {
                     client.sendMessage(message);
                 }
