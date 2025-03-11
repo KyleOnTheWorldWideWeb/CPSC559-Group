@@ -25,22 +25,37 @@ import java.util.logging.*;
     // user data
     private String username; 
 
+    // address server information
+    // in future iterations this will be fetched from a static URL
+    private String address;
+    private int addresssPort;
+    
+    // handles reconnection
+    private int reconnectTries = 0; // number of times the client has failed a reconnection
+    private static final int MAX_RECONNECT_TRIES = 5; // the maximum number of times the client can attempt to reconnect before failing.
+
+    // chat server data
+    private Socket chatServer;
+    private InputStream inStream;
+    private OutputStream outStream; // should only use this for the login attempt
+
+
     // chat messaging data
     private Queue<AbstractMessage> messagQueue; // a queue for sending messages
     private Queue<AbstractMessage> toPrintQueue; // a queue for printing messages to the 
     private AbstractChatLog messageLog;     
 
     // threads; grouped to help with shutdown
-    private ConnectionThread connectionThread;
-    private InputThread inputThread; 
-    private OutputThread outputThread;
+    private FetchMessageThread fetchThread; // thread for fetching messages from the server
+    private InputThread inputThread;  // thread for handling data passing to the UI
+    private OutputThread outputThread; // thread for handling data passing to the UI
 
 
     // logging utilities
     private static final Logger logger = Logger.getLogger("Client");
 
     /**
-     * Client app constructor
+     * Client app constructor. Handles the initial registration with the address server and setting up a connection to the chatServer.
      * 
      *  @param hostname name of the server that is being connected too; should be the address server
      *          (would it make more sense to use INetAddresses if these are hardcoded anyway?)
@@ -49,18 +64,104 @@ import java.util.logging.*;
     public Client(String username, String serverName, int serverPort){
         // sets up client data 
         this.username = username; 
+        this.address = serverName;
+        this.addresssPort = serverPort;
 
-        // spawns threads and links them
-        connectionThread = new ConnectionThread(serverName, serverPort);
-        inputThread = new InputThread();
-        outputThread = new OutputThread();;
+            try {
+                connectToAddress();      
 
-        // start threads
-        connectionThread.start();
-        inputThread.start();
-        outputThread.start();
+                // start UI threads for handling user input
+                inputThread = new InputThread();
+                outputThread = new OutputThread();;
 
-        // client now has very little to do
+                inputThread.start();
+                outputThread.start();
+        
+
+            } catch (Exception e) {
+                // log
+                String message =  "Error occured connecting to address server from Client "+ username + "\n";
+                message += e.getMessage();
+                e.printStackTrace();
+                logger.warning(message);
+
+                shutdown(); // interupt the main thread to shut down the client in a clean way
+                return;
+            }
+            // Client has been properly set up with a chat server
+        }
+
+        /**
+         *  Run the client application.
+         *  
+         */
+        public void run(){
+            AbstractMessage toSend = null; 
+
+                        // later on this could be changed to be triggered by a user command but for now its just automated
+            // log in to the chat server
+            boolean loginSuccess = login();
+
+
+            // start listening for messages from the server
+            fetchThread = new FetchMessageThread(this.chatServer);
+            fetchThread.start();
+
+            // once connected to the
+            while(true){
+                // check for messages to send
+                if(! messagQueue.isEmpty()){
+                    // if a message exists in the message queue attempt to send it
+                    try{
+                        toSend = messagQueue.poll();
+                        sendMessage(toSend);
+                    }  
+                    catch(IOException e){
+                        // attempt to reconnect to the server
+                        reconnect();
+                        messagQueue.add(toSend); // put the message back onto the queue, it should be sent on the next round
+                    }
+                } 
+
+            } // end run loop
+        } // end run()
+
+    /**
+     * Connects to the addressing server via provided address. 
+     * Connects with a persistent chat server.
+    */
+    private void connectToAddress() throws IOException{
+
+        return;
+    }
+
+    /**
+     * Attempts to reconnect to the server network
+     */
+    private void reconnect(){
+        while(reconnectTries < MAX_RECONNECT_TRIES){
+            try {
+                connectToAddress();
+            } catch (Exception e) {
+                // TODO: handle exception
+            }
+        }
+    }
+
+    /**
+     * Performs handshake with assosiated chat server.
+     * For demo 2 this just means passing a username
+    */
+    private boolean login(){
+        return false;
+    }
+
+    /**
+     * sends a chat message to the associated chat server.
+     * @param message 
+    */
+    private void sendMessage(AbstractMessage message) throws IOException{
+
     }
 
     /**
@@ -69,88 +170,65 @@ import java.util.logging.*;
      */
     public void shutdown(){
         try{
-            connectionThread.join();
+            fetchThread.join();
             inputThread.join();
             outputThread.join();
         }
         catch(InterruptedException e){
             // if the main thread is interupted while waiting on threads
             // try to close them again
-            if(connectionThread.isAlive()){ connectionThread.interrupt();}
+            if(fetchThread.isAlive()){ fetchThread.interrupt();}
             if(inputThread.isAlive()){ inputThread.interrupt();}
             if(outputThread.isAlive()){ outputThread.interrupt();}
  
         }
-        // threads are all closed
-        
+        // threads are all closed        
         // do something to save user data here? i guess?
 
     }
     
 
     /*
-     * Spawns a thread for handling connection to the server(s). 
+     * Spawns a thread for handling connection to the chat server specifically for recieving messages from the server 
      */
-    private class ConnectionThread extends Thread {
-        private Socket css;
-        private InputStream inStream;
-        private OutputStream outStream;
-
-
-        // handles reconnection
-        private int reconnectTries = 0; // number of times the client has failed a reconnection
-        private static final int MAX_RECONNECT_TRIES = 5; // the maximum number of times the client can attempt to reconnect before failing.
-
-
-        // tracks
-        private OutputThread output; // track and inform
-
-        public ConnectionThread(String address, int port){
-
-        }
+    private class FetchMessageThread extends Thread {
+        private Socket chatServerSocket;
+        private InputStream csInStream;
+        private OutputStream csOutStream;
 
         /**
-         *  Running code for the thread
+         * establishes communication with the chat server
+         * @param
+         * csSocket     a socket connected to the current chat server
+         */
+        public FetchMessageThread(Socket csSocket){
+            try{
+                this.chatServerSocket = csSocket;
+                this.csInStream = csSocket.getInputStream();
+                this.csOutStream = csSocket.getOutputStream();
+            }
+            catch(IOException e){
+                // log that an error occured
+
+            }
+        }
+
+
+        /**
+         *  Continually attempts to read from the socket to get messages from the server.
+         *  When a message is read adds to the outgoing message queue.
          */
         @Override
         public void run(){
-
-            return;
-        }
-        
-
-
-
-        /**
-         * Connects to the addressing server via provided address. 
-         * Connects with a persistent chat server.
-         */
-        private void connectToAddress(String address, int port){
-
-            return;
+            
         }
 
-        /**
-         * Performs handshake with assosiated chat server.
-         * For demo 2 this just means passing a username
-         */
-        private void login(){
-
-        }
-
-        /**
-         * sends a chat message to the associated chat server.
-         * @param message 
-         */
-        private void sendMessage(AbstractMessage message){
-
-        }
 
         /**
          * Reads a clientServerMessage from the socket and packages it into a chat-Message type.
          * Passes the parsed Message to the output writer 
          */
-        private void parseMessage(){
+        private void parseMessage() throws IOException{
 
             return;
         }
@@ -175,13 +253,13 @@ import java.util.logging.*;
         private void closeSocketStreams() {
         try{
             // close the InputStream
-            this.inStream.close();
+            this.csInStream.close();
 
             // close the OutputStream
-            this.outStream.close();
+            this.csOutStream.close();
 
             // close the socket
-            this.css.close();
+            this.chatServerSocket.close();
         }
         catch(IOException e){
             e.printStackTrace(); // something went wrong closeing the sockets
@@ -258,5 +336,33 @@ import java.util.logging.*;
     }
 
 
+
+    public static void main(String[] args){
+        // from command line get:
+        //  - hardcoded address server hostname 
+        //  - hardcoded address server portnum
+        //  - hardcoded username
+        //  - whatever else we need help
+
+        // get command line args (help!)   
+        String username = "Chloe";
+        String STATIC_SERVER_ADDRESS = "localhost";
+        int STATIIC_PORT = 2424;
+
+        // launch a client 
+        Client client = new Client(username, STATIC_SERVER_ADDRESS, STATIIC_PORT);
+        
+        client.run();
+            
+        // :(
+    
+        }
+     
+
+
+
+
+
+    
 }
 
