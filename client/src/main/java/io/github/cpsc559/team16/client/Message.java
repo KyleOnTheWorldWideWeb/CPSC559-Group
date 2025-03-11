@@ -7,18 +7,36 @@ import java.util.Date;
 public class Message extends AbstractMessage{
     private String sender;
     private String content;
+    private String receiver;
     private Date timeSent;
 
-    public Message(String sender, String content){
+    public Message(String sender, String receiver, String content){
         this.sender = sender;
+        this.receiver = receiver;
         this.content = content;
         this.timeSent = new Date();// get current time and date
     }
 
-    @Override
-    public void addMessage(AbstractMessage message) {
-        // TODO: Implement the desired behavior.
-        // Remove throw declaration after method body has been declared
-        throw new UnsupportedOperationException("addMessage is not supported for Message.");
+    /**
+     * Returns the sender username of the message
+     * @return
+     */
+    public String getSender(){
+        return this.sender;
     }
+
+    /**
+     * Returns the reciever username of the message
+     */
+    public String getReciever(){
+        return this.receiver;
+    }
+
+    /**
+     * returns the message content of the message
+     */
+    public String getContent(){
+        return this.content;
+    }
+
 }

@@ -41,8 +41,8 @@ import java.util.logging.*;
 
 
     // chat messaging data
-    private Queue<AbstractMessage> messagQueue; // a queue for sending messages
-    private Queue<AbstractMessage> toPrintQueue; // a queue for printing messages to the 
+    private Queue<ClientServerMessage> messagQueue; // a queue for sending messages
+    private Queue<ClientServerMessage> toPrintQueue; // a queue for printing messages to the 
     private AbstractChatLog messageLog;     
 
     // threads; grouped to help with shutdown
@@ -76,7 +76,6 @@ import java.util.logging.*;
 
                 inputThread.start();
                 outputThread.start();
-        
 
             } catch (Exception e) {
                 // log
@@ -96,7 +95,7 @@ import java.util.logging.*;
          *  
          */
         public void run(){
-            AbstractMessage toSend = null; 
+            ClientServerMessage toSend = null; 
 
                         // later on this could be changed to be triggered by a user command but for now its just automated
             // log in to the chat server
@@ -127,23 +126,36 @@ import java.util.logging.*;
         } // end run()
 
     /**
-     * Connects to the addressing server via provided address. 
+     * Connects to the addressing server via hardcoded address and port number. 
      * Connects with a persistent chat server.
     */
     private void connectToAddress() throws IOException{
+        try{
+            Socket addressSocket = new Socket(this.address, this.addresssPort); // connect to the port
+
+            // handshake with the address server would go here
+            // for now the address server just sends the Chat server's address and port number as a String
+        }
+        catch(IOException e){  
+            // :((
+
+        }
 
         return;
     }
 
     /**
      * Attempts to reconnect to the server network
-     */
-    private void reconnect(){
+          * @throws InterruptedException 
+          */
+         private void reconnect() {
         while(reconnectTries < MAX_RECONNECT_TRIES){
             try {
                 connectToAddress();
             } catch (Exception e) {
-                // TODO: handle exception
+                // iterate the reconnect tries by 1
+                reconnectTries ++;  
+               // wait a bit before trying again 
             }
         }
     }
@@ -157,10 +169,16 @@ import java.util.logging.*;
     }
 
     /**
-     * sends a chat message to the associated chat server.
+     * Sends a chat message to the associated chat server.
+     * Encapsulates the chat message object into a ClientServerMessage
      * @param message 
     */
-    private void sendMessage(AbstractMessage message) throws IOException{
+    private void sendMessage(ClientServerMessage message) throws IOException{
+        // converts the message into its String format
+        String messageStr = message.toString();
+
+        // sends the message over the socket
+        // waits for an ack?
 
     }
 
@@ -193,8 +211,10 @@ import java.util.logging.*;
      */
     private class FetchMessageThread extends Thread {
         private Socket chatServerSocket;
-        private InputStream csInStream;
-        private OutputStream csOutStream;
+        private InputStream csInStream; 
+        private OutputStream csOutStream; // we probabably will never need this
+
+        private BufferedReader inStream;
 
         /**
          * establishes communication with the chat server
@@ -205,14 +225,28 @@ import java.util.logging.*;
             try{
                 this.chatServerSocket = csSocket;
                 this.csInStream = csSocket.getInputStream();
-                this.csOutStream = csSocket.getOutputStream();
             }
             catch(IOException e){
                 // log that an error occured
-
             }
         }
 
+        /**
+         * Run when the Client reconnects to a new server. 
+         * 
+         * @param newCSSocket
+         */
+        public void reconnect(Socket newCSSocket){
+            try{
+                this.chatServerSocket = newCSSocket;
+                this.csInStream = newCSSocket.getInputStream();
+            }
+            catch(IOException e){
+                // log that an error occured
+                e.printStackTrace();
+                return;
+            }
+        }
 
         /**
          *  Continually attempts to read from the socket to get messages from the server.
@@ -220,7 +254,15 @@ import java.util.logging.*;
          */
         @Override
         public void run(){
-            
+            // assumes client has already logged in, so all messages being read in will be chat messages
+            // attempts to read data in from the client
+
+            while(true){
+                // attempt to read from the inputStream
+
+                // if there is something to read then parseMessage()
+
+            }
         }
 
 
