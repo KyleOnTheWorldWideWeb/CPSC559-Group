@@ -337,7 +337,6 @@ import java.util.logging.*;
             while(true){
                 String messageContent = reader.nextLine(); 
                 // mutext this section
-                messagQueue.add(new Message(username, messageContent)); // add the
                 // end mutext
             }
         }
