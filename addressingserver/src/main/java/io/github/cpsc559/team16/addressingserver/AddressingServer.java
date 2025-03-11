@@ -279,6 +279,12 @@ public class AddressingServer {
         String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
         try {
             createChatServerRecord(chatServerHostAddr, 2424, 2424, 200);
+            // TODO - Implement proper handshaking protocol for Replication iteration
+            String message = "ACK!";
+            ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+            while (buffer.hasRemaining()) {
+                newChatServerChannel.write(buffer);
+            }
         } catch (Exception e) {
             System.err.println("Failed during an attempt to register the chat server with address: " + chatServerHostAddr);
             e.printStackTrace();
@@ -377,7 +383,6 @@ public class AddressingServer {
             System.err.println("Error during main event loop: "+ ioe.getMessage());
             ioe.printStackTrace();
         }
-
     }
 
     /**
