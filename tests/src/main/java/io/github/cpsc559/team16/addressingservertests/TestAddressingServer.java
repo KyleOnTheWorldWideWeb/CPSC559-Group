@@ -65,24 +65,25 @@ public class TestAddressingServer {
         addressingServer.debugPrint(dummyLog.get(1L));
 
         // Attempt to connect to the Addressing Server as a chat-server
-        try (Socket socket = new Socket("127.0.0.1", 49800)) {
+        try (Socket socket = new Socket("host.docker.internal", 49802)) {
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-            String response = reader.readLine(); // Read the response (e.g. "ACK!")
+            String ack = reader.readLine();
+            System.out.println("Received chat server response......" + ack);
+        } catch (IOException e) {
+            System.err.println("An error occured while attempting to register with the addressing server: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        // Attempt to connect to the AddressingServer as a client
+        try (Socket socket = new Socket("host.docker.internal", 49800)) {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            String response = reader.readLine();
             System.out.println("Received chat server address: " + response);
         } catch (IOException e) {
             System.err.println("Error during test client connection: " + e.getMessage());
             e.printStackTrace();
         }
 
-        // Attempt to connect to the AddressingServer as a client
-        try (Socket socket = new Socket("127.0.0.1", 49800)) {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-            String response = reader.readLine(); // Read the response (e.g., "192.168.1.100:4000")
-            System.out.println("Received chat server address: " + response);
-        } catch (IOException e) {
-            System.err.println("Error during test client connection: " + e.getMessage());
-            e.printStackTrace();
-        }
 
         System.out.println("Test stub execution complete.");
     }

@@ -3,6 +3,7 @@ import com.bmuschko.gradle.docker.tasks.container.*
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
+import com.bmuschko.gradle.docker.tasks.network.DockerCreateNetwork
 import java.util.Properties  // Used for loading .env file for port bindings
 import org.gradle.api.tasks.TaskAction
 
@@ -168,47 +169,54 @@ tasks.register("safeRemoveAddrServerContainer") {
 val addrServerContainer = tasks.register<DockerCreateContainer>("buildAddrServerContainer") {
     group = "docker-addressing_server"
     description = "Creates a Docker container using the latest addressingserver image (addrserver:latest)"
-    dependsOn("safeRemoveAddrServerContainer", "buildAddrServerImage")
+    dependsOn("safeRemoveAddrServerContainer", "buildAddrServerImage", "createIRCNetwork")
     imageId.set("addrserver:latest")
     containerName.set("addrserver_container")
 
     // ---------- WE CAN DEFINE PORT BINDING HERE ----------------
-    hostConfig.portBindings.set(
-            listOf(
-                    "${envProperties.getProperty("CLIENT_PORT")}:${envProperties.getProperty("CLIENT_PORT")}",
-                    "${envProperties.getProperty("REPLICA_PORT")}:${envProperties.getProperty("REPLICA_PORT")}",
-                    "${envProperties.getProperty("CHAT_SERVER_PORT")}:${envProperties.getProperty("CHAT_SERVER_PORT")}"
-            )
-    )
+    hostConfig.network.set("my-macvlan-network")
+//    hostConfig.portBindings.set(
+//            listOf(
+//                    "${envProperties.getProperty("CLIENT_PORT")}:${envProperties.getProperty("CLIENT_PORT")}",
+//                    "${envProperties.getProperty("REPLICA_PORT")}:${envProperties.getProperty("REPLICA_PORT")}",
+//                    "${envProperties.getProperty("CHAT_SERVER_PORT")}:${envProperties.getProperty("CHAT_SERVER_PORT")}"
+//            )
+//    )
     // Printing the container name and image ID to console
     doLast {
         println("addressingserver Container built - Name: ${containerName.get()}")
     }
 }
 
-// Ensures ll tasks that involve running a container (begin with `run`) are configured with the module specific .env file
-// TODO - We can remove this once/if we start using Docker Compose as it does it all for us!
-//tasks.matching { it.name.startsWith("run") }.configureEach {
-//    doFirst {
-//        def envFile = file('.env')
-//        if (envFile.exists()) {
-//            envFile.eachLine { line ->
-//                line = line.trim()
-//                if (!line || line.startsWith('#')) {
-//                    return
-//                }
-//                def parts = line.split('=', 2)
-//                if (parts.size() == 2) {
-//                    def key = parts[0].trim()
-//                    def value = parts[1].trim()
-//                    environment key, value
-//                }
-//            }
-//        } else {
-//            println ".env file not found, skipping environment variables load."
-//        }
-//    }
-//}
+
+tasks.register<DockerCreateNetwork>("createIRCNetwork") {
+    group = "docker"
+    description = "Creates a custom Docker network for container communication with external sources."
+    networkName.set("my-macvlan-network")
+    ipam.driver.set("default")
+}
+
+
+tasks.register<DockerCreateNetwork>("createMyMacvlanNetwork") {
+    group = ("docker")
+    description = ("Creates a custom macvlan network that assigns external IP addresses.")
+    networkName.set("my-macvlan-network")
+    ipam.driver.set("macvlan") // Use the macvlan driver to get external IPs
+
+    // Configure IPAM settings for the network.
+    ipam.getDriver().set("default")
+
+    // Optionally, add an IPAM configuration to define a subnet and gateway.
+    ipam.configs.add(
+            project.objects.newInstance(DockerCreateNetwork.Ipam.Config::class.java).apply {
+                // Adjust these values to match your LAN configuration.
+                setSubnet("192.168.1.0/24")
+                setGateway("192.168.1.1")
+            }
+    )
+}
+
+
 
 
 // Ensure the container is created after the image is built.

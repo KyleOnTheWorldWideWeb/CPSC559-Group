@@ -179,13 +179,9 @@ val testAddrServerContainer = tasks.register<DockerCreateContainer>("buildTestAd
     containerName.set("testaddrserver_container")
 
     // Map ports, if your TestAddressingServer also needs them from .env
-    hostConfig.portBindings.set(
-            listOf(
-                    "${envProperties.getProperty("CLIENT_PORT")}:${envProperties.getProperty("CLIENT_PORT")}",
-                    "${envProperties.getProperty("REPLICA_PORT")}:${envProperties.getProperty("REPLICA_PORT")}",
-                    "${envProperties.getProperty("CHAT_SERVER_PORT")}:${envProperties.getProperty("CHAT_SERVER_PORT")}"
-            )
-    )
+    // Map the port from the environment variable
+    val port = envVars.get().getOrDefault("PORT", "2424")
+    hostConfig.portBindings.set(listOf("$port:$port"))
 
     doLast {
         println("TestAddressingServer container built - Name: ${containerName.get()}")

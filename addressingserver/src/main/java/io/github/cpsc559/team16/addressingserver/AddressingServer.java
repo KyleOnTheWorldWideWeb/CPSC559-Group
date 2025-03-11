@@ -14,6 +14,7 @@ import java.net.InetSocketAddress;
 
 // Internal (Project) Dependencies
 import io.github.cpsc559.team16.addressingserver.ServerInfo.ServerStatus;
+import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
@@ -198,6 +199,13 @@ public class AddressingServer {
     private Optional<String> getActiveHost() {
         for (ServerInfo host : addressLog.values()) {
             if (host.getStatus() == ServerStatus.ACTIVE) {
+                try {
+                    host.addClient();
+                } catch (ChatServerFullException csfe) {
+                    System.err.println("Chat Server Full - attempting to find another.");
+                    continue; // Skip over this host and look for another ACTIVE chat server.
+                }
+                debugPrint(host);
                 return Optional.of(host.getHostAddress() + ":" + host.getClientPort());
             }
         }
