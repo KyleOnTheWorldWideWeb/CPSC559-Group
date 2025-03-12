@@ -28,6 +28,8 @@ public class AddressingServer {
 
     /**
      * The network address of this Addressing Server.
+     * The Primary Addressing Server posts this address to the
+     * A-record in the static DNS.
      * TODO - Assign dynamically at runtime for replication.
      */
     private final String hostAddress;
@@ -53,15 +55,31 @@ public class AddressingServer {
     private int chatServerPort;
 
     /**
-     *
+     * The Selector used for multiplexing non-blocking I/O operations on the registered channels.
+     * This allows the AddressingServer to monitor multiple channels using a single thread.
      */
     private Selector selector;
+
     /**
-     *
+     * The ServerSocketChannel that listens for incoming connection requests from chat servers.
+     * When a connection is accepted, a new data channel is created for communicating with that chat server.
      */
-    private ServerSocketChannel chatServerChannel;
-    private ServerSocketChannel clientChannel;
-    private ServerSocketChannel replicaChannel;
+    private ServerSocketChannel chatServerListenerChannel;
+
+    /**
+     * The ServerSocketChannel that listens for incoming connection requests from clients.
+     * When a connection is accepted, a new data channel is created for communicating with that client.
+     * Clients connect to this channel to be assigned to an active chat server.
+     */
+    private ServerSocketChannel clientListenerChannel;
+
+    /**
+     * The ServerSocketChannel that listens for incoming connection requests from replica servers.
+     * This channel is used for establishing (but not maintaining) peer-to-peer communication between
+     * the primary addressing server and its backup replicas.
+     */
+    private ServerSocketChannel replicaListenerChannel;
+
     /**
      * A mapping of unique chat server IDs to their corresponding {@link ServerInfo} records.
      * <p>
@@ -162,17 +180,17 @@ public class AddressingServer {
     private void createChatServerRecord(String chatHostAddress, int chatClientPort,
                                     int chatPeerPort, int maxClientCount) throws Exception {
         try {
-            Long id = generateID();
-            ServerInfo newServer = new ServerInfo(chatHostAddress, chatPeerPort, chatClientPort, maxClientCount);
+            Long serverID = generateID();
+            ServerInfo newServer = new ServerInfo(serverID, chatHostAddress, chatPeerPort, chatClientPort, maxClientCount);
             // Check if the key already existed (should be null for a new key)
-            ServerInfo previous = addressLog.put(id, newServer);
+            ServerInfo previous = addressLog.put(serverID, newServer);
             if (previous != null) {
-                System.err.println("WARNING: A server with ID " + id + " already existed. Overwriting existing entry.");
+                System.err.println("WARNING: A server with ID " + serverID + " already existed. Overwriting existing entry.");
                 // TODO: add logic to skip a range of ID values and re-insert the overwritten record - "previous"
             } else {
-                System.out.println("Server registered successfully with ID " + id);
+                System.out.println("Server registered successfully with ID " + serverID);
                 // TODO: RM debug print statement
-                debugPrint(newServer);
+                debugPrintServer(newServer);
             }
         } catch (Exception e) {
             System.err.println("Error registering chat server: " + e.getMessage());
@@ -202,10 +220,10 @@ public class AddressingServer {
                 try {
                     host.addClient();
                 } catch (ChatServerFullException csfe) {
-                    System.err.println("Chat Server Full - attempting to find another.");
+                    System.err.printf("Chat Server ID #%d Full - attempting to find another.%n", host.getID());
                     continue; // Skip over this host and look for another ACTIVE chat server.
                 }
-                debugPrint(host);
+                debugPrintServer(host);
                 return Optional.of(host.getHostAddress() + ":" + host.getClientPort());
             }
         }
@@ -310,9 +328,9 @@ public class AddressingServer {
     public void initializeChannels() {
         try {
             selector = Selector.open();  // Initializing the selector used to access the multiplexed channels
-            clientChannel = openServerChannel(clientPort);
-            replicaChannel = openServerChannel(replicaPort);
-            chatServerChannel = openServerChannel(chatServerPort);
+            clientListenerChannel = openServerChannel(clientPort);
+            replicaListenerChannel = openServerChannel(replicaPort);
+            chatServerListenerChannel = openServerChannel(chatServerPort);
         } catch (IOException ioe) {
             System.err.println("Failed to establish Addressing Server connections: " + ioe.getMessage());
         }
@@ -347,16 +365,16 @@ public class AddressingServer {
 
                     // Using identity comparison to determine which channel this is and act as a switch statement:
                     // Currently, the only connections that should be persistent are those between addressing server processes.
-                    if (listeningSC == clientChannel) {
+                    if (listeningSC == clientListenerChannel) {
                         try {
                             connectClientToHost(newChannel);
                         } catch (IOException ioe) {
                             System.err.println("Error sending chat server host address to client: " + ioe.getMessage());
                             ioe.printStackTrace();
                         }
-                    } else if (listeningSC == replicaChannel) {
+                    } else if (listeningSC == replicaListenerChannel) {
                         System.out.println("This functionality will be implemented for the Replication Iteration of the project.");
-                    } else if (listeningSC == chatServerChannel) {
+                    } else if (listeningSC == chatServerListenerChannel) {
                         try {
                             registerChatServer(newChannel);
                         } catch (IOException ioe) {
@@ -396,7 +414,7 @@ public class AddressingServer {
     /**
      * Logs the details of this ServerInfo object to the console for debugging purposes.
      */
-    public void debugPrint(ServerInfo s) {
+    public void debugPrintServer(ServerInfo s) {
         System.out.println("---------- ServerInfo Debug ----------");
         System.out.printf("Host Address : %s%n", s.getHostAddress());
         System.out.printf("Client Port  : %d%n", s.getClientPort());
@@ -405,5 +423,18 @@ public class AddressingServer {
         System.out.printf("Status       : %s%n", s.getStatus());
         System.out.println("--------------------------------------");
     }
+
+    public void debugPrintAllServers() {
+        for (ServerInfo s : addressLog.values()){
+            System.out.println("---------- ServerInfo Debug ----------");
+            System.out.printf("Host Address : %s%n", s.getHostAddress());
+            System.out.printf("Client Port  : %d%n", s.getClientPort());
+            System.out.printf("Peer Port    : %d%n", s.getPeerPort());
+            System.out.printf("Client Count : %d%n", s.getClientCount());
+            System.out.printf("Status       : %s%n", s.getStatus());
+            System.out.println("--------------------------------------");
+        }
+    }
+
 
 }

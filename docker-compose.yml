@@ -1,4 +1,5 @@
 services:  # Defines the services (Docker containers) that will be run.
+          # These not be limited to
 
   #<name_of_service>: # This is how we declare the "service" aka process we want to create an image of
     #image: chatserver:latest  # The Docker image name and tag used to run this service
@@ -21,9 +22,14 @@ services:  # Defines the services (Docker containers) that will be run.
     container_name: chatserver_container
     networks:
       - chat_network  # Connects this service to the 'chat_network' for communication
-    ports:
-      - "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication)
+    ports: # NOTE: Port mapping simply exposes the container port to the local host - the container will not have an "outward facing" network address.
+      - "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication).
 
+
+    # we can use volumes to create persistent data storage:
+    # e.g. if we want to use a DB which stores usernames and PW's, we can use a volume
+    # in combination with an SQL database to store information during execution that will remain
+    # even after the container is stopped or deleted.
   client:  # Name of the client service
     image: client:latest  # The Docker image name and tag for the client service
     build:

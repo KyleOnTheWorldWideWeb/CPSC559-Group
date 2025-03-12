@@ -7,7 +7,16 @@ import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
  * An instance of {@code ServerInfo} is created for each chat server when it registers with the Primary Addressing Server.
  */
 public class ServerInfo {
-    // TODO May want to make address and ports FINAL depending on our fault tolerance strategy. i.e. can servers "recover"?
+    // TODO May want to make address and ports FINAL depending on our
+    //  fault tolerance strategy. i.e. can servers "recover"?
+
+    /**
+     * The unique identifier of this server.
+     * Used as a key for the key:value pairs that make up the unified (consistent)
+     * ServerInfo HashMap of records kept by Addressing Servers.
+     */
+    private final Long id;
+
     /**
      * The network address of the chat server this instance of {@code ServerInfo} is tied to.
      */
@@ -61,23 +70,26 @@ public class ServerInfo {
      */
     private ServerStatus status;
 
-    public String getHostAddress() { return hostAddress; }
-    public int getPeerPort() { return peerPort; }
-    public int getClientPort() { return clientPort; }
-    public int getClientCount() { return clientCount; }
-    public ServerStatus getStatus() { return status; }
+    public Long getID() { return this.id; }
+    public String getHostAddress() { return this.hostAddress; }
+    public int getPeerPort() { return this.peerPort; }
+    public int getClientPort() { return this.clientPort; }
+    public int getClientCount() { return this.clientCount; }
+    public ServerStatus getStatus() { return this.status; }
 
     // TODO Decide if we are assigning a subset of chat servers to each chat server as its peers -> create instance record.
     /**
      * Constructs a new {@code ServerInfo} instance with the specified parameters, a default
      * {@code ACTIVE status} and a starting {@code clientCount} of zero.
      *
-     * @param hostAddress The network address of the chat server (IP).
-     * @param peerPort The port on which the server listens for chat server connections from its peers.
-     * @param clientPort The port on which the server listens for client connections.
+     * @param serverID       The unique identifier (key) of the chat server
+     * @param hostAddress    The network address of the chat server (IP).
+     * @param peerPort       The port on which the server listens for chat server connections from its peers.
+     * @param clientPort     The port on which the server listens for client connections.
      * @param maxClientCount The maximum amount of persistent client connections this server should be assigned.
      */
-    public ServerInfo(String hostAddress, int peerPort, int clientPort, int maxClientCount) {
+    public ServerInfo(Long serverID, String hostAddress, int peerPort, int clientPort, int maxClientCount) {
+        this.id = serverID;
         this.hostAddress = hostAddress;
         this.peerPort = peerPort;
         this.clientPort = clientPort;

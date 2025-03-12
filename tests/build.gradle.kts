@@ -2,9 +2,7 @@
 import com.bmuschko.gradle.docker.tasks.container.*
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
-import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
 import java.util.Properties  // Used for loading .env file for port bindings
-import org.gradle.api.tasks.TaskAction
 
 // Applying necessary plugins for Java application development and Docker support
 plugins {
@@ -19,7 +17,6 @@ plugins {
 */
 dependencies {
     implementation(project(":common"))
-    implementation(project(":common"))
     implementation(project(":chatserver"))
     implementation(project(":addressingserver"))
     implementation(project(":client"))
@@ -28,7 +25,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("io.github.cpsc559.team16.addressingservertests.TestAddressingServer")
+    mainClass.set("io.github.cpsc559.team16.tests.TestRunner")
 }
 
 // Load the port bindings from the test module’s .env file
@@ -38,20 +35,20 @@ val envProperties = Properties().apply {
 
 // Configure the default jar task to build the test module’s JAR file
 tasks.jar {
-    archiveFileName.set("addressingserver-tests.jar")
+    archiveFileName.set("tests.jar")
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
     manifest {
         attributes(
-                "Main-Class" to "io.github.cpsc559.team16.addressingservertests.TestAddressingServer"
+                "Main-Class" to "io.github.cpsc559.team16.tests.TestRunner"
         )
     }
 }
 
 // Task to create a fat (uber) JAR that packages the test application along with all its dependencies
-tasks.register<Jar>("addressingserverTestsFatJar") {
+tasks.register<Jar>("testsFatJar") {
     group = "build"
-    description = "Creates a runnable JAR for the AddressingServer tests."
-    archiveFileName.set("addressingserver-tests.jar")
+    description = "Creates a runnable JAR for module testing."
+    archiveFileName.set("tests.jar")
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
 
     // Include the compiled classes of this test module
@@ -70,162 +67,246 @@ tasks.register<Jar>("addressingserverTestsFatJar") {
 
     manifest {
         attributes(
-                "Main-Class" to "io.github.cpsc559.team16.addressingservertests.TestAddressingServer"
+                "Main-Class" to "io.github.cpsc559.team16.tests.TestRunner"
         )
     }
 }
 
 // Task to build and package the tests JAR before the Docker image is created.
-tasks.register("buildTestAddrServerJar") {
+tasks.register("buildTestJar") {
     group = "build"
-    description = "Compiles and packages the addressingserver-tests.jar before the Docker image is built."
-    dependsOn("addressingserverTestsFatJar")
+    description = "Compiles and packages the tests.jar before the Docker image is built."
+    dependsOn("testsFatJar")
     doLast {
         val libsDir = layout.buildDirectory.dir("libs").get().asFile
-        println("Addressing Server Tests JAR successfully created: ${libsDir}/addressingserver-tests.jar")
+        println("CPSC 559(Team 16) - Tests JAR successfully created: ${libsDir}/tests.jar")
     }
 }
 
 // Task to build the Docker image for the test application.
-tasks.register<DockerBuildImage>("buildTestAddrServerImage") {
-    group = "docker-addressing_server_tests"
-    description = "Builds the Docker image for the AddressingServer tests."
-    dependsOn("buildTestAddrServerJar")
+tasks.register<DockerBuildImage>("buildTestImage") {
+    group = "docker-tests"
+    description = "Builds the Docker image for running tests involving all modules in the repository."
+    dependsOn("buildTestJar")
 
     inputDir.set(file("."))            // Use the module directory as the Docker build context
     dockerFile.set(file("Dockerfile")) // Dockerfile must be in this module folder
-    images.add("testaddrserver:latest")
+    images.add("test:latest")
 
     doLast {
         try {
-            val imageInfo = dockerClient.inspectImageCmd("testaddrserver:latest").exec()
-            println("Previous testaddrserver Image ID: ${imageInfo.id}\n")
+            val imageInfo = dockerClient.inspectImageCmd("test:latest").exec()
+            println("Previous test Image ID: ${imageInfo.id}\n")
         } catch (e: Exception) {
-            println("No previous image found for 'testaddrserver:latest'. A new image will be created.")
+            println("No previous image found for 'test:latest'. A new image will be created.")
         }
     }
 }
 
 // Task to remove the Docker image if it exists.
-tasks.register<DockerRemoveImage>("safeRemoveTestAddrServerImage") {
-    group = "docker-addressing_server_tests"
-    description = "Removes the Docker image <testaddrserver:latest> if it exists."
-    targetImageId("testaddrserver:latest")
+tasks.register<DockerRemoveImage>("safeRemoveTestImage") {
+    group = "docker-tests"
+    description = "Removes the Docker image <test:latest> if it exists."
+    targetImageId("test:latest")
     force.set(true)
     onlyIf {
         try {
-            val imageInfo = dockerClient.inspectImageCmd("testaddrserver:latest").exec()
+            val imageInfo = dockerClient.inspectImageCmd("test:latest").exec()
             imageInfo != null
         } catch (e: Exception) {
-            logger.error("Image 'testaddrserver:latest' does not exist: ${e.message}")
+            logger.error("Image 'test:latest' does not exist: ${e.message}")
             false
         }
     }
     doLast {
-        println("Successfully removed previous testaddrserver:latest image.")
+        println("Successfully removed previous test:latest image.")
     }
 }
 
 // Task to kill the test container if it is running.
-tasks.register<DockerKillContainer>("killTestAddrServerContainer") {
-    group = "docker-addressing_server_tests"
-    description = "Kills the test container (testaddrserver_container) if it is running."
-    targetContainerId("testaddrserver_container")
+tasks.register<DockerKillContainer>("killTestContainer") {
+    group = "docker-tests"
+    description = "Kills the test container (test_container) if it is running."
+    targetContainerId("test_container")
     onlyIf {
         try {
-            val containerInfo = dockerClient.inspectContainerCmd("testaddrserver_container").exec()
+            val containerInfo = dockerClient.inspectContainerCmd("test_container").exec()
             containerInfo.state.running
         } catch (e: Exception) {
             false
         }
     }
     doLast {
-        println("Container 'testaddrserver_container' has been killed.")
+        println("Container 'test_container' has been killed.")
     }
 }
 
 // Task to remove the test container if it exists and is not running.
-tasks.register<DockerRemoveContainer>("removeTestAddrServerContainer") {
-    group = "docker-addressing_server_tests"
-    description = "Removes the testaddrserver_container if it is not running."
-    targetContainerId("testaddrserver_container")
+tasks.register<DockerRemoveContainer>("removeTestContainer") {
+    group = "docker-tests"
+    description = "Removes the test_container if it is not running."
+    targetContainerId("test_container")
     force.set(true)
     onlyIf {
         try {
-            val containerInfo = dockerClient.inspectContainerCmd("testaddrserver_container").exec()
+            val containerInfo = dockerClient.inspectContainerCmd("test_container").exec()
             !containerInfo.state.running
         } catch (e: Exception) {
             false
         }
     }
     doLast {
-        println("Container 'testaddrserver_container' has been removed.")
+        println("Container 'test_container' has been removed.")
     }
 }
 
 // Composite task to safely remove the test container.
-tasks.register("safeRemoveTestAddrServerContainer") {
-    group = "docker-addressing_server_tests"
-    description = "Kills the testaddrserver_container if running; otherwise removes it if it exists."
-    dependsOn("killTestAddrServerContainer", "removeTestAddrServerContainer")
+tasks.register("safeRemoveTestContainer") {
+    group = "docker-tests"
+    description = "Kills the test_container if running; otherwise removes it if it exists."
+    dependsOn("killTestContainer", "removeTestContainer")
 }
 
 // Create the test container from the built image.
-val testAddrServerContainer = tasks.register<DockerCreateContainer>("buildTestAddrServerContainer") {
-    group = "docker-addressing_server_tests"
-    description = "Creates a Docker container using the latest testaddrserver image (testaddrserver:latest)."
-    dependsOn("safeRemoveTestAddrServerContainer", "buildTestAddrServerImage")
-    imageId.set("testaddrserver:latest")
-    containerName.set("testaddrserver_container")
+val testContainer = tasks.register<DockerCreateContainer>("buildTestContainer") {
+    group = "docker-tests"
+    description = "Creates a Docker container using the latest test image (test:latest)."
+    dependsOn("safeRemoveTestContainer", "buildTestImage")
+    imageId.set("test:latest")
+    containerName.set("test_container")
 
-    // Map ports, if your TestAddressingServer also needs them from .env
-    // Map the port from the environment variable
-    val port = envVars.get().getOrDefault("PORT", "2424")
-    hostConfig.portBindings.set(listOf("$port:$port"))
+    // Configuring interactive settings
+    hostConfig.apply {
+        tty.set(true)  // Allocate a TTY for interactive shell
+        stdinOpen.set(true)  // Keep STDIN open for interactive input
+    }
+
+    entrypoint.set(listOf("java", "-jar", "tests.jar"))
 
     doLast {
-        println("TestAddressingServer container built - Name: ${containerName.get()}")
+        println("Test container built - Name: ${containerName.get()}")
     }
 }
 
+
 // Ensure the container is created after the image is built
-tasks.named("buildTestAddrServerContainer") {
-    mustRunAfter("buildTestAddrServerImage")
+tasks.named("buildTestContainer") {
+    mustRunAfter("buildTestImage")
 }
 
 // Task to stream logs from the test container
-tasks.register<DockerLogsContainer>("streamTestAddrServerLogs") {
-    group = "docker-addressing_server_tests"
-    description = "Streams logs from the testaddrserver_container to the console."
-    targetContainerId("testaddrserver_container")
+tasks.register<DockerLogsContainer>("streamTestLogs") {
+    group = "docker-tests"
+    description = "Streams logs from the test_container to the console."
+    targetContainerId("test_container")
     follow.set(true)
 }
 
 // Task to start the test container
-tasks.register<DockerStartContainer>("startNewTestAddrServerContainer") {
-    group = "docker-addressing_server_tests"
-    description = "Builds a new container <testaddrserver_container> and starts it."
-    dependsOn(testAddrServerContainer)
-    targetContainerId("testaddrserver_container")
+tasks.register<DockerStartContainer>("startNewTestContainerMacOS") {
+    group = "docker-tests"
+    description = "Builds a new container <test_container> and starts it."
+    dependsOn(testContainer)
+    targetContainerId("test_container")
+    // Ensure interactive mode
+    doLast {
+        println("Launching test container in a new macOS terminal...")
+
+        val runCommand = "docker run --rm -it --name test_container test:latest"
+
+        project.exec {
+            commandLine("osascript", "-e", "tell application \"Terminal\" to do script \"$runCommand\"")
+        }
+    }
+
 }
+
+tasks.register("startNewTestContainerLinux") {
+    group = "docker-tests"
+    description = "Starts a test container in a new terminal window interactively."
+    dependsOn("safeRemoveTestContainer", "buildTestImage")
+
+    doLast {
+        println("Launching test container in a new terminal window...")
+
+        val runCommand = "docker run --rm -it --name test_container test:latest"
+
+        // Linux (GNOME Terminal)
+        project.exec {
+            commandLine("gnome-terminal", "--", "bash", "-c", runCommand)
+        }
+
+        // Alternative for systems using `x-terminal-emulator`
+        // project.exec {
+        //     commandLine("x-terminal-emulator", "-e", runCommand)
+        // }
+    }
+}
+
+tasks.register("startNewTestContainerWindows") {
+    group = "docker-tests"
+    description = "Starts a test container in a new terminal window on Windows."
+    dependsOn("safeRemoveTestContainer", "buildTestImage")
+
+    doLast {
+        println("Launching test container in a new terminal window...")
+
+        val runCommand = "docker run --rm -it --name test_container test:latest"
+
+        // For Windows CMD
+        project.exec {
+            commandLine("cmd", "/c", "start", "cmd", "/k", runCommand)
+        }
+
+        // For Windows PowerShell:
+        // project.exec {
+        //     commandLine("powershell", "-Command", "Start-Process", "powershell", "-ArgumentList", "'-NoExit', '-Command', '$runCommand'")
+        // }
+    }
+}
+
 
 // Composite task to remove container but keep the image
-tasks.register("runTestAddrServerRetainImg") {
-    group = "docker-addressing_server_tests"
-    description = "Builds and runs a TestAddressingServer Container from the current Image. Deletes the current container but preserves the image."
-    dependsOn("safeRemoveTestAddrServerContainer", "startNewTestAddrServerContainer", "streamTestAddrServerLogs")
+tasks.register("runTestRetainImgWindows") {
+    group = "docker-tests"
+    description = "Builds and runs a Test Container from the current Image. Deletes the current container but preserves the image."
+    dependsOn("safeRemoveTestContainer", "startNewTestContainer", "streamTestLogs")
     doLast {
-        println("TestAddressingServer container started from image 'testaddrserver:latest'.")
+        println("Test container started from image 'test:latest'.")
     }
 }
 
-// Composite task to remove both container and image, then build fresh
-tasks.register("runTestAddrServerWipeImg") {
-    group = "docker-addressing_server_tests"
-    description = "Builds and runs a TestAddressingServer container from a new image. Deletes the current container and image."
-    dependsOn("safeRemoveTestAddrServerContainer", "safeRemoveTestAddrServerImage")
-    dependsOn("startNewTestAddrServerContainer", "streamTestAddrServerLogs")
+tasks.register("runTestWindows") {
+    group = "docker-tests"
+    description = "Builds and runs a Test container in a window that is like a terminal but not quite, for proprietary (money) reasons."
+    dependsOn("safeRemoveTestContainer", "safeRemoveTestImage")
+    dependsOn("startNewTestContainerWindows", "streamTestLogs")
     doLast {
-        println("TestAddressingServer container started from new image 'testaddrserver:latest'. Previous image removed from disk.")
+        println("Test container started from new image 'test:latest'. Previous image removed from disk.")
     }
 }
+
+tasks.register("runTestMacOS") {
+    group = "docker-tests"
+    description = "Builds and runs a Test container on a Big Mac"
+    dependsOn("safeRemoveTestContainer", "safeRemoveTestImage")
+    dependsOn("startNewTestContainerWindows", "streamTestLogs")
+    doLast {
+        println("Test container started from new image 'test:latest'. Previous image removed from disk.")
+    }
+}
+
+tasks.register("runTestComputerJesus") {
+    group = "docker-tests"
+    description = "Builds and runs a Test container in a bash terminal for Linux."
+    dependsOn("safeRemoveTestContainer", "safeRemoveTestImage")
+    dependsOn("startNewTestContainerWindows", "streamTestLogs")
+    doLast {
+        println("Test container started from new image 'test:latest'. Previous image removed from disk.")
+    }
+}
+
+
+
+
+
