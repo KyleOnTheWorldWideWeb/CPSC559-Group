@@ -4,6 +4,7 @@ import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
 import org.gradle.api.tasks.TaskAction
+import java.util.*
 
 
 // Applying necessary plugins for Java application dev. and Docker support
@@ -19,7 +20,7 @@ plugins {
 */
 
 dependencies {
-    implementation(project(":utilities"))                                   // Adds dependency on the utilities module
+    implementation(project(":common"))                                   // Adds dependency on the utilities module
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 testing framework
 }
@@ -29,6 +30,12 @@ dependencies {
 application {
     mainClass.set("io.github.cpsc559.team16.client.ClientTest") // Inform Gradle which class contains the main method for launching the app.
 }
+
+// Loading the port bindings from the client .env file
+val envProperties = Properties().apply {
+    file(".env").inputStream().use { load(it) }
+}
+
 
 // Configure the default jar task to build the client JAR file
 tasks.jar {
@@ -66,9 +73,8 @@ tasks.register<Jar>("clientFatJar") {
     // Gradle compiles all the classes in the directory client/src/main/java automatically.
     from(sourceSets.main.get().output)
 
-    // *** Explicitly include the compiled classes from the utilities module ***
-    // This is where we must include any other dependencies Classes in this module have - e.g. JSON, Junit, other modules, etc.
-    from(project(":utilities").sourceSets.main.get().output)
+    // *** Explicitly include the compiled classes from the common module (Classes shared by several modules) ***
+    from(project(":common").sourceSets.main.get().output)
 
     // Include all runtime dependencies by unpacking their JARs
     from({
@@ -243,8 +249,16 @@ val clientContainer = tasks.register<DockerCreateContainer>("buildClientContaine
     containerName.set("client_container")           // Default docker behavior assigns a random container name
 
     // ---------- WE CAN DEFINE PORT BINDING HERE ----------------
-    // hostConfig.portBindings.set(listOf("8080:8080")) // Port binding (if needed)
-
+    // >---------------- WE CAN DEFINE PORT BINDING AND NETWORKS HERE ---------------------<
+    //hostConfig.network.set("my-macvlan-network")
+    hostConfig.portBindings.set(
+            listOf(
+                    "${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}:${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}",
+                    "${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}:${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}",
+            )
+    )
+    println("CLIENT_ADDRSERVER_PORT=${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}")
+    println("CLIENT_CHATSERVER_PORT=${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}")
     // Printing the container name and image ID to console
     doLast {
         println("Client Container Built - Name: ${containerName.get()}")
@@ -317,3 +331,72 @@ tasks.register("runClientWipeImg") {
         println("Client container started from new image 'client:latest'. Previous image removed from disk.")
     }
 }
+
+
+// >-------------------- TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<
+tasks.register("runClientWindows") {
+    group = "docker-client"
+    description = "Builds and runs the Client container in a new Windows CMD terminal (interactive)."
+
+    // Wipe old container & image, then ensure plugin-based container starts
+    dependsOn("safeRemoveClientContainer", "safeRemoveClientImage")
+    dependsOn("startNewClientContainer") // The Gradle DockerStartContainer that starts 'client_container'
+
+    doLast {
+        println("Client container started from new image 'client:latest'. Previous image removed from disk.")
+        println("\nOpening a new Windows CMD window and attaching to client_container...")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+        // Attach to the running container in a new terminal
+        val attachCommand = "docker attach client_container"
+
+        project.exec {
+            commandLine("cmd", "/c", "start", "cmd", "/k", attachCommand)
+        }
+    }
+}
+
+tasks.register("runClientMacOS") {
+    group = "docker-client"
+    description = "Builds and runs the Client container in a new macOS Terminal (interactive)."
+
+    dependsOn("safeRemoveClientContainer", "safeRemoveClientImage")
+    dependsOn("startNewClientContainer")
+
+    doLast {
+        println("Client container started from new image 'client:latest'. Previous image removed from disk.")
+        println("\nOpening a new macOS Terminal window and attaching to client_container...")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+        val attachCommand = "docker attach client_container"
+
+        // Use osascript to open a new macOS Terminal session
+        project.exec {
+            commandLine("osascript", "-e", "tell application \"Terminal\" to do script \"$attachCommand\"")
+        }
+    }
+}
+
+tasks.register("runClientLinux") {
+    group = "docker-client"
+    description = "Builds and runs the Client container in a new Linux terminal (interactive)."
+
+    dependsOn("safeRemoveClientContainer", "safeRemoveClientImage")
+    dependsOn("startNewClientContainer")
+
+    doLast {
+        println("Client container started from new image 'client:latest'. Previous image removed from disk.")
+        println("\nOpening a new Linux terminal and attaching to client_container...")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+        val attachCommand = "docker attach client_container"
+
+        // For GNOME Terminal:
+        project.exec {
+            commandLine("gnome-terminal", "--", "bash", "-c", attachCommand)
+        }
+
+        // If you’re on KDE/XFCE/etc., uncomment this:
+        // project.exec {
+        //     commandLine("x-terminal-emulator", "-e", attachCommand)
+        // }
+    }
+}
+// >-------------------- END OF TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<

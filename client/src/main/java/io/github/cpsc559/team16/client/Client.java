@@ -1,5 +1,4 @@
 package io.github.cpsc559.team16.client;
-import io.github.cpsc559.team16.utilities.ProcessUtils;
 
 /*
  * Base class for IRC-style application client. 
@@ -7,12 +6,9 @@ import io.github.cpsc559.team16.utilities.ProcessUtils;
  */
 
 import java.net.Socket;
-import java.security.MessageDigest;
 
-import javax.net.ssl.SSLSocket;  
-import java.io.*;
-import java.util.ArrayList;
-import java.util.Scanner;
+        import java.io.*;
+        import java.util.Scanner;
 
  import java.util.Queue;
 

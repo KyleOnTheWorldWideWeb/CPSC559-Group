@@ -1,19 +1,30 @@
 package io.github.cpsc559.team16.chatserver;
 
 import io.github.cpsc559.team16.utilities.BaseMessage;
-import io.github.cpsc559.team16.utilities.ProcessUtils;
+import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 public class ChatServer {
     private static final ConcurrentHashMap<String, ClientHandler> clients = new ConcurrentHashMap<>();
     private static final BlockingQueue<BaseMessage> messageQueue = new LinkedBlockingQueue<>();
 
     public static void main(String[] args) {
+        // This timeout is necessary for proper output in the new terminal window..
+        // ... without it, the initial output to console occurs before the terminal is open
+        try {
+            TimeUnit.SECONDS.sleep(1);
+        } catch (Exception e) {System.err.println(e.getMessage());}
+
         // Print all environment variables for debugging
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
 
@@ -29,6 +40,16 @@ public class ChatServer {
         // I think we should consider creating a threadpool for this instead of this
         // implementation.
         try (ServerSocket serverSocket = new ServerSocket(port)) {
+            System.out.print("ChatServer is attempting to connect to addressing server.......");
+            try (Socket addrServerSocket = new Socket("host.docker.internal", 49802)) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(addrServerSocket.getInputStream(), StandardCharsets.UTF_8));
+                String ack = reader.readLine();
+                System.out.println(ack);
+            } catch (IOException e) {
+                System.err.println("An error occured while attempting to register with the addressing server: " + e.getMessage());
+                e.printStackTrace();
+            }
+
             System.out.println("ChatServer is listening on port " + port);
 
             while (true) {

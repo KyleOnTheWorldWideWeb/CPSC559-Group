@@ -3,6 +3,8 @@ import com.bmuschko.gradle.docker.tasks.container.*
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
+import com.bmuschko.gradle.docker.tasks.network.DockerCreateNetwork
+import java.util.Properties  // Used for loading .env file for port bindings
 import org.gradle.api.tasks.TaskAction
 
 // Applying necessary plugins for Java application development and Docker support
@@ -16,7 +18,7 @@ plugins {
     Declaring dependencies for the addressingserver module.
 */
 dependencies {
-    implementation(project(":utilities"))                                   // Dependency on the utilities module
+    implementation(project(":common"))                                   // Dependency on the common module (utilities, exceptions)
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 for testing
 }
@@ -24,6 +26,11 @@ dependencies {
 // Configure the application plugin with the main class for launching the addressingserver.
 application {
     mainClass.set("io.github.cpsc559.team16.addressingserver.AddressingServer")
+}
+
+// Loading the port bindings from the addressingserver .env file
+val envProperties = Properties().apply {
+    file(".env").inputStream().use { load(it) }
 }
 
 // Configure the default jar task to build the addressingserver JAR file
@@ -46,8 +53,8 @@ tasks.register<Jar>("addressingserverFatJar") {
     // Include the compiled classes of this module (addressingserver)
     from(sourceSets.main.get().output)
     
-    // Explicitly include the compiled classes from the utilities module
-    from(project(":utilities").sourceSets.main.get().output)
+    // Explicitly include the compiled classes from the common module
+    from(project(":common").sourceSets.main.get().output)
     
     // Include all runtime dependencies by unpacking their JARs
     from({
@@ -69,7 +76,7 @@ tasks.register("buildAddrServerJar") {
     dependsOn("addressingserverFatJar")
     doLast {
         val libsDir = layout.buildDirectory.dir("libs").get().asFile
-        println("Addressing Server module JAR successfully created: ${libsDir}/addressingserver.jar")
+        println("Addressing Server module fatJAR successfully created: ${libsDir}/addressingserver.jar")
     }
 }
 
@@ -162,18 +169,56 @@ tasks.register("safeRemoveAddrServerContainer") {
 val addrServerContainer = tasks.register<DockerCreateContainer>("buildAddrServerContainer") {
     group = "docker-addressing_server"
     description = "Creates a Docker container using the latest addressingserver image (addrserver:latest)"
+
     dependsOn("safeRemoveAddrServerContainer", "buildAddrServerImage")
     imageId.set("addrserver:latest")
     containerName.set("addrserver_container")
-
-    // ---------- WE CAN DEFINE PORT BINDING HERE ----------------
-    // hostConfig.portBindings.set(listOf("8080:8080")) // Port binding (if needed)
-
+    // >---------------- WE CAN DEFINE PORT BINDING AND NETWORKS HERE ---------------------<
+    //hostConfig.network.set("my-macvlan-network")
+    hostConfig.portBindings.set(
+            listOf(
+                    "${envProperties.getProperty("AS_CLIENT_PORT")}:${envProperties.getProperty("AS_CLIENT_PORT")}",
+                    "${envProperties.getProperty("AS_REPLICA_PORT")}:${envProperties.getProperty("AS_REPLICA_PORT")}",
+                    "${envProperties.getProperty("AS_CHATSERVER_PORT")}:${envProperties.getProperty("AS_CHATSERVER_PORT")}"
+            )
+    )
+    println("AS_CLIENT_PORT=${envProperties.getProperty("AS_CLIENT_PORT")}")
+    println("AS_REPLICA_PORT=${envProperties.getProperty("AS_REPLICA_PORT")}")
+    println("AS_CHATSERVER_PORT=${envProperties.getProperty("AS_CHATSERVER_PORT")}")
     // Printing the container name and image ID to console
     doLast {
         println("addressingserver Container built - Name: ${containerName.get()}")
     }
 }
+
+
+tasks.register<DockerCreateNetwork>("createIRCNetwork") {
+    group = "docker"
+    description = "Creates a custom Docker network for container communication with external sources."
+    networkName.set("my-macvlan-network")
+    ipam.driver.set("default")
+}
+
+
+tasks.register<DockerCreateNetwork>("createMyMacvlanNetwork") {
+    group = ("docker")
+    description = ("Creates a custom macvlan network that assigns external IP addresses.")
+    networkName.set("my-macvlan-network")
+    ipam.driver.set("macvlan") // Use the macvlan driver to get external IPs
+
+    // Configure IPAM settings for the network.
+    ipam.getDriver().set("default")
+
+    // Optionally, add an IPAM configuration to define a subnet and gateway.
+    ipam.configs.add(
+            project.objects.newInstance(DockerCreateNetwork.Ipam.Config::class.java).apply {
+                // Adjust these values to match your LAN configuration.
+                setSubnet("192.168.1.0/24")
+                setGateway("192.168.1.1")
+            }
+    )
+}
+
 
 // Ensure the container is created after the image is built.
 tasks.named("buildAddrServerContainer") {
@@ -187,6 +232,7 @@ tasks.register<DockerLogsContainer>("streamAddrServerLogs") {
     targetContainerId("addrserver_container")
     follow.set(true)
 }
+
 
 // Task to start the AddrServer container.
 tasks.register<DockerStartContainer>("startNewAddrServerContainer") {
@@ -206,7 +252,6 @@ tasks.register("runAddrServerRetainImg") {
             "\t\t\t(Dockerfile -> AddrServer Image -> AddrServer Container)."
     // This wrapper task depends on starting the container and then telling gradle to stream its logs.
     dependsOn("safeRemoveAddrServerContainer", "startNewAddrServerContainer","streamAddrServerLogs")
-    dependsOn()
     doLast {
         println("Addressing Server container started from image 'addrserver:latest'.")
     }
@@ -226,3 +271,75 @@ tasks.register("runAddrServerWipeImg") {
         println("Addressing Server container started from new image 'addrserver:latest'. Previous image removed from disk.")
     }
 }
+
+// >-------------------- TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<
+tasks.register("runAddrServerWindows") {
+    group = "docker-addressing_server"
+    description = "Does the exact same thing as runAddrServerWipeImg but opens a new terminal for the containers output!"
+    dependsOn("safeRemoveAddrServerContainer", "safeRemoveAddrServerImage")
+    dependsOn("startNewAddrServerContainer")
+
+    doLast {
+        println("Addressing Server container started from new image 'addrserver:latest'. Previous image removed from disk.")
+        println("Launching a new Windows terminal.......")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+
+        // Attach to the running container's shell in a new terminal
+        val attachCommand = "docker attach addrserver_container"
+        project.exec {
+            commandLine("cmd", "/c", "start", "cmd", "/k", attachCommand)
+        }
+
+    }
+}
+
+tasks.register("runAddrServerMacOS") {
+    group = "docker-addressing_server"
+    description = "Does the same as runAddrServerWipeImg but opens a new terminal for the container output on macOS!"
+
+    dependsOn("safeRemoveAddrServerContainer", "safeRemoveAddrServerImage")
+    dependsOn("startNewAddrServerContainer")
+
+    doLast {
+        println("Addressing Server container started from new image 'addrserver:latest'. Previous image removed from disk.")
+        println("Launching a new macOS terminal.......")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+
+        // Attach to the running container in a new terminal
+        val attachCommand = "docker attach addrserver_container"
+
+        project.exec {
+            commandLine("osascript", "-e", "tell application \"Terminal\" to do script \"$attachCommand\"")
+        }
+    }
+}
+
+tasks.register("runAddrServerLinux") {
+    group = "docker-addressing_server"
+    description = "Does the same as runAddrServerWipeImg but opens a new terminal for the container output on Linux!"
+
+    dependsOn("safeRemoveAddrServerContainer", "safeRemoveAddrServerImage")
+    dependsOn("startNewAddrServerContainer")
+
+    doLast {
+        println("Addressing Server container started from new image 'addrserver:latest'. Previous image removed from disk.")
+        println("Launching a new Linux terminal.......")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+
+        // Attach to the running container in a new terminal
+        val attachCommand = "docker attach addrserver_container"
+
+        // For GNOME Terminal:
+        project.exec {
+            commandLine("gnome-terminal", "--", "bash", "-c", attachCommand)
+        }
+
+        // If you're on KDE/XFCE/etc., you can use:
+        // project.exec {
+        //     commandLine("x-terminal-emulator", "-e", attachCommand)
+        // }
+    }
+}
+
+
+// >-------------------- END OF TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<
