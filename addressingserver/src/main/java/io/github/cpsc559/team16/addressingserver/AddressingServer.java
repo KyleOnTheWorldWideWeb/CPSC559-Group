@@ -3,13 +3,14 @@ package io.github.cpsc559.team16.addressingserver;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
 import java.net.InetSocketAddress;
-
+import java.util.concurrent.TimeUnit;
 
 
 // Internal (Project) Dependencies
@@ -24,7 +25,7 @@ public class AddressingServer {
      * The number of chat servers that have been registered.
      * Count begins at 1, not zero, because normals don't start at zero.
      */
-    private long chatServerCount;
+    private long idCounter;
 
     /**
      * The network address of this Addressing Server.
@@ -81,6 +82,22 @@ public class AddressingServer {
     private ServerSocketChannel replicaListenerChannel;
 
     /**
+     * Each AddressingServer process has a distinct id amongst its peers.
+     * {@code pid} is used as a 'tie-breaker' during leader elections.
+     */
+    private long pid;
+
+    /**
+     * AddressingServer processes are either:
+     * <ul>
+     *     <li>PRIMARY - the leader process in charge of coordinating connections in the network.</li>
+     *     <li>BACKUP - a `Passive Replica` receiving and retrieving updates.</li>
+     * </ul>
+     *
+     */
+    private String role;
+
+    /**
      * A mapping of unique chat server IDs to their corresponding {@link ServerInfo} records.
      * <p>
      * This address log is used by the AddressingServer to track all registered chat servers
@@ -88,6 +105,16 @@ public class AddressingServer {
      * </p>
      */
     private Map<Long, ServerInfo> addressLog;
+
+    /**
+     * This address log is used by each AddressingServer to track all other addressing servers in the network.
+     * <p>
+     * The implementation of our push protocol for consistency and leader election for fault tolerance is such that
+     * every server in the data structure will be used during updates and elections, so a simple DS (array) is ideal.
+     * </p>
+     * All AddressingServer processes will have {@code ServerInfo.maxClientCount} = 0
+     */
+    private ArrayList<ServerInfo> replicaLog;
 
     /**
      * Represents the leadership status of an addressing server.
@@ -159,7 +186,7 @@ public class AddressingServer {
      * @return a unique {@code Long} representing the chat server's ID.
      */
     private Long generateID() {
-        return ++this.chatServerCount;
+        return ++this.idCounter;
     }
 
     /**
@@ -400,6 +427,11 @@ public class AddressingServer {
     }
 
     public static void main(String[] args) {
+        // This timeout is necessary for proper output in the new terminal window..
+        // ... without it, the initial output to console occurs before the terminal is open
+        try {
+            TimeUnit.SECONDS.sleep(1);
+        } catch (Exception e) {System.err.println(e.getMessage());}
         System.out.printf("Addressing Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
         AddressingServer server = new AddressingServer();
         server.initializeChannels();

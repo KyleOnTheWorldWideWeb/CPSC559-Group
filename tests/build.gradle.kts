@@ -28,9 +28,9 @@ application {
     mainClass.set("io.github.cpsc559.team16.tests.TestRunner")
 }
 
-// Load the port bindings from the test module’s .env file
+// Loading the port bindings from the addressingserver .env file
 val envProperties = Properties().apply {
-    file(".env").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    file(".env").inputStream().use { load(it) }
 }
 
 // Configure the default jar task to build the test module’s JAR file
@@ -175,11 +175,34 @@ val testContainer = tasks.register<DockerCreateContainer>("buildTestContainer") 
     imageId.set("test:latest")
     containerName.set("test_container")
 
-    // Configuring interactive settings
+    //Configuring interactive settings
     hostConfig.apply {
         tty.set(true)  // Allocate a TTY for interactive shell
         stdinOpen.set(true)  // Keep STDIN open for interactive input
     }
+
+    // >---------------- WE CAN DEFINE PORT BINDING AND NETWORKS HERE ---------------------<
+    //hostConfig.network.set("my-macvlan-network")
+    hostConfig.portBindings.set(
+            listOf(
+                    "${envProperties.getProperty("AS_CLIENT_PORT")}:${envProperties.getProperty("AS_CLIENT_PORT")}",
+                    "${envProperties.getProperty("AS_REPLICA_PORT")}:${envProperties.getProperty("AS_REPLICA_PORT")}",
+                    "${envProperties.getProperty("AS_CHATSERVER_PORT")}:${envProperties.getProperty("AS_CHATSERVER_PORT")}",
+                    "${envProperties.getProperty("CS_CLIENT_PORT")}:${envProperties.getProperty("CS_CLIENT_PORT")}",
+                    "${envProperties.getProperty("CS_PEER_PORT")}:${envProperties.getProperty("CS_PEER_PORT")}",
+                    "${envProperties.getProperty("CS_ADDRSERVER_PORT")}:${envProperties.getProperty("CS_ADDRSERVER_PORT")}",
+                    "${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}:${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}",
+                    "${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}:${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}"
+            )
+    )
+    println("AS_CLIENT_PORT=${envProperties.getProperty("AS_CLIENT_PORT")}")
+    println("AS_REPLICA_PORT=${envProperties.getProperty("AS_REPLICA_PORT")}")
+    println("AS_CHATSERVER_PORT=${envProperties.getProperty("AS_CHATSERVER_PORT")}\n")
+    println("CS_CLIENT_PORT=${envProperties.getProperty("CS_CLIENT_PORT")}")
+    println("CS_PEER_PORT=${envProperties.getProperty("CS_PEER_PORT")}")
+    println("CS_ADDRSERVER_PORT=${envProperties.getProperty("CS_ADDRSERVER_PORT")}\n")
+    println("CLIENT_ADDRSERVER_PORT=${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}")
+    println("CLIENT_CHATSERVER_PORT=${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}")
 
     entrypoint.set(listOf("java", "-jar", "tests.jar"))
 
@@ -202,111 +225,77 @@ tasks.register<DockerLogsContainer>("streamTestLogs") {
     follow.set(true)
 }
 
-// Task to start the test container
-tasks.register<DockerStartContainer>("startNewTestContainerMacOS") {
+
+// Task to start the AddrServer container.
+tasks.register<DockerStartContainer>("startNewTestContainer") {
     group = "docker-tests"
     description = "Builds a new container <test_container> and starts it."
     dependsOn(testContainer)
     targetContainerId("test_container")
-    // Ensure interactive mode
-    doLast {
-        println("Launching test container in a new macOS terminal...")
-
-        val runCommand = "docker run --rm -it --name test_container test:latest"
-
-        project.exec {
-            commandLine("osascript", "-e", "tell application \"Terminal\" to do script \"$runCommand\"")
-        }
-    }
-
-}
-
-tasks.register("startNewTestContainerLinux") {
-    group = "docker-tests"
-    description = "Starts a test container in a new terminal window interactively."
-    dependsOn("safeRemoveTestContainer", "buildTestImage")
 
     doLast {
-        println("Launching test container in a new terminal window...")
-
-        val runCommand = "docker run --rm -it --name test_container test:latest"
-
-        // Linux (GNOME Terminal)
-        project.exec {
-            commandLine("gnome-terminal", "--", "bash", "-c", runCommand)
-        }
-
-        // Alternative for systems using `x-terminal-emulator`
-        // project.exec {
-        //     commandLine("x-terminal-emulator", "-e", runCommand)
-        // }
-    }
-}
-
-tasks.register("startNewTestContainerWindows") {
-    group = "docker-tests"
-    description = "Starts a test container in a new terminal window on Windows."
-    dependsOn("safeRemoveTestContainer", "buildTestImage")
-
-    doLast {
-        println("Launching test container in a new terminal window...")
-
-        val runCommand = "docker run --rm -it --name test_container test:latest"
-
-        // For Windows CMD
-        project.exec {
-            commandLine("cmd", "/c", "start", "cmd", "/k", runCommand)
-        }
-
-        // For Windows PowerShell:
-        // project.exec {
-        //     commandLine("powershell", "-Command", "Start-Process", "powershell", "-ArgumentList", "'-NoExit', '-Command', '$runCommand'")
-        // }
+        println("Successfully started test_container with automated platform independant Gradle tasks.")
     }
 }
 
 
-// Composite task to remove container but keep the image
-tasks.register("runTestRetainImgWindows") {
-    group = "docker-tests"
-    description = "Builds and runs a Test Container from the current Image. Deletes the current container but preserves the image."
-    dependsOn("safeRemoveTestContainer", "startNewTestContainer", "streamTestLogs")
-    doLast {
-        println("Test container started from image 'test:latest'.")
-    }
-}
-
+// >-------------------- TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<
 tasks.register("runTestWindows") {
-    group = "docker-tests"
-    description = "Builds and runs a Test container in a window that is like a terminal but not quite, for proprietary (money) reasons."
     dependsOn("safeRemoveTestContainer", "safeRemoveTestImage")
-    dependsOn("startNewTestContainerWindows", "streamTestLogs")
+    dependsOn("startNewTestContainer") // Actually start the container with port bindings
+
     doLast {
-        println("Test container started from new image 'test:latest'. Previous image removed from disk.")
+        println("Launching a new Windows CMD and attaching interactively...")
+        // Attach to the running container's shell in a new terminal
+        val attachCommand = "docker attach test_container"
+        project.exec {
+            commandLine("cmd", "/c", "start", "cmd", "/k", attachCommand)
+        }
+
     }
 }
 
 tasks.register("runTestMacOS") {
     group = "docker-tests"
-    description = "Builds and runs a Test container on a Big Mac"
+    description = "Builds and runs a Test container in a new macOS Terminal."
+
     dependsOn("safeRemoveTestContainer", "safeRemoveTestImage")
-    dependsOn("startNewTestContainerWindows", "streamTestLogs")
+    dependsOn("startNewTestContainer")
+
     doLast {
-        println("Test container started from new image 'test:latest'. Previous image removed from disk.")
+        println("Launching a new macOS Terminal and attaching interactively...")
+
+        val attachCommand = "docker attach test_container"
+
+        // Open a new macOS Terminal window and run the attach command.
+        project.exec {
+            commandLine("osascript", "-e", "tell application \"Terminal\" to do script \"$attachCommand\"")
+        }
     }
 }
 
-tasks.register("runTestComputerJesus") {
+tasks.register("runTestLinux") {
     group = "docker-tests"
-    description = "Builds and runs a Test container in a bash terminal for Linux."
+    description = "WARNING: For 1337∪$3R only. Builds and runs a Test container in a new Linux terminal."
+
     dependsOn("safeRemoveTestContainer", "safeRemoveTestImage")
-    dependsOn("startNewTestContainerWindows", "streamTestLogs")
+    dependsOn("startNewTestContainer")
+
     doLast {
-        println("Test container started from new image 'test:latest'. Previous image removed from disk.")
+        println("Launching a new Linux terminal and attaching interactively...")
+
+        val attachCommand = "docker attach test_container"
+
+        // For GNOME Terminal:
+        project.exec {
+            commandLine("gnome-terminal", "--", "bash", "-c", attachCommand)
+        }
+
+        // Alternative if using x-terminal-emulator:
+        // project.exec {
+        //     commandLine("x-terminal-emulator", "-e", attachCommand)
+        // }
     }
 }
 
-
-
-
-
+// >-------------------- END OF TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<

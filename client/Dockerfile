@@ -30,6 +30,14 @@ COPY build/libs/client.jar /app/client.jar
 # You must first find the image ID using: $ docker images -a
 # Then find the image's layers and their sizes: $ docker history --no-trunc <Image ID>
 
+# Expose the port the client runs on
+
+ENV CLIENT_ADDRSERVER_PORT=49850
+ENV CLIENT_CHATSERVER_PORT=49851
+EXPOSE ${CLIENT_ADDRSERVER_PORT}
+EXPOSE ${CLIENT_CHATSERVER_PORT}
+
+
 
 # >----------EXECUTING PROGRAMS IN DOCKER------------<
 # CMD defines the default program that Docker executes upon startup.

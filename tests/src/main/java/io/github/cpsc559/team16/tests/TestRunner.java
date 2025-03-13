@@ -15,12 +15,16 @@ import io.github.cpsc559.team16.addressingserver.AddressingServer;
 
 import java.lang.reflect.Method;
 import java.util.Scanner;
+import java.util.concurrent.TimeUnit;
 
 public class TestRunner {
     public static void main(String[] args) {
-        TestManager.getInstance(); // Ensure the singleton is initialized
+        TestManager.getInstance();
 
         Scanner scanner = new Scanner(System.in);
+        try {
+            TimeUnit.SECONDS.sleep(1);
+        } catch (Exception e) {System.err.println(e.getMessage());}
         System.out.println("Enter a method name to run (or type 'list' to see all methods):");
 
         while (true) {
@@ -39,7 +43,7 @@ public class TestRunner {
                 Method method = TestManager.class.getMethod(input);
                 method.invoke(null); // Invoke the static method
             } catch (NoSuchMethodException e) {
-                System.out.println("Error: Method not found.");
+                System.out.printf("Error: Method < %s > not found.%n", input);
             } catch (Exception e) {
                 System.out.println("Error executing method: " + e.getMessage());
             }

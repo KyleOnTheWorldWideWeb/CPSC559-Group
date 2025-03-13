@@ -14,12 +14,12 @@ COPY build/libs/addressingserver.jar /app/addressingserver.jar
 #CMD ["java", "-cp", "/app/client.jar", "io.github.cpsc559.team16.client.Client"]
 
 # Expose the port the application runs on
-ENV CLIENT_PORT=49800
-ENV REPLICA_PORT=49801
-ENV CHAT_SERVER_PORT=49802
-EXPOSE ${CLIENT_PORT}
-EXPOSE ${REPLICA_PORT}
-EXPOSE ${CHAT_SERVER_PORT}
+ENV AS_CLIENT_PORT=49800
+ENV AS_REPLICA_PORT=49801
+ENV AS_CHATSERVER_PORT=49802
+EXPOSE ${AS_CLIENT_PORT}
+EXPOSE ${AS_REPLICA_PORT}
+EXPOSE ${AS_CHATSERVER_PORT}
 
 
 # Defines the default program run by the Docker Container - this

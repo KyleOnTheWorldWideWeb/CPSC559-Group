@@ -12,12 +12,19 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 public class ChatServer {
     private static final ConcurrentHashMap<String, ClientHandler> clients = new ConcurrentHashMap<>();
     private static final BlockingQueue<BaseMessage> messageQueue = new LinkedBlockingQueue<>();
 
     public static void main(String[] args) {
+        // This timeout is necessary for proper output in the new terminal window..
+        // ... without it, the initial output to console occurs before the terminal is open
+        try {
+            TimeUnit.SECONDS.sleep(1);
+        } catch (Exception e) {System.err.println(e.getMessage());}
+
         // Print all environment variables for debugging
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
 

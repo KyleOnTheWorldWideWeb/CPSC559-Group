@@ -13,17 +13,27 @@ COPY build/libs/tests.jar /app/tests.jar
 # "io.github.cpsc559.team16.client.Client" specifies which class contains the main method we want the container to launch at startup.
 #CMD ["java", "-cp", "/app/client.jar", "io.github.cpsc559.team16.client.Client"]
 
-# Expose the port the application runs on
-ENV CLIENT_PORT=49800
-ENV REPLICA_PORT=49801
-ENV CHAT_SERVER_PORT=49802
-EXPOSE ${CLIENT_PORT}
-EXPOSE ${REPLICA_PORT}
-EXPOSE ${CHAT_SERVER_PORT}
+# Expose the ports the chat server uses
+ENV CS_CLIENT_PORT=2424
+ENV CS_PEER_PORT=2425
+ENV CS_ADDRSERVER_PORT=2426
+EXPOSE ${CS_CLIENT_PORT}
+EXPOSE ${CS_PEER_PORT}
+EXPOSE ${CS_ADDRSERVER_PORT}
 
+# Expose the ports the address server uses
+ENV AS_CLIENT_PORT=49800
+ENV AS_REPLICA_PORT=49801
+ENV AS_CHATSERVER_PORT=49802
+EXPOSE ${AS_CLIENT_PORT}
+EXPOSE ${AS_REPLICA_PORT}
+EXPOSE ${AS_CHATSERVER_PORT}
 
-# Allow execution
-RUN chmod +x tests.jar
+# Expose the ports the client uses
+ENV CLIENT_ADDRSERVER_PORT=49850
+ENV CLIENT_CHATSERVER_PORT=49851
+EXPOSE ${CLIENT_ADDRSERVER_PORT}
+EXPOSE ${CLIENT_CHATSERVER_PORT}
 
 
 # Defines the default program run by the Docker Container - this
