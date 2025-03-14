@@ -1,10 +1,5 @@
 package io.github.cpsc559.team16.chatserver;
 
-import io.github.cpsc559.team16.common.utilities.BaseMessage;
-import io.github.cpsc559.team16.common.utilities.ProcessUtils;
-import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
-import io.github.cpsc559.team16.client.Client;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -22,6 +17,11 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+
+import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
+import io.github.cpsc559.team16.client.Client;
+import io.github.cpsc559.team16.common.utilities.BaseMessage;
+import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 public class ChatServer {
 
