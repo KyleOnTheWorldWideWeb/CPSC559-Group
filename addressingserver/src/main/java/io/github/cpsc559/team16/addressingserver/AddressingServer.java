@@ -104,18 +104,24 @@ public class AddressingServer {
      * for each registered chat server in the network.
      * </p>
      */
-    private Map<Long, ChatServerInfo> addressLog;
+    private Map<Long, ChatServerInfo> chatServerRecords;
 
     /**
-     * This address log is used by each AddressingServer to track all other addressing servers in the network.
+     * This address log is used by each AddressingServer to keep records
+     * of all other addressing servers in the network.
+     * <p>
+     * All AddressingServer processes will have {@code ChatServerInfo.maxClientCount} = 0
+     * </p>
+     */
+    private ArrayList<AddrServerInfo> replicaRecords;
+
+    /**
+     * Contains the set of all open channels between the Primary {@code AddressingServer} and its Replicas.
      * <p>
      * The implementation of our push protocol for consistency and leader election for fault tolerance is such that
      * every server in the data structure will be used during updates and elections, so a simple DS (array) is ideal.
      * </p>
-     * All AddressingServer processes will have {@code ChatServerInfo.maxClientCount} = 0
      */
-    private ArrayList<AddrServerInfo> replicaLog;
-
     private ArrayList<SocketChannel> replicaChannels;
 
     /**
@@ -138,7 +144,7 @@ public class AddressingServer {
      * This constructor initializes a new, empty address log to track registered chat servers.
      * </p>
      *
-     * @see #setAddressLog(Map) to assign an address log.
+     * @see #setChatServerRecords(Map) to assign an address log.
      *
      */
     public AddressingServer() {
@@ -146,24 +152,27 @@ public class AddressingServer {
         System.out.println("Addressing server network info dump:");
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
         // TODO - Figure out how to get the outward facing IP address (needed for the primary AS when it starts up)
+        hostAddress = System.getenv("HOST_ADDRESS");
         clientPort = Integer.parseInt(System.getenv().getOrDefault("AS_CLIENT_PORT", "49800"));
         replicaPort = Integer.parseInt(System.getenv().getOrDefault("AS_REPLICA_PORT", "49801"));
-        chatServerPort = Integer.parseInt(System.getenv().getOrDefault("AS_CHAT_SERVER_PORT", "49802"));
-        addressLog = new ConcurrentHashMap<>();
+        chatServerPort = Integer.parseInt(System.getenv().getOrDefault("AS_CHATSERVER_PORT", "49802"));
+        chatServerRecords = new ConcurrentHashMap<>();
+        replicaRecords = new ArrayList<>();
+        replicaChannels = new ArrayList<>();
     }
 
     /**
-     * Replaces the current address log with the provided new address log.
+     * Replaces the current set of chat server records with the new set of records.
      * <p>
      * This method updates the AddressingServer's registry of chat servers by replacing its internal
      * address log with the new map passed as a parameter. This allows for dynamic reconfiguration or recovery
-     * by resetting the address log.
+     * by resetting the chat server records.
      * </p>
      *
-     * @param newAddressLog a {@code Map} of chat server IDs to {@link ChatServerInfo} objects representing the new address log.
+     * @param newChatServerRecords a {@code Map} of chat server IDs to {@link ChatServerInfo} objects representing the new address log.
      */
-    public void setAddressLog(Map<Long, ChatServerInfo> newAddressLog) {
-        this.addressLog = newAddressLog;
+    public void setChatServerRecords(Map<Long, ChatServerInfo> newChatServerRecords) {
+        this.chatServerRecords = newChatServerRecords;
     }
 
     // To be completed for Replication
@@ -198,7 +207,7 @@ public class AddressingServer {
      * @return {@code true} if the server was successfully removed; {@code false} otherwise.
      */
     private boolean deregisterChatServer(Long chatServerID) {
-        return addressLog.remove(chatServerID) != null;
+        return chatServerRecords.remove(chatServerID) != null;
     }
 
     /**
@@ -208,7 +217,7 @@ public class AddressingServer {
      *         or {@code Optional.empty()} if no active host exists.
      */
     private Optional<String> getActiveHost() {
-        for (ChatServerInfo host : addressLog.values()) {
+        for (ChatServerInfo host : chatServerRecords.values()) {
             if (host.getStatus() == ServerStatus.ACTIVE) {
                 try {
                     host.addClient();
@@ -284,15 +293,17 @@ public class AddressingServer {
      * @param chatClientPort  the port used for client connections.
      * @param chatPeerPort    the port used for peer-to-peer (gossip) communication.
      * @param maxClientCount  the maximum number of client connections allowed for this server.
+     *
+     * @return serverPID The unique process id generated for the newly registered {@code ChatServer}
      */
-    private void createChatServerRecord(String chatHostAddress, int addrServerPort, int chatClientPort,
+    private long createChatServerRecord(String chatHostAddress, int addrServerPort, int chatClientPort,
                                         int chatPeerPort, int maxClientCount) {
         try {
             Long serverPID = generatePID();
 
             ChatServerInfo newServer = new ChatServerInfo(serverPID, chatHostAddress, addrServerPort, chatPeerPort, chatClientPort, maxClientCount);
             // Check if the key already existed (should be null for a new key)
-            ChatServerInfo previous = addressLog.put(serverPID, newServer);
+            ChatServerInfo previous = chatServerRecords.put(serverPID, newServer);
 
             if (previous != null) {
                 System.err.println("WARNING: A server with ID " + serverPID + " already existed. Overwriting existing entry.");
@@ -302,7 +313,7 @@ public class AddressingServer {
                 // TODO: RM debug print statement
                 debugPrintServer(newServer);
             }
-
+            return serverPID;
         } catch (Exception e) {
             System.err.println("Error registering chat server: " + e.getMessage());
             throw e;
@@ -312,6 +323,7 @@ public class AddressingServer {
     /**
      * Registers a chat server by retrieving its IP address from the provided SocketChannel
      * and passing that IP along with port numbers and maximum client count to create a chat server record.
+     * <p>Responds to the chat server with an ACK in the form of it's newly assigned process ID.</p>
      *
      * @param newChatServerChannel the {@link SocketChannel} representing the incoming connection from a chat server.
      * @throws IOException if an I/O error occurs while obtaining the remote address.
@@ -325,9 +337,8 @@ public class AddressingServer {
         // TODO - Implement proper handshaking protocol for Replication iteration
         //  The chat server should be telling the AddressingServer what ports its using and its max connections.
         try {
-            createChatServerRecord(chatServerHostAddr, 2426, 2424, 2425, 3);
-            String message = "ACK!";
-            ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+            long pid = createChatServerRecord(chatServerHostAddr, 2426, 2424, 2425, 3);
+            ByteBuffer buffer = ByteBuffer.wrap(Long.toString(pid).getBytes(StandardCharsets.UTF_8));
             while (buffer.hasRemaining()) {
                 newChatServerChannel.write(buffer);
             }
@@ -351,7 +362,7 @@ public class AddressingServer {
         // Extracting the IP address of the replica from the established connection.
         String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
 
-        this.replicaLog.add(new AddrServerInfo(generatePID(), replicaHostAddr, 49800, 49801, 49802 ));
+        this.replicaRecords.add(new AddrServerInfo(generatePID(), replicaHostAddr, 49800, 49801, 49802 ));
         String message = "ACK!";
         ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
 
@@ -445,9 +456,9 @@ public class AddressingServer {
                         }
                     } else if (listeningSC == replicaListenerChannel) {
                         /*
-                        Only replicas are given a persistent connection, so we must
-                         *  register the `newChannel` with the `selector` which will add a `SelectionKey`
-                         *   for that channel and monitor it until it is explicitly closed.
+                         Only replicas are given a persistent connection, so we must
+                         register the `newChannel` with the `selector` which will add a `SelectionKey`
+                         for that channel and monitor it until it is explicitly closed.
                          */
                         newChannel.register(selector, SelectionKey.OP_READ); // SocketChannel set to persistent non-blocking I/O
                         registerReplicaServer(newChannel);
@@ -491,7 +502,7 @@ public class AddressingServer {
         try {
             server.mainEventLoop();
         } catch (IOException ioe) {
-            System.err.println("Error during main event loop: "+ ioe.getMessage());
+            System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());
             ioe.printStackTrace();
         }
     }
@@ -510,7 +521,7 @@ public class AddressingServer {
     }
 
     public void debugPrintAllServers() {
-        for (ChatServerInfo s : addressLog.values()){
+        for (ChatServerInfo s : chatServerRecords.values()){
             System.out.println("---------- ChatServerInfo Debug ----------");
             System.out.printf("Host Address : %s%n", s.getHostAddress());
             System.out.printf("Client Port  : %d%n", s.getClientPort());

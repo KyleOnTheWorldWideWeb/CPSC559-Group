@@ -24,7 +24,7 @@ public class TestAddressingServer {
         // Create a dummy address log with one ChatServerInfo instance
         Map<Long, ChatServerInfo> dummyLog = new HashMap<>();
         dummyLog.put(1L, new ChatServerInfo(234L, "192.168.1.666", 3000, 1234, 5));
-        addressingServer.setAddressLog(dummyLog);
+        addressingServer.setChatServerRecords(dummyLog);
 
         // Use debugPrint to print the ChatServerInfo details
         System.out.println("Debug printing ChatServerInfo from AddressingServer's address log:");
