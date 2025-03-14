@@ -1,4 +1,4 @@
-package io.github.cpsc559.team16.utilities;
+package io.github.cpsc559.team16.common.utilities;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.core.JsonProcessingException;

@@ -1,4 +1,4 @@
-package io.github.cpsc559.team16.utilities;
+package io.github.cpsc559.team16.common.utilities;
 
 public class ClientServerMessage extends BaseMessage {
     private String content;

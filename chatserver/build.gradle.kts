@@ -21,7 +21,9 @@ plugins {
 
 dependencies {
     implementation(project(":common"))                                   // Adds dependency on the utilities module
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
+    implementation(project(":addressingserver"))
+    implementation(project(":client"))
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 testing framework
 }
 

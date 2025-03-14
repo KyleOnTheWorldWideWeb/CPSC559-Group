@@ -1,20 +1,8 @@
 package io.github.cpsc559.team16.tests;
 import java.lang.reflect.Method;
 import java.util.Scanner;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
-import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
-import io.github.cpsc559.team16.addressingserver.ServerInfo;
-import io.github.cpsc559.team16.addressingserver.AddressingServer;
 
 
-import java.lang.reflect.Method;
-import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
 public class TestRunner {
