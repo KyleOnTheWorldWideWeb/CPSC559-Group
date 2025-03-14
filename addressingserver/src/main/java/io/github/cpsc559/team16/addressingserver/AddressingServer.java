@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 
 // Internal (Project) Dependencies
-import io.github.cpsc559.team16.addressingserver.ServerInfo.ServerStatus;
+import io.github.cpsc559.team16.addressingserver.ChatServerInfo.ServerStatus;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
@@ -25,7 +25,7 @@ public class AddressingServer {
      * The number of chat servers that have been registered.
      * Count begins at 1, not zero, because normals don't start at zero.
      */
-    private long idCounter;
+    private long pidCounter;
 
     /**
      * The network address of this Addressing Server.
@@ -98,13 +98,13 @@ public class AddressingServer {
     private String role;
 
     /**
-     * A mapping of unique chat server IDs to their corresponding {@link ServerInfo} records.
+     * A mapping of unique chat server IDs to their corresponding {@link ChatServerInfo} records.
      * <p>
-     * This address log is used by the AddressingServer to track all registered chat servers
-     * in the distributed network, enabling operations such as client assignment and server status monitoring.
+     * A {@code ChatServerInfo} record is maintained and updated by the Primary Addressing Server
+     * for each registered chat server in the network.
      * </p>
      */
-    private Map<Long, ServerInfo> addressLog;
+    private Map<Long, ChatServerInfo> addressLog;
 
     /**
      * This address log is used by each AddressingServer to track all other addressing servers in the network.
@@ -112,9 +112,11 @@ public class AddressingServer {
      * The implementation of our push protocol for consistency and leader election for fault tolerance is such that
      * every server in the data structure will be used during updates and elections, so a simple DS (array) is ideal.
      * </p>
-     * All AddressingServer processes will have {@code ServerInfo.maxClientCount} = 0
+     * All AddressingServer processes will have {@code ChatServerInfo.maxClientCount} = 0
      */
-    private ArrayList<ServerInfo> replicaLog;
+    private ArrayList<AddrServerInfo> replicaLog;
+
+    private ArrayList<SocketChannel> replicaChannels;
 
     /**
      * Represents the leadership status of an addressing server.
@@ -143,11 +145,10 @@ public class AddressingServer {
         // Print all environment variables for debugging
         System.out.println("Addressing server network info dump:");
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
-        // Read the network address from the environment variable
-        hostAddress = System.getenv("HOST_ADDRESS");
-        clientPort = Integer.parseInt(System.getenv().getOrDefault("CLIENT_PORT", "49800"));
-        replicaPort = Integer.parseInt(System.getenv().getOrDefault("REPLICA_PORT", "49801"));
-        chatServerPort = Integer.parseInt(System.getenv().getOrDefault("CHAT_SERVER_PORT", "49802"));
+        // TODO - Figure out how to get the outward facing IP address (needed for the primary AS when it starts up)
+        clientPort = Integer.parseInt(System.getenv().getOrDefault("AS_CLIENT_PORT", "49800"));
+        replicaPort = Integer.parseInt(System.getenv().getOrDefault("AS_REPLICA_PORT", "49801"));
+        chatServerPort = Integer.parseInt(System.getenv().getOrDefault("AS_CHAT_SERVER_PORT", "49802"));
         addressLog = new ConcurrentHashMap<>();
     }
 
@@ -159,9 +160,9 @@ public class AddressingServer {
      * by resetting the address log.
      * </p>
      *
-     * @param newAddressLog a {@code Map} of chat server IDs to {@link ServerInfo} objects representing the new address log.
+     * @param newAddressLog a {@code Map} of chat server IDs to {@link ChatServerInfo} objects representing the new address log.
      */
-    public void setAddressLog(Map<Long, ServerInfo> newAddressLog) {
+    public void setAddressLog(Map<Long, ChatServerInfo> newAddressLog) {
         this.addressLog = newAddressLog;
     }
 
@@ -175,7 +176,7 @@ public class AddressingServer {
 //     *
 //     * @param newAddressLog the address log object received from the network
 //     */
-//    public void updateAddressLogFromNetwork(Map<Long,ServerInfo> newAddressLog) {
+//    public void updateAddressLogFromNetwork(Map<Long,ChatServerInfo> newAddressLog) {
 //
 //    }
 
@@ -185,45 +186,10 @@ public class AddressingServer {
      *
      * @return a unique {@code Long} representing the chat server's ID.
      */
-    private Long generateID() {
-        return ++this.idCounter;
+    private Long generatePID() {
+        return ++this.pidCounter;
     }
 
-    /**
-     * Creates a record for a chat server by generating a unique ID and inserting its
-     * ServerInfo record into the global addressLog.
-     * <p>
-     * This method generates a unique ID using {@code generateID()}, creates a new
-     * {@link ServerInfo} object with the given parameters, and then inserts it into the addressLog. If a record
-     * with the same ID already exists, it logs a warning message (and overwrites it).
-     * </p>
-     *
-     * @param chatHostAddress the host address (IP or hostname) of the chat server.
-     * @param chatClientPort  the port used for client connections.
-     * @param chatPeerPort    the port used for peer-to-peer (gossip) communication.
-     * @param maxClientCount  the maximum number of client connections allowed for this server.
-     * @throws Exception if any error occurs during the registration process.
-     */
-    private void createChatServerRecord(String chatHostAddress, int chatClientPort,
-                                    int chatPeerPort, int maxClientCount) throws Exception {
-        try {
-            Long serverID = generateID();
-            ServerInfo newServer = new ServerInfo(serverID, chatHostAddress, chatPeerPort, chatClientPort, maxClientCount);
-            // Check if the key already existed (should be null for a new key)
-            ServerInfo previous = addressLog.put(serverID, newServer);
-            if (previous != null) {
-                System.err.println("WARNING: A server with ID " + serverID + " already existed. Overwriting existing entry.");
-                // TODO: add logic to skip a range of ID values and re-insert the overwritten record - "previous"
-            } else {
-                System.out.println("Server registered successfully with ID " + serverID);
-                // TODO: RM debug print statement
-                debugPrintServer(newServer);
-            }
-        } catch (Exception e) {
-            System.err.println("Error registering chat server: " + e.getMessage());
-            throw e;
-        }
-    }
 
     /**
      * Deregisters a chat server by removing it from the {@code addressLog} containing all known chat servers.
@@ -242,12 +208,12 @@ public class AddressingServer {
      *         or {@code Optional.empty()} if no active host exists.
      */
     private Optional<String> getActiveHost() {
-        for (ServerInfo host : addressLog.values()) {
+        for (ChatServerInfo host : addressLog.values()) {
             if (host.getStatus() == ServerStatus.ACTIVE) {
                 try {
                     host.addClient();
                 } catch (ChatServerFullException csfe) {
-                    System.err.printf("Chat Server ID #%d Full - attempting to find another.%n", host.getID());
+                    System.err.printf("Chat Server ID #%d Full - attempting to find another.%n", host.getPID());
                     continue; // Skip over this host and look for another ACTIVE chat server.
                 }
                 debugPrintServer(host);
@@ -257,20 +223,6 @@ public class AddressingServer {
         return Optional.empty();
     }
 
-    /**
-     * Helper method to open and bind a ServerSocketChannel.
-     *
-     * @param port the port number to bind the channel to
-     * @return the opened ServerSocketChannel
-     * @throws IOException if an I/O error occurs while opening or binding the channel
-     */
-    private ServerSocketChannel openServerChannel(int port) throws IOException {
-        ServerSocketChannel channel = ServerSocketChannel.open();
-        channel.configureBlocking(false); // NIO channel set to non-blocking
-        channel.socket().bind(new InetSocketAddress(port));
-        channel.register(selector, SelectionKey.OP_ACCEPT);
-        return channel;
-    }
 
     /**
      * FOR USE IN REPLICATION STAGE OF PROJECT
@@ -319,6 +271,45 @@ public class AddressingServer {
 
 
     /**
+     * Creates a record for a chat server by generating a unique ID and inserting its
+     * ChatServerInfo record into the global addressLog.
+     * <p>
+     * This method generates a unique ID using {@code generatePID()}, creates a new
+     * {@link ChatServerInfo} object with the given parameters, and then inserts it into the addressLog. If a record
+     * with the same ID already exists, it logs a warning message (and overwrites it).
+     * </p>
+     *
+     * @param chatHostAddress the host address (IP or hostname) of the chat server.
+     * @param addrServerPort The port used for communication with the addressing server.
+     * @param chatClientPort  the port used for client connections.
+     * @param chatPeerPort    the port used for peer-to-peer (gossip) communication.
+     * @param maxClientCount  the maximum number of client connections allowed for this server.
+     */
+    private void createChatServerRecord(String chatHostAddress, int addrServerPort, int chatClientPort,
+                                        int chatPeerPort, int maxClientCount) {
+        try {
+            Long serverPID = generatePID();
+
+            ChatServerInfo newServer = new ChatServerInfo(serverPID, chatHostAddress, addrServerPort, chatPeerPort, chatClientPort, maxClientCount);
+            // Check if the key already existed (should be null for a new key)
+            ChatServerInfo previous = addressLog.put(serverPID, newServer);
+
+            if (previous != null) {
+                System.err.println("WARNING: A server with ID " + serverPID + " already existed. Overwriting existing entry.");
+                // TODO: add logic to skip a range of ID values and re-insert the overwritten record - "previous"
+            } else {
+                System.out.println("Server registered successfully with ID " + serverPID);
+                // TODO: RM debug print statement
+                debugPrintServer(newServer);
+            }
+
+        } catch (Exception e) {
+            System.err.println("Error registering chat server: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
      * Registers a chat server by retrieving its IP address from the provided SocketChannel
      * and passing that IP along with port numbers and maximum client count to create a chat server record.
      *
@@ -330,9 +321,11 @@ public class AddressingServer {
         InetSocketAddress remoteAddress = (InetSocketAddress) newChatServerChannel.getRemoteAddress();
         // Extracting the IP address of the chat server from the established connection.
         String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
+
+        // TODO - Implement proper handshaking protocol for Replication iteration
+        //  The chat server should be telling the AddressingServer what ports its using and its max connections.
         try {
-            createChatServerRecord(chatServerHostAddr, 2424, 2424, 200);
-            // TODO - Implement proper handshaking protocol for Replication iteration
+            createChatServerRecord(chatServerHostAddr, 2426, 2424, 2425, 3);
             String message = "ACK!";
             ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
             while (buffer.hasRemaining()) {
@@ -343,6 +336,45 @@ public class AddressingServer {
             e.printStackTrace();
         }
         newChatServerChannel.close();
+    }
+
+    /**
+     * Registers a chat server by retrieving its IP address from the provided SocketChannel
+     * and passing that IP along with port numbers and maximum client count to create a chat server record.
+     *
+     * @param newChatServerChannel the {@link SocketChannel} representing the incoming connection from a chat server.
+     * @throws IOException if an I/O error occurs while obtaining the remote address.
+     */
+    private void registerReplicaServer(SocketChannel newChatServerChannel) throws IOException {
+        // Retrieving the remote address from the SocketChannel and casting it to InetSocketAddress.
+        InetSocketAddress remoteAddress = (InetSocketAddress) newChatServerChannel.getRemoteAddress();
+        // Extracting the IP address of the replica from the established connection.
+        String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
+
+        this.replicaLog.add(new AddrServerInfo(generatePID(), replicaHostAddr, 49800, 49801, 49802 ));
+        String message = "ACK!";
+        ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+
+        while (buffer.hasRemaining()) {
+            newChatServerChannel.write(buffer);
+        }
+
+        newChatServerChannel.close();
+    }
+
+    /**
+     * Helper method to open and bind a ServerSocketChannel.
+     *
+     * @param port the port number to bind the channel to
+     * @return the opened ServerSocketChannel
+     * @throws IOException if an I/O error occurs while opening or binding the channel
+     */
+    private ServerSocketChannel openServerChannel(int port) throws IOException {
+        ServerSocketChannel channel = ServerSocketChannel.open();
+        channel.configureBlocking(false); // NIO channel set to non-blocking
+        channel.socket().bind(new InetSocketAddress(port));
+        channel.register(selector, SelectionKey.OP_ACCEPT); // Sets the channel to accept new connections.
+        return channel;
     }
 
 
@@ -371,25 +403,37 @@ public class AddressingServer {
      */
     public void mainEventLoop() throws IOException {
         while (true) {
-            selector.select();  // Thread blocks until events occur
+            // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
+            selector.select();
+            /*
+             * When you register a channel with a selector, you get back a SelectionKey.
+             * Here, we iterate through all keys (channels) that are "ready" for an I/O operation.
+             * We know that at least one such key exists because of the preceding `selector.select()` method invocation.
+             */
             Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
 
-            while (keys.hasNext()) {
-                SelectionKey key = keys.next();
-                keys.remove();
+            while (keys.hasNext()) {      // Loop until there are no more keys (channels with I/O events).
+                SelectionKey key = keys.next();    // Retrieve a new key
+                keys.remove();                     // Remove the key used in the last iteration of this loop.
 
-                if (!key.isValid()) { // exit loop and retrieve next key
+                if (!key.isValid()) {               // skip current loop iteration
                     continue;
                 }
 
-                // Establishing a new connection
+                /* Establishing a new connection. `isAcceptable` returns true if a ServerSocketChannel registered
+                 *  with `selector` is ready to accept (detected) a new connection. SocketChannel's registered with
+                 *   the `selector should not appear here.
+                 */
                 if (key.isAcceptable()) {
+                    /*
+                     * `listeningSC` is not a "new" channel - it is one of the ServerSocketChannels we registered
+                     *  with the selector in the `initializeChannels` method.
+                     */
                     ServerSocketChannel listeningSC = (ServerSocketChannel) key.channel();
+                    // We use a `SocketChanel` for established connections. `newChannel.isAcceptable()` will ALWAYS return False
                     SocketChannel newChannel = listeningSC.accept();
+                    // All requests on this channel will be sent to "non-blocking"
                     newChannel.configureBlocking(false);
-                    // Register newChannel for reading. Not needed for this iteration
-                    newChannel.register(selector, SelectionKey.OP_READ);
-
                     // Using identity comparison to determine which channel this is and act as a switch statement:
                     // Currently, the only connections that should be persistent are those between addressing server processes.
                     if (listeningSC == clientListenerChannel) {
@@ -400,10 +444,19 @@ public class AddressingServer {
                             ioe.printStackTrace();
                         }
                     } else if (listeningSC == replicaListenerChannel) {
-                        System.out.println("This functionality will be implemented for the Replication Iteration of the project.");
+                        /*
+                        Only replicas are given a persistent connection, so we must
+                         *  register the `newChannel` with the `selector` which will add a `SelectionKey`
+                         *   for that channel and monitor it until it is explicitly closed.
+                         */
+                        newChannel.register(selector, SelectionKey.OP_READ); // SocketChannel set to persistent non-blocking I/O
+                        registerReplicaServer(newChannel);
+                        // The Primary `AddressingServer` maintains a persistent connection to replicas. Store the channel in an array.
+                        this.replicaChannels.add(newChannel);
                     } else if (listeningSC == chatServerListenerChannel) {
                         try {
                             registerChatServer(newChannel);
+                            // TODO: Share the entire {@code addressLog} with chat servers when they register.
                         } catch (IOException ioe) {
                             System.err.println("Error retrieving chat server IP address: " + ioe.getMessage());
                             ioe.printStackTrace();
@@ -411,17 +464,17 @@ public class AddressingServer {
                     }
                 }
 
-                // THIS CODE WILL BE NEEDED FOR PERSISTENT CONNECTIONS IN FUTURE ITERATIONS
-//                if (key.isReadable()) {
-//                    SocketChannel channel = (SocketChannel) key.channel();
-//                    if (channel == chatServerDataChannel) {
-//                        readChatServerData(channel);
-//                    } else if (channel == clientDataChannel) {
-//                        readClientData(channel);
-//                    } else if (channel == replicaDataChannel) {
-//                        readReplicaData(channel);
-//                    }
-//                }
+                /*
+                 * Only keys tied to channels that were registered with OP_READ
+                 * (as we are doing above with `newChannel`) will return True when invoking `isReadable()`.
+                 * Typically, only a SocketChannel would ever be registered with OP_READ.
+                 */
+                if (key.isReadable()) {
+                    /*
+                     Since replica servers are the only persistent connections, the logic contained
+                     in this conditional pertains solely to our replication implentation.
+                     */
+                }
             }
         }
     }
@@ -444,10 +497,10 @@ public class AddressingServer {
     }
 
     /**
-     * Logs the details of this ServerInfo object to the console for debugging purposes.
+     * Logs the details of this ChatServerInfo object to the console for debugging purposes.
      */
-    public void debugPrintServer(ServerInfo s) {
-        System.out.println("---------- ServerInfo Debug ----------");
+    public void debugPrintServer(ChatServerInfo s) {
+        System.out.println("---------- ChatServerInfo Debug ----------");
         System.out.printf("Host Address : %s%n", s.getHostAddress());
         System.out.printf("Client Port  : %d%n", s.getClientPort());
         System.out.printf("Peer Port    : %d%n", s.getPeerPort());
@@ -457,8 +510,8 @@ public class AddressingServer {
     }
 
     public void debugPrintAllServers() {
-        for (ServerInfo s : addressLog.values()){
-            System.out.println("---------- ServerInfo Debug ----------");
+        for (ChatServerInfo s : addressLog.values()){
+            System.out.println("---------- ChatServerInfo Debug ----------");
             System.out.printf("Host Address : %s%n", s.getHostAddress());
             System.out.printf("Client Port  : %d%n", s.getClientPort());
             System.out.printf("Peer Port    : %d%n", s.getPeerPort());

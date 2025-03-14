@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.github.cpsc559.team16.addressingserver.ServerInfo;
+import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
 import io.github.cpsc559.team16.addressingserver.AddressingServer;
 
 
@@ -21,13 +21,13 @@ public class TestAddressingServer {
         System.out.println("\nStarting tests for AddressingServer...");
         AddressingServer addressingServer = new AddressingServer();
 
-        // Create a dummy address log with one ServerInfo instance
-        Map<Long, ServerInfo> dummyLog = new HashMap<>();
-        dummyLog.put(1L, new ServerInfo(234L, "192.168.1.666", 3000, 1234, 5));
+        // Create a dummy address log with one ChatServerInfo instance
+        Map<Long, ChatServerInfo> dummyLog = new HashMap<>();
+        dummyLog.put(1L, new ChatServerInfo(234L, "192.168.1.666", 3000, 1234, 5));
         addressingServer.setAddressLog(dummyLog);
 
-        // Use debugPrint to print the ServerInfo details
-        System.out.println("Debug printing ServerInfo from AddressingServer's address log:");
+        // Use debugPrint to print the ChatServerInfo details
+        System.out.println("Debug printing ChatServerInfo from AddressingServer's address log:");
         addressingServer.debugPrintServer(dummyLog.get(1L));
 
         // Attempt to connect to the Addressing Server as a chat-server

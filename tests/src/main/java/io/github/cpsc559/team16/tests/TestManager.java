@@ -1,19 +1,7 @@
 package io.github.cpsc559.team16.tests;
 
-import io.github.cpsc559.team16.addressingserver.AddressingServer;
-import io.github.cpsc559.team16.addressingserver.ServerInfo;
-import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 import io.github.cpsc559.team16.tests.addressingservertests.TestAddressingServer;
 import io.github.cpsc559.team16.tests.addressingservertests.TestServerInfo;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
 
 public class TestManager {
     private static final TestManager INSTANCE = new TestManager();
