@@ -75,11 +75,11 @@ public class Client {
         this.username = username; 
         this.address = serverName;
         this.addressPort = serverPort;
-        this.terminate = false;
-
     }
 
     public void run() {
+
+        terminate = false;
 
         try {
 
