@@ -1,22 +1,23 @@
 package io.github.cpsc559.team16.client;
 
-import io.github.cpsc559.team16.utilities.ClientServerMessage;
-
-import java.net.Socket;
-
-import java.util.logging.*;
-import java.util.Queue;
-import java.util.LinkedList;
-import java.util.concurrent.ConcurrentLinkedQueue;
-
+import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.Socket;
+import java.util.LinkedList;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.logging.Logger;
 
-import org.jline.reader.LineReader; // requires jline dependency
-import org.jline.reader.LineReaderBuilder; // requires jline dependency
-import org.jline.terminal.Terminal; // requires jline dependency
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder; // requires jline dependency
+
+import com.fasterxml.jackson.databind.ObjectMapper; // requires jline dependency
+
+import io.github.cpsc559.team16.utilities.ClientServerMessage; // requires jline dependency
 
 /*
  * Base class for IRC-style application client. 
@@ -39,8 +40,8 @@ public class Client {
 
     // chat server data
     private Socket chatServer;
-    private ObjectInputStream in;
-    private ObjectOutputStream out; // should only use this for the login attempt
+    private BufferedReader in;
+    private PrintWriter out; // should only use this for the login attempt
 
     private final LinkedList<ClientServerMessage> msgLog = new LinkedList<>(); // Entire chatlog
     private final Queue<ClientServerMessage> messageQueue = new ConcurrentLinkedQueue<>(); // Messages awaiting ack from server
@@ -57,10 +58,13 @@ public class Client {
 
     // flag to indicate if the client should terminate
     private boolean terminate;
+    private boolean isConnected = false;
 
     // JLine terminal and line reader for UI
     Terminal terminal;
     LineReader lineReader;
+
+    ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Client app constructor. Handles the initial registration with the address server and setting up a connection to the chatServer.
@@ -88,8 +92,8 @@ public class Client {
             this.lineReader = LineReaderBuilder.builder().terminal(terminal).build();
 
             // Establish connection and session
+            // login();
             connect();
-            login();
 
             // Create threads
             inputThread = new InputThread(lineReader);
@@ -108,13 +112,21 @@ public class Client {
                 Thread.sleep(1000); // So it doesn't blow up
             }
 
-        } catch (Exception e) {
+        }
+
+        catch (Exception e) {
             // log
             String message =  "Error occured connecting to address server from Client "+ username + "\n" + e.getMessage();
-            e.printStackTrace();
             logger.warning(message);
             shutdown(); // interupt the main thread to shut down the client in a clean way
-            return;
+        }
+
+        finally {
+            try {
+                chatServer.close();
+            } catch (IOException e) {
+                logger.warning("Error closing chatServer: " + e.getMessage());
+            }
         }
     }
 
@@ -132,36 +144,42 @@ public class Client {
      * TODO: make this actually talk to the addressing server to get the chat server
     */
     private void connect() throws IOException{
-        try{
-            Socket addressSocket = new Socket(this.address, this.addressPort); // connect to the addressing server
 
-            // GET CHATSERVER address and port:
-            // this will have to eventually be received from the addressing server, for now hardcoded
-            String chatServerAddress = "localhost";
-            int chatServerPort = 8080;
-            //////////
+        if (!terminate) {
+            try {
+                Socket addressSocket = new Socket(this.address, this.addressPort); // connect to the addressing server
+    
+                // GET CHATSERVER address and port:
+                // this will have to eventually be received from the addressing server, for now hardcoded
+                String chatServerAddress = "localhost";
+                int chatServerPort = 8080;
+                //////////
+    
+                // Close addressing server connection (we have received the chat server address and port)
+                addressSocket.close();
+                
+                // Connect to chatserver
+                chatServer = new Socket(chatServerAddress, chatServerPort); // connect to the chat server
+                out = new PrintWriter(chatServer.getOutputStream(), true);
+                in = new BufferedReader(new InputStreamReader(chatServer.getInputStream()));
+                isConnected = true;
+            }
+            catch(IOException e) {
+                String message =  "Error occured connecting to server from Client "+ username + "\n" + e.getMessage();
+                logger.warning(message);
+            }
+        }
 
-            // Close addressing server connection (we have received the chat server address and port)
-            addressSocket.close();
-            
-            // Connect to chatserver
-            chatServer = new Socket(chatServerAddress, chatServerPort); // connect to the chat server
-            out = new ObjectOutputStream(chatServer.getOutputStream());
-            in = new ObjectInputStream(chatServer.getInputStream());
-        }
-        catch(IOException e) {
-            String message =  "Error occured connecting to server from Client "+ username + "\n" + e.getMessage();
-            logger.warning(message);
-        }
     }
 
     /**
      * Attempts to reconnect to the server network
      * @throws InterruptedException 
-     * 
-     * TODO: nothing
      */
     private void reconnect() {
+
+        isConnected = false;
+
         while(reconnectTries < MAX_RECONNECT_TRIES){
             try {
                 connect();
@@ -173,32 +191,23 @@ public class Client {
         }
     }
 
-    /**
-     * Ends the client application.
-     * Shuts down threads.
-     * 
-     * TODO: nothing
-     */
-    public void shutdown(){
-        try{
-            senderThread.join();
-            receiverThread.join();
-            inputThread.join();
-            outputThread.join();
-            terminate = true;
-        }
-        catch(InterruptedException e){
-            // if the main thread is interupted while waiting on threads
-            // try to close them again
-            if(senderThread.isAlive()){ senderThread.interrupt();}
-            if(receiverThread.isAlive()){ receiverThread.interrupt();}
-            if(inputThread.isAlive()){ inputThread.interrupt();}
-            if(outputThread.isAlive()){ outputThread.interrupt();}
- 
-        }
-        // threads are all closed        
-        // do something to save user data here? i guess?
+    private void shutdownThreads() {
+        if (senderThread != null) senderThread.interrupt();
+        if (receiverThread != null) receiverThread.interrupt();
+        if (inputThread != null) inputThread.interrupt();
+        if (outputThread != null) outputThread.interrupt();
+    }
 
+    public void shutdown() {
+        terminate = true;
+        shutdownThreads();
+        try {
+            if (chatServer != null) chatServer.close();
+            if (in != null) in.close();
+            if (out != null) out.close();
+        } catch (IOException e) {
+            logger.warning("Error closing resources: " + e.getMessage());
+        }
     }
 
     /*
@@ -213,71 +222,66 @@ public class Client {
     /*
      * Sends a message to the server.
      * Returns true if it was sent without causing an exception (not necessarily acked)
-     * 
-     * TODO: make sure this actually works
      */
     public void sendMessage(ClientServerMessage msg) {
         try {
-
-            // this is the part to fix (I'm not sure if this correctly sends an object)
-            out.writeObject(msg.toJson());
-
-
+            out.println(msg.toJson());
         } catch (IOException e) {
-            reconnect();
             messageQueue.add(msg); // put the message back onto the queue, it should be sent on the next round
+            reconnect();
         }
-    }
-
-    /*
-     * Blocks until a message is received from server.
-     * 
-     * TODO: make sure this actually works
-     */
-    public ClientServerMessage receiveMessage() throws IOException {
-        return (ClientServerMessage) in.readObject();
     }
 
     private class SenderThread extends Thread {
 
         @Override
         public void run() {
-            while (true) {
-                try {
+            try {
+                while (!terminate) { 
+                    if (isConnected) {
+                        ClientServerMessage msg = messageQueue.poll(); // Check messageQueue
 
-                    // Check messageQueue
-                    ClientServerMessage msg = messageQueue.poll();
+                        // If msg exists, send it
+                        if (msg != null) {
+                            sendMessage(msg);
+                        }
 
-                    // If msg exists, send it
-                    if (msg != null) {
-                        sendMessage(msg);
+                        Thread.sleep(2000); // So it doesn't blow up
                     }
-
-                    Thread.sleep(2000);
-                } catch (Exception e) {
-                    System.out.println("Receiver error: " + e.getMessage());
+                    else {
+                        Thread.sleep(5000); // Wait for reconnect (5 sec)
+                    }
                 }
+            } catch (Exception e) {
+                System.out.println("Receiver error: " + e.getMessage());
+                e.printStackTrace();
             }
         }
     }
+    
 
     /*
      * Receives messages from server and updates the chatlog.
-     * 
-     * TODO: nothing
      */
     private class ReceiverThread extends Thread {
 
         @Override
         public void run() {
-            while (true) {
-                try {
+            try {
+                // Receive messages from server until socket closed
+                while (!terminate) {
 
-                    // Receive message from server
-                    ClientServerMessage msg = receiveMessage();
+                    if (isConnected) {
 
-                    // If the message isn't null, proceed
-                    if (msg != null) {
+                        // Get message and reconnect if socket closed
+                        String serializedMsg = in.readLine();
+                        if (serializedMsg == null) {
+                            reconnect();
+                            continue;
+                        }
+
+                        // Deserialize JSON to ClientServerMessage
+                        ClientServerMessage msg = objectMapper.readValue(serializedMsg, ClientServerMessage.class);
 
                         // If the message was sent by the current user, remove it from the awaitingAck queue
                         if (msg.getSender().equals(username)) {
@@ -286,19 +290,18 @@ public class Client {
                         // Add it to the msgLog for printing to UI
                         msgLog.add(msg);
                     }
-
-                    Thread.sleep(2000);
-                } catch (Exception e) {
-                    System.out.println("Receiver error: " + e.getMessage());
                 }
+            }
+
+            catch (Exception e) {
+                System.out.println("Receiver error: " + e.getMessage());
+                e.printStackTrace();
             }
         }
     }
 
     /*
      * This class is responsible for handling user input.
-     * 
-     * TODO: fix the "createMessage" method to include sender
      */
     private class InputThread extends Thread {
 
@@ -310,7 +313,7 @@ public class Client {
 
         @Override
         public void run() {
-            while (true) {
+            while (!terminate) {
                 try {
 
                     // Read user input
@@ -321,13 +324,14 @@ public class Client {
                     if (!msgContents.trim().isEmpty()) {
 
                         // Create a message and add it to the messageQueue
-                        ClientServerMessage msg = createMessage(msgContents);
-                        messageQueue.add(msg);
-                        int id = sendCounter++;
+                        messageQueue.add(createMessage(msgContents, "placeholder"));
                     }
                     Thread.sleep(1000); // So it doesn't blow up
-                } catch (Exception e) {
+                }
+                
+                catch (Exception e) {
                     System.out.println("Sender error: " + e.getMessage());
+                    e.printStackTrace();
                 }
             }
         }
@@ -335,8 +339,6 @@ public class Client {
 
     /*
      * This class is responsible for updating the UI.
-     * 
-     * TODO: nothing
      */
     private class OutputThread extends Thread {
 
@@ -349,12 +351,15 @@ public class Client {
         @Override
         public void run() {
             try {
-                while (true) {
+                while (!terminate) {
                     render();
                     Thread.sleep(500);
                 }
-            } catch (Exception e) {
+            }
+            
+            catch (Exception e) {
                 System.out.println("UI error: " + e.getMessage());
+                e.printStackTrace();
             }
         }
 
