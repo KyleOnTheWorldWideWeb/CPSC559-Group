@@ -49,6 +49,7 @@ public class Client {
     // threads; grouped to help with shutdown
     private InputThread inputThread;  // thread for handling data input from the UI
     private OutputThread outputThread; // thread for rendering of UI
+    private SenderThread senderThread; // thread to send messages to the server
     private ReceiverThread receiverThread; // thread to listen for incoming messages
 
     // logging utilities
@@ -93,27 +94,17 @@ public class Client {
             // Create threads
             inputThread = new InputThread(lineReader);
             outputThread = new OutputThread(lineReader);
+            senderThread = new SenderThread();
             receiverThread = new ReceiverThread();
 
             // Start threads
             inputThread.start();
             outputThread.start();
+            senderThread.start();
             receiverThread.start();
 
             // Loop sending messaages
             while (!terminate) {
-
-                ClientServerMessage msg = messageQueue.poll();
-
-                if (msg != null) {
-                    try {
-                        sendMessage(msg);
-                    } catch (IOException e) {
-                        reconnect();
-                        messageQueue.add(msg); // put the message back onto the queue, it should be sent on the next round
-                    }
-                }
-
                 Thread.sleep(1000); // So it doesn't blow up
             }
 
@@ -190,6 +181,7 @@ public class Client {
      */
     public void shutdown(){
         try{
+            senderThread.join();
             receiverThread.join();
             inputThread.join();
             outputThread.join();
@@ -198,6 +190,7 @@ public class Client {
         catch(InterruptedException e){
             // if the main thread is interupted while waiting on threads
             // try to close them again
+            if(senderThread.isAlive()){ senderThread.interrupt();}
             if(receiverThread.isAlive()){ receiverThread.interrupt();}
             if(inputThread.isAlive()){ inputThread.interrupt();}
             if(outputThread.isAlive()){ outputThread.interrupt();}
@@ -218,11 +211,21 @@ public class Client {
 
     /*
      * Sends a message to the server.
+     * Returns true if it was sent without causing an exception (not necessarily acked)
      * 
      * TODO: make sure this actually works
      */
-    public void sendMessage(ClientServerMessage msg) throws IOException {
-        out.writeObject(msg.toJson());
+    public void sendMessage(ClientServerMessage msg) {
+        try {
+
+            // this is the part to fix (I'm not sure if this correctly sends an object)
+            out.writeObject(msg.toJson());
+
+
+        } catch (IOException e) {
+            reconnect();
+            messageQueue.add(msg); // put the message back onto the queue, it should be sent on the next round
+        }
     }
 
     /*
@@ -232,6 +235,29 @@ public class Client {
      */
     public ClientServerMessage receiveMessage() throws IOException {
         return (ClientServerMessage) in.readObject();
+    }
+
+    private class SenderThread extends Thread {
+
+        @Override
+        public void run() {
+            while (true) {
+                try {
+
+                    // Check messageQueue
+                    ClientServerMessage msg = messageQueue.poll();
+
+                    // If msg exists, send it
+                    if (msg != null) {
+                        sendMessage(msg);
+                    }
+
+                    Thread.sleep(2000);
+                } catch (Exception e) {
+                    System.out.println("Receiver error: " + e.getMessage());
+                }
+            }
+        }
     }
 
     /*
