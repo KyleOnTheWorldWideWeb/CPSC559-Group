@@ -115,9 +115,10 @@ public class ChatServer {
         System.out.println("ChatServer environment variables: ");
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
         // Read the network address from the environment variable
-        clientPort = Integer.parseInt(System.getenv().getOrDefault("CS_CLIENT_PORT", "2424"));
-        peerPort = Integer.parseInt(System.getenv().getOrDefault("CS_PEER_PORT", "2425"));
-        addrServerPort = Integer.parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "2426"));
+        clientPort = Integer.parseInt(System.getenv().getOrDefault("CS_CLIENT_PORT", "2424").trim());
+        peerPort = Integer.parseInt(System.getenv().getOrDefault("CS_PEER_PORT", "2425").trim());
+        addrServerPort = Integer.parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "2426").trim());
+
         chatServerRecords = new ConcurrentHashMap<>();
     }
 
