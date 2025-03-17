@@ -1,25 +1,18 @@
 package io.github.cpsc559.team16.client;
 
-import java.net.Socket;
-import java.security.MessageDigest;
+import io.github.cpsc559.team16.utilities.ClientServerMessage;
 
-import javax.net.ssl.SSLSocket;  
-import java.io.*;
-import java.util.ArrayList;
-import java.util.Scanner;
-import java.util.Queue;
+import java.net.Socket;
+
 import java.util.logging.*;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
+import java.util.Queue;
 import java.util.LinkedList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-// IMPORTS THAT NEED FIXING
-import io.github.cpsc559.team16.utilities.BaseMessage; // can't get this import configured???
-import io.github.cpsc559.team16.utilities.ClientServerMessage; // can't get this import configured???
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+
 import org.jline.reader.LineReader; // requires jline dependency
 import org.jline.reader.LineReaderBuilder; // requires jline dependency
 import org.jline.terminal.Terminal; // requires jline dependency
@@ -56,7 +49,7 @@ public class Client {
     // threads; grouped to help with shutdown
     private InputThread inputThread;  // thread for handling data input from the UI
     private OutputThread outputThread; // thread for rendering of UI
-    private Receiver receiverThread; // thread to listen for incoming messages
+    private ReceiverThread receiverThread; // thread to listen for incoming messages
 
     // logging utilities
     private static final Logger logger = Logger.getLogger("Client");
@@ -83,13 +76,15 @@ public class Client {
         this.addressPort = serverPort;
         this.terminate = false;
 
-        this.terminal = TerminalBuilder.builder().system(true).build();
-        this.lineReader = LineReaderBuilder.builder().terminal(terminal).build();
     }
 
     public void run() {
 
         try {
+
+            // Set up terminal and line reader
+            this.terminal = TerminalBuilder.builder().system(true).build();
+            this.lineReader = LineReaderBuilder.builder().terminal(terminal).build();
 
             // Establish connection and session
             login();
@@ -98,7 +93,7 @@ public class Client {
             // Create threads
             inputThread = new InputThread(lineReader);
             outputThread = new OutputThread(lineReader);
-            receiverThread = new Receiver(in);
+            receiverThread = new ReceiverThread(in);
 
             // Start threads
             inputThread.start();
@@ -106,7 +101,7 @@ public class Client {
             receiverThread.start();
 
             // Loop sending messaages
-            while (true) {
+            while (!terminate) {
 
                 ClientServerMessage msg = messageQueue.poll();
 
@@ -130,6 +125,14 @@ public class Client {
             shutdown(); // interupt the main thread to shut down the client in a clean way
             return;
         }
+    }
+
+    /**
+     * Performs handshake with assosiated chat server.
+     * For demo 2 this just means passing a username
+    */
+    private boolean login(){
+        return false;
     }
 
     /**
@@ -179,14 +182,6 @@ public class Client {
     }
 
     /**
-     * Performs handshake with assosiated chat server.
-     * For demo 2 this just means passing a username
-    */
-    private boolean login(){
-        return false;
-    }
-
-    /**
      * Ends the client application.
      * Shuts down threads.
      */
@@ -195,6 +190,7 @@ public class Client {
             receiverThread.join();
             inputThread.join();
             outputThread.join();
+            terminate = true;
         }
         catch(InterruptedException e){
             // if the main thread is interupted while waiting on threads
@@ -210,11 +206,11 @@ public class Client {
     }
 
     /*
-     * Clears the terminal screen.
+     * Creates a message object from the user input.
+     * 
+     * TODO: ensure this works with Parmeet's serializable message class
      */
-    private void clearScreen() {
-        System.out.print("\033[H\033[2J");
-        System.out.flush();
+    public ClientServerMessage createMessage(String msgContents) {
     }
 
     /*
@@ -232,26 +228,25 @@ public class Client {
      * TODO: make sure this actually works
      */
     public ClientServerMessage receiveMessage() throws IOException {
-        return (Message) in.readObject();
+        return (ClientServerMessage) in.readObject();
     }
 
     /*
-     * Creates a message object from the user input.
-     * 
-     * TODO: ensure this works with Parmeet's serializable message class
+     * Clears the terminal screen.
      */
-    public ClientServerMessage createMessage(String msgContents) {
-        return new ClientServerMessage(username, id, msgContents);
+    private void clearScreen() {
+        System.out.print("\033[H\033[2J");
+        System.out.flush();
     }
 
     /*
      * Receives messages from server and updates the chatlog.
      */
-    private class Receiver extends Thread {
+    private class ReceiverThread extends Thread {
 
         private final ObjectInputStream in;
 
-        public Receiver(ObjectInputStream in) {
+        public ReceiverThread(ObjectInputStream in) {
             this.in = in;
         }
 
@@ -269,7 +264,7 @@ public class Client {
 
                         // If the message was sent by the current user, remove it from the awaitingAck queue
                         if (msg.getSender().equals(username)) {
-                            awaitingAck.removeIf(pendingMsg -> pendingMsg.getId() == msg.getId());
+                            awaitingAck.removeIf(pendingMsg -> pendingMsg.getClientCounter() == msg.getClientCounter());
                         }
                         // Add it to the msgLog for printing to UI
                         msgLog.add(msg);
@@ -302,7 +297,6 @@ public class Client {
                     // Read user input
                     String msgContents = lineReader.readLine();
                     lineReader.getBuffer().clear();
-
 
                     // If the message isn't empty, proceed
                     if (!msgContents.trim().isEmpty()) {
@@ -375,10 +369,10 @@ public class Client {
         // get command line args (help!)   
         String username = "Chloe";
         String STATIC_SERVER_ADDRESS = "localhost";
-        int STATIIC_PORT = 2424;
+        int STATIC_PORT = 2424;
 
         // launch a client 
-        Client client = new Client(username, STATIC_SERVER_ADDRESS, STATIIC_PORT);
+        Client client = new Client(username, STATIC_SERVER_ADDRESS, STATIC_PORT);
         
         client.run();
             
