@@ -87,13 +87,13 @@ public class Client {
             this.lineReader = LineReaderBuilder.builder().terminal(terminal).build();
 
             // Establish connection and session
+            connect();
             login();
-            connectToAddress();
 
             // Create threads
             inputThread = new InputThread(lineReader);
             outputThread = new OutputThread(lineReader);
-            receiverThread = new ReceiverThread(in);
+            receiverThread = new ReceiverThread();
 
             // Start threads
             inputThread.start();
@@ -129,50 +129,51 @@ public class Client {
 
     /**
      * Performs handshake with assosiated chat server.
-     * For demo 2 this just means passing a username
+     * 
+     * TODO: implement fully
     */
-    private boolean login(){
-        return false;
+    private void login() {
     }
 
     /**
-     * Connects to the addressing server via hardcoded address and port number. 
-     * Connects with a persistent chat server.
+     * Connects with address server, which then connects it to a chat server.
+     * 
+     * TODO: make this actually talk to the addressing server to get the chat server
     */
-    private void connectToAddress() throws IOException{
+    private void connect() throws IOException{
         try{
-            Socket addressSocket = new Socket(this.address, this.addressPort); // connect to the port
+            Socket addressSocket = new Socket(this.address, this.addressPort); // connect to the addressing server
 
-            // handshake with the address server would go here
-            // for now the address server just sends the Chat server's address and port number as a String
-            //////////
-
-            // GETTING CHATSERVER address and port:
+            // GET CHATSERVER address and port:
             // this will have to eventually be received from the addressing server, for now hardcoded
             String chatServerAddress = "localhost";
             int chatServerPort = 8080;
             //////////
 
-            chatServer = new Socket(address, chatServerPort); // connect to the chat server
+            // Close addressing server connection (we have received the chat server address and port)
+            addressSocket.close();
+            
+            // Connect to chatserver
+            chatServer = new Socket(chatServerAddress, chatServerPort); // connect to the chat server
             out = new ObjectOutputStream(chatServer.getOutputStream());
             in = new ObjectInputStream(chatServer.getInputStream());
         }
-        catch(IOException e) {  
-            // :((
+        catch(IOException e) {
+            String message =  "Error occured connecting to server from Client "+ username + "\n" + e.getMessage();
+            logger.warning(message);
         }
-        return;
-
     }
 
     /**
      * Attempts to reconnect to the server network
      * @throws InterruptedException 
+     * 
+     * TODO: nothing
      */
-
     private void reconnect() {
         while(reconnectTries < MAX_RECONNECT_TRIES){
             try {
-                connectToAddress();
+                connect();
             } catch (Exception e) {
                 // iterate the reconnect tries by 1
                 reconnectTries ++;  
@@ -184,6 +185,8 @@ public class Client {
     /**
      * Ends the client application.
      * Shuts down threads.
+     * 
+     * TODO: nothing
      */
     public void shutdown(){
         try{
@@ -208,7 +211,7 @@ public class Client {
     /*
      * Creates a message object from the user input.
      * 
-     * TODO: ensure this works with Parmeet's serializable message class
+     * TODO: implement so that this works with Parmeet's serializable message class
      */
     public ClientServerMessage createMessage(String msgContents) {
     }
@@ -232,23 +235,11 @@ public class Client {
     }
 
     /*
-     * Clears the terminal screen.
-     */
-    private void clearScreen() {
-        System.out.print("\033[H\033[2J");
-        System.out.flush();
-    }
-
-    /*
      * Receives messages from server and updates the chatlog.
+     * 
+     * TODO: nothing
      */
     private class ReceiverThread extends Thread {
-
-        private final ObjectInputStream in;
-
-        public ReceiverThread(ObjectInputStream in) {
-            this.in = in;
-        }
 
         @Override
         public void run() {
@@ -257,7 +248,6 @@ public class Client {
 
                     // Receive message from server
                     ClientServerMessage msg = receiveMessage();
-
 
                     // If the message isn't null, proceed
                     if (msg != null) {
@@ -280,6 +270,8 @@ public class Client {
 
     /*
      * This class is responsible for handling user input.
+     * 
+     * TODO: nothing
      */
     private class InputThread extends Thread {
 
@@ -316,6 +308,8 @@ public class Client {
 
     /*
      * This class is responsible for updating the UI.
+     * 
+     * TODO: nothing
      */
     private class OutputThread extends Thread {
 
@@ -340,7 +334,9 @@ public class Client {
         private void render() {
             synchronized (System.out) {
 
-                clearScreen();
+                // Clear the screen
+                System.out.print("\033[H\033[2J");
+                System.out.flush();
 
                 // Print chatlog
                 for (ClientServerMessage msg : msgLog) {
@@ -359,6 +355,11 @@ public class Client {
         }
     }
 
+    /*
+     * Main method for the client application.
+     * 
+     * TODO: test this, once everything else is implemented
+     */
     public static void main(String[] args){
         // from command line get:
         //  - hardcoded address server hostname 
