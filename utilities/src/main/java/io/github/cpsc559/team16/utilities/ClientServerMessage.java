@@ -14,6 +14,12 @@ public class ClientServerMessage extends BaseMessage {
         this.clientCounter = clientCounter;
     }
 
+    public ClientServerMessage(String sender, String receiver, String content) {
+        super(sender, receiver);
+        this.content = content;
+        this.clientCounter = 0;
+    }
+
     public String getContent() {
         return content;
     }
