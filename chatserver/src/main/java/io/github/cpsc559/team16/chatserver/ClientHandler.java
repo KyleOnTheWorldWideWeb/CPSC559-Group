@@ -1,13 +1,16 @@
 package io.github.cpsc559.team16.chatserver;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.github.cpsc559.team16.utilities.BaseMessage;
 import io.github.cpsc559.team16.utilities.ClientServerMessage;
 
@@ -33,24 +36,10 @@ public class ClientHandler implements Runnable {
 
             // Read the username
 
-            String loginJson = input.readLine();
-            BaseMessage loginMessage = BaseMessage.fromJson(loginJson, ClientServerMessage.class);
-
-            if (loginMessage instanceof ClientServerMessage) {
-                username = ((ClientServerMessage) loginMessage).getContent();
-
-                if (clients.containsKey(username)) {
-                    sendMessage(
-                            new ClientServerMessage("server", username, "Username already taken. Connection closed."));
-                    socket.close();
-                    return;
-                }
-
-                clients.put(username, this);
+            if (loginUser(input)) {
+                // Send a welcome message to the client
                 sendMessage(new ClientServerMessage("server", username, "Welcome, " + username + "!"));
             } else {
-                sendMessage(new ClientServerMessage("server", "unknown", "Invalid login message."));
-                socket.close();
                 return;
             }
 
@@ -82,5 +71,28 @@ public class ClientHandler implements Runnable {
 
     public void sendMessage(BaseMessage message) {
         output.println(message);
+    }
+
+    private boolean loginUser (BufferedReader input) throws IOException {
+        String loginJson = input.readLine();
+        BaseMessage loginMessage = BaseMessage.fromJson(loginJson, ClientServerMessage.class);
+
+        if (loginMessage instanceof ClientServerMessage) {
+            username = ((ClientServerMessage) loginMessage).getContent();
+
+            if (clients.containsKey(username)) {
+                sendMessage(
+                        new ClientServerMessage("server", username, "Username already taken. Connection closed."));
+                socket.close();
+                return false;
+            }
+
+            clients.put(username, this);
+            return true;
+        } else {
+            sendMessage(new ClientServerMessage("server", "unknown", "Invalid login message."));
+            socket.close();
+            return false;
+        }
     }
 }
