@@ -23,6 +23,7 @@ dependencies {
     implementation(project(":common"))                                   // Adds dependency on the utilities module
     implementation(project(":addressingserver"))
     implementation(project(":client"))
+    implementation("org.json:json:20240303") 
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 testing framework
 }

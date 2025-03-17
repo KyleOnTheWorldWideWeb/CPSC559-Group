@@ -1,7 +1,7 @@
 package io.github.cpsc559.team16.tests;
 
 import io.github.cpsc559.team16.tests.addressingservertests.TestAddressingServer;
-import io.github.cpsc559.team16.tests.addressingservertests.TestServerInfo;
+// import io.github.cpsc559.team16.tests.addressingservertests.TestServerInfo;
 
 public class TestManager {
     private static final TestManager INSTANCE = new TestManager();
@@ -13,7 +13,6 @@ public class TestManager {
     public static TestManager getInstance() {
         return INSTANCE;
     }
-
 
     public static void testMethod1() {
         System.out.println("Test Method 1 executed!");
@@ -42,7 +41,7 @@ public class TestManager {
     }
 
     public static void serverInfoTest() {
-        TestServerInfo.createServerRecord();
+        // TestServerInfo.createServerRecord();
         listMethods();
     }
 
@@ -56,4 +55,3 @@ public class TestManager {
         System.out.println(" - exit (to quit)\n");
     }
 }
-

@@ -1,4 +1,5 @@
 package io.github.cpsc559.team16.tests.addressingservertests;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -9,7 +10,6 @@ import java.util.Map;
 
 import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
 import io.github.cpsc559.team16.addressingserver.AddressingServer;
-
 
 public class TestAddressingServer {
 
@@ -23,7 +23,7 @@ public class TestAddressingServer {
 
         // Create a dummy address log with one ChatServerInfo instance
         Map<Long, ChatServerInfo> dummyLog = new HashMap<>();
-        dummyLog.put(1L, new ChatServerInfo(234L, "192.168.1.666", 3000, 1234, 5));
+        // dummyLog.put(1L, new ChatServerInfo(234L, "192.168.1.666", 3000, 1234, 5));
         addressingServer.setChatServerRecords(dummyLog);
 
         // Use debugPrint to print the ChatServerInfo details
@@ -32,11 +32,13 @@ public class TestAddressingServer {
 
         // Attempt to connect to the Addressing Server as a chat-server
         try (Socket socket = new Socket("host.docker.internal", 49802)) {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
             String ack = reader.readLine();
             System.out.println("Received chat server response......" + ack);
         } catch (IOException e) {
-            System.err.println("An error occured while attempting to register with the addressing server: " + e.getMessage());
+            System.err.println(
+                    "An error occured while attempting to register with the addressing server: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -45,7 +47,8 @@ public class TestAddressingServer {
 
         // Attempt to connect to the AddressingServer as a client
         try (Socket socket = new Socket("host.docker.internal", 49800)) {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
             String response = reader.readLine();
             System.out.println("Received chat server address: " + response);
         } catch (IOException e) {
@@ -55,7 +58,4 @@ public class TestAddressingServer {
         System.out.println("Addressing server test stub execution complete.\n");
     }
 
-
 }
-
-

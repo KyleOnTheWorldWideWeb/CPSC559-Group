@@ -21,6 +21,8 @@ dependencies {
     implementation(project(":common"))                                   // Dependency on the common module (utilities, exceptions)
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 for testing
+    implementation("org.json:json:20240303")  // Add JSON dependency
+
 }
 
 // Configure the application plugin with the main class for launching the addressingserver.
