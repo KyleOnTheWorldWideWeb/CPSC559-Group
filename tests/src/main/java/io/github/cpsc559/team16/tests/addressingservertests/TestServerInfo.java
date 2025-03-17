@@ -9,7 +9,7 @@ public class TestServerInfo {
             System.out.println(">----Starting Test for Server Info----<");
 
             // Create a ChatServerInfo instance with a maximum of 3 clients
-            ChatServerInfo serverInfo = new ChatServerInfo(1337L, "127.0.0.1", 3000, 4000, 3);
+            ChatServerInfo serverInfo = new ChatServerInfo(Long.valueOf(234), "192.168.1.666", 2424, 2425,2426, 30);
             System.out.println("Is chat server full? " + serverInfo.isFull());
 
             // Test addClient() until the server is full
