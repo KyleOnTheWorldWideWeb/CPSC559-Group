@@ -1,0 +1,10 @@
+services:
+  client:
+    image: client:latest
+    container_name: client_container
+    ports:
+      - "${CLIENT_ADDRSERVER_PORT}:${CLIENT_ADDRSERVER_PORT}"
+      - "${CLIENT_CHATSERVER_PORT}:${CLIENT_CHATSERVER_PORT}"
+    stdin_open: true
+    tty: true
+    command: /bin/bash

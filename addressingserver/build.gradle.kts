@@ -6,6 +6,7 @@ import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
 import com.bmuschko.gradle.docker.tasks.network.DockerCreateNetwork
 import java.util.Properties  // Used for loading .env file for port bindings
 import org.gradle.api.tasks.TaskAction
+import org.gradle.jvm.tasks.Jar
 
 // Applying necessary plugins for Java application development and Docker support
 plugins {
@@ -18,7 +19,7 @@ plugins {
     Declaring dependencies for the addressingserver module.
 */
 dependencies {
-    implementation(project(":common"))                                   // Dependency on the common module (utilities, exceptions)
+    implementation(project(":common"))                                 // Dependency on the common module (utilities, exceptions)
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 for testing
 }
@@ -33,12 +34,9 @@ val envProperties = Properties().apply {
     file(".env").inputStream().use { load(it) }
 }
 
-// Configure the default jar task to build the addressingserver JAR file
-tasks.jar {
-    archiveFileName.set("addressingserver.jar")
-    destinationDirectory.set(layout.buildDirectory.dir("libs"))
+tasks.withType<Jar> {
     manifest {
-        attributes("Main-Class" to "io.github.cpsc559.team16.addressingserver.AddressingServer")
+        attributes["Main-Class"] = "io.github.cpsc559.team16.addressingserver.AddressingServer"
     }
 }
 

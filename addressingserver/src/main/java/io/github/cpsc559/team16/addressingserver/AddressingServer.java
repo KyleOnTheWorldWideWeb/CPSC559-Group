@@ -1,21 +1,23 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
-import java.nio.charset.StandardCharsets;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets; // Used for conditionals that don't rely on non-null checks
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.Optional; // Used for conditionals that don't rely on non-null checks
-import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
 
-
-// Internal (Project) Dependencies
 import io.github.cpsc559.team16.addressingserver.ChatServerInfo.ServerStatus;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
+import io.github.cpsc559.team16.common.utilities.AddrHandshakeUtils;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
@@ -152,7 +154,8 @@ public class AddressingServer {
         System.out.println("Addressing server network info dump:");
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
         // TODO - Figure out how to get the outward facing IP address (needed for the primary AS when it starts up)
-        hostAddress = System.getenv("HOST_ADDRESS");
+        hostAddress = System.getenv().getOrDefault("HOST_ADDRESS", "addressingserver");
+        System.out.printf("Host Address: %s\n", hostAddress);
         clientPort = Integer.parseInt(System.getenv().getOrDefault("AS_CLIENT_PORT", "49800"));
         replicaPort = Integer.parseInt(System.getenv().getOrDefault("AS_REPLICA_PORT", "49801"));
         chatServerPort = Integer.parseInt(System.getenv().getOrDefault("AS_CHATSERVER_PORT", "49802"));
@@ -328,27 +331,48 @@ public class AddressingServer {
      * @param newChatServerChannel the {@link SocketChannel} representing the incoming connection from a chat server.
      * @throws IOException if an I/O error occurs while obtaining the remote address.
      */
-    private void registerChatServer(SocketChannel newChatServerChannel) throws IOException{
+    private void registerChatServer(SocketChannel newChatServerChannel) throws IOException {
         // Retrieving the remote address from the SocketChannel and casting it to InetSocketAddress.
         InetSocketAddress remoteAddress = (InetSocketAddress) newChatServerChannel.getRemoteAddress();
         // Extracting the IP address of the chat server from the established connection.
         String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
-
-        // TODO - Implement proper handshaking protocol for Replication iteration
-        //  The chat server should be telling the AddressingServer what ports its using and its max connections.
+    
+        // Read the JSON message from the chat server
+        Map<String, Object> handshakeData = AddrHandshakeUtils.readHandshakeData(newChatServerChannel.socket());
+        int addrServerPort = (int) handshakeData.get("addrServerPort");
+        int chatClientPort = (int) handshakeData.get("chatClientPort");
+        int chatPeerPort = (int) handshakeData.get("chatPeerPort");
+        int maxClientCount = (int) handshakeData.get("maxClientCount");
+    
         try {
-            long pid = createChatServerRecord(chatServerHostAddr, 2426, 2424, 2425, 3);
+            long pid = createChatServerRecord(chatServerHostAddr, addrServerPort, chatClientPort, chatPeerPort, maxClientCount);
             ByteBuffer buffer = ByteBuffer.wrap(Long.toString(pid).getBytes(StandardCharsets.UTF_8));
             while (buffer.hasRemaining()) {
                 newChatServerChannel.write(buffer);
             }
+    
+            // Share the entire address log with the newly registered chat server
+            shareAddressLogWithChatServer(newChatServerChannel);
         } catch (Exception e) {
             System.err.println("Failed during an attempt to register the chat server with address: " + chatServerHostAddr);
             e.printStackTrace();
         }
         newChatServerChannel.close();
     }
-
+    /**
+     * Shares the entire address log with the newly registered chat server.
+     *
+     * @param newChatServerChannel the {@link SocketChannel} representing the newly registered chat server.
+     * @throws IOException if an I/O error occurs while writing to the channel.
+     */
+    private void shareAddressLogWithChatServer(SocketChannel newChatServerChannel) throws IOException {
+        for (ChatServerInfo serverInfo : chatServerRecords.values()) {
+            ByteBuffer buffer = ByteBuffer.wrap(serverInfo.toString().getBytes(StandardCharsets.UTF_8));
+            while (buffer.hasRemaining()) {
+                newChatServerChannel.write(buffer);
+            }
+        }
+    }
     /**
      * Registers a chat server by retrieving its IP address from the provided SocketChannel
      * and passing that IP along with port numbers and maximum client count to create a chat server record.
@@ -401,6 +425,7 @@ public class AddressingServer {
             clientListenerChannel = openServerChannel(clientPort);
             replicaListenerChannel = openServerChannel(replicaPort);
             chatServerListenerChannel = openServerChannel(chatServerPort);
+            System.out.println("AddressingServer is listening on port " + chatServerPort);
         } catch (IOException ioe) {
             System.err.println("Failed to establish Addressing Server connections: " + ioe.getMessage());
         }

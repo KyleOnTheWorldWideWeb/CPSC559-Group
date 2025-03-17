@@ -375,28 +375,15 @@ tasks.register("runClientMacOS") {
     }
 }
 
-tasks.register("runClientLinux") {
+// Task to run Docker Compose
+tasks.register("runClientCompose") {
     group = "docker-client"
-    description = "Builds and runs the Client container in a new Linux terminal (interactive)."
-
-    dependsOn("safeRemoveClientContainer", "safeRemoveClientImage")
-    dependsOn("startNewClientContainer")
-
+    description = "Runs the client container using Docker Compose."
+    dependsOn("buildClientImage")
     doLast {
-        println("Client container started from new image 'client:latest'. Previous image removed from disk.")
-        println("\nOpening a new Linux terminal and attaching to client_container...")
-        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
-        val attachCommand = "docker attach client_container"
-
-        // For GNOME Terminal:
-        project.exec {
-            commandLine("gnome-terminal", "--", "bash", "-c", attachCommand)
+        exec {
+            commandLine("docker-compose", "up")
         }
-
-        // If you’re on KDE/XFCE/etc., uncomment this:
-        // project.exec {
-        //     commandLine("x-terminal-emulator", "-e", attachCommand)
-        // }
     }
 }
 // >-------------------- END OF TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<
