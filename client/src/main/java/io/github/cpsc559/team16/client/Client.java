@@ -204,9 +204,10 @@ public class Client {
     /*
      * Creates a message object from the user input.
      * 
-     * TODO: implement so that this works with Parmeet's serializable message class
+     * TODO: nothing
      */
-    public ClientServerMessage createMessage(String msgContents) {
+    public ClientServerMessage createMessage(String msgContents, String receiver) {
+        return new ClientServerMessage(username, receiver, msgContents, sendCounter++);
     }
 
     /*
