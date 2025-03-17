@@ -298,7 +298,7 @@ public class Client {
     /*
      * This class is responsible for handling user input.
      * 
-     * TODO: nothing
+     * TODO: fix the "createMessage" method to include sender
      */
     private class InputThread extends Thread {
 
