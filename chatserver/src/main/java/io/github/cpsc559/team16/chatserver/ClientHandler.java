@@ -34,14 +34,8 @@ public class ClientHandler implements Runnable {
         try (BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
             output = new PrintWriter(socket.getOutputStream(), true);
 
-            // Read the username
-
-            if (loginUser(input)) {
-                // Send a welcome message to the client
-                sendMessage(new ClientServerMessage("server", username, "Welcome, " + username + "!"));
-            } else {
-                return;
-            }
+            // LOGIN
+            // if (!loginUser(input)) { return; }
 
             // Read messages from the client and add them to the message queue
             String messageJson;
@@ -88,6 +82,7 @@ public class ClientHandler implements Runnable {
             }
 
             clients.put(username, this);
+            sendMessage(new ClientServerMessage("server", username, "Welcome, " + username + "!"));
             return true;
         } else {
             sendMessage(new ClientServerMessage("server", "unknown", "Invalid login message."));
