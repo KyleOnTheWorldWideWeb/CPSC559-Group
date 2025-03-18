@@ -5,10 +5,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Date;
+import java.util.UUID;
 
 public abstract class BaseMessage {
     private String sender;
     private String receiver;
+    private String messageId;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private Date timeSent;
@@ -20,6 +22,12 @@ public abstract class BaseMessage {
         this.sender = sender;
         this.receiver = receiver;
         this.timeSent = new Date();
+        this.messageId = UUID.randomUUID().toString();
+
+    }
+
+    public String getMessageId() {
+        return messageId;
     }
 
     public String getSender() {

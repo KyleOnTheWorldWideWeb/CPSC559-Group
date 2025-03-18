@@ -1,15 +1,27 @@
 package io.github.cpsc559.team16.common.utilities;
 
 public class ClientServerMessage extends BaseMessage {
+    private int id;
     private String content;
 
     public ClientServerMessage() {
         super();
+        this.content = "";
+
     }
 
-    public ClientServerMessage(String sender, String receiver, String content) {
+    public ClientServerMessage(String sender, String receiver, int id, String content) {
         super(sender, receiver);
-        this.content = content;
+        this.id = id;
+        this.content = (content != null) ? content : "";
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public String getContent() {
@@ -23,10 +35,11 @@ public class ClientServerMessage extends BaseMessage {
     @Override
     public String toString() {
         return "ClientServerMessage{" +
-                "sender='" + getSender() + '\'' +
-                ", receiver='" + getReceiver() + '\'' +
+                "sender=" + getSender() +
+                ", receiver=" + getReceiver() +
+                ", id=" + id +
                 ", timeSent=" + getTimeSent() +
-                ", content='" + content + '\'' +
+                ", content='" + content + "'" +
                 '}';
     }
 }

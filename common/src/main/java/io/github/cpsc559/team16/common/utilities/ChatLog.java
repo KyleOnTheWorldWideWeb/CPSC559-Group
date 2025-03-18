@@ -38,6 +38,7 @@ public class ChatLog {
         this.messageIndex = new HashMap<>();
         this.messageHashes = new HashSet<>();
         this.objectMapper = new ObjectMapper();
+        ensureLogFileExists();
         loadIndexFile();
     }
 
@@ -281,6 +282,32 @@ public class ChatLog {
             System.out.println("Existing log loaded successfully and verified.");
         } catch (IOException e) {
             System.err.println("Error loading existing log: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Ensures that the log file exists. If it does not exist, it creates an empty
+     * file.
+     */
+    private void ensureLogFileExists() {
+        try {
+            File file = new File(logFile);
+
+            // Ensure parent directories exist only if they are not null
+            File parentDir = file.getParentFile();
+            if (parentDir != null) {
+                parentDir.mkdirs();
+            }
+            // Ensure parent directories exist
+            file.getParentFile().mkdirs();
+            if (!file.exists()) {
+                boolean created = file.createNewFile();
+                if (created) {
+                    System.out.println("Created new chat log file: " + logFile);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to create chat log file: " + e.getMessage());
         }
     }
 

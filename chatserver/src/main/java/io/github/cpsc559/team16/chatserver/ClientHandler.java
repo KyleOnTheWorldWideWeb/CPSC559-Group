@@ -7,7 +7,6 @@ import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 
@@ -17,7 +16,6 @@ public class ClientHandler implements Runnable {
     private PrintWriter output;
     private BlockingQueue<BaseMessage> messageQueue;
     private ConcurrentHashMap<String, ClientHandler> clients;
-    private ObjectMapper objectMapper = new ObjectMapper();
 
     public ClientHandler(Socket socket, BlockingQueue<BaseMessage> messageQueue,
             ConcurrentHashMap<String, ClientHandler> clients) {
@@ -41,15 +39,16 @@ public class ClientHandler implements Runnable {
 
                 if (clients.containsKey(username)) {
                     sendMessage(
-                            new ClientServerMessage("server", username, "Username already taken. Connection closed."));
+                            new ClientServerMessage("server", username, 0,
+                                    "Username already taken. Connection closed."));
                     socket.close();
                     return;
                 }
 
                 clients.put(username, this);
-                sendMessage(new ClientServerMessage("server", username, "Welcome, " + username + "!"));
+                sendMessage(new ClientServerMessage("server", username, 0, "Welcome, " + username + "!"));
             } else {
-                sendMessage(new ClientServerMessage("server", "unknown", "Invalid login message."));
+                sendMessage(new ClientServerMessage("server", "unknown", 0, "Invalid login message."));
                 socket.close();
                 return;
             }
@@ -59,7 +58,7 @@ public class ClientHandler implements Runnable {
             while ((messageJson = input.readLine()) != null) {
                 try {
                     // Deserialize JSON to ClientServerMessage
-                    ClientServerMessage message = objectMapper.readValue(messageJson, ClientServerMessage.class);
+                    ClientServerMessage message = BaseMessage.fromJson(messageJson, ClientServerMessage.class);
                     messageQueue.put(message);
                 } catch (JsonProcessingException e) {
                     System.err.println("Error parsing message from client: " + e.getMessage());
@@ -81,6 +80,10 @@ public class ClientHandler implements Runnable {
     }
 
     public void sendMessage(BaseMessage message) {
-        output.println(message);
+        try {
+            output.println(message.toJson());
+        } catch (JsonProcessingException e) {
+            System.err.println("Error serializing message: " + e.getMessage());
+        }
     }
 }
