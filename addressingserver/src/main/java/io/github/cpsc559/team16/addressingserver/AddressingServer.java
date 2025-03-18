@@ -203,7 +203,7 @@ public class AddressingServer {
      * @param newChatServerChannel the {@link SocketChannel} representing the incoming connection from a chat server.
      * @throws IOException if an I/O error occurs while obtaining the remote address.
      */
-    private void registerChatServer(SocketChannel newChatServerChannel) throws IOException{
+    private void registerChatServer(SocketChannel newChatServerChannel) throws IOException {
         // Retrieving the remote address from the SocketChannel and casting it to InetSocketAddress.
         InetSocketAddress remoteAddress = (InetSocketAddress) newChatServerChannel.getRemoteAddress();
         // Extracting the IP address of the chat server from the established connection.
@@ -287,6 +287,8 @@ public class AddressingServer {
         }
     }
 
+
+
     public void handleChatServerRegistration(SocketChannel channel) {
         try {
             registerChatServer(channel);
@@ -295,6 +297,12 @@ public class AddressingServer {
             System.err.println("Error retrieving chat server IP address: " + ioe.getMessage());
             ioe.printStackTrace();
         }
+    }
+
+
+
+    public void handleReplicaUpdate(String incomingData) {
+
     }
 
     /*
@@ -313,95 +321,17 @@ public class AddressingServer {
         }
     }
 
-    /**
-     * Begins the main event loop, listening for incoming connections on the
-     * {@code config.clientPort}, {@code config.replicaPort} and {@code config.chatServerPort}
-     *
-     * @throws IOException if an I/O error occurs while selecting
-     */
-//    public void mainEventLoop() throws IOException {
-//        while (true) {
-//            // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
-//            selector.select();
-//            /*
-//             * When you register a channel with a selector, you get back a SelectionKey.
-//             * Here, we iterate through all keys (channels) that are "ready" for an I/O operation.
-//             * We know that at least one such key exists because of the preceding `selector.select()` method invocation.
-//             */
-//            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-//
-//            while (keys.hasNext()) {      // Loop until there are no more keys (channels with I/O events).
-//                SelectionKey key = keys.next();    // Retrieve a new key
-//                keys.remove();                     // Remove the key used in the last iteration of this loop.
-//
-//                if (!key.isValid()) {               // skip current loop iteration
-//                    continue;
-//                }
-//
-//                /* Establishing a new connection. `isAcceptable` returns true if a ServerSocketChannel registered
-//                 *  with `selector` is ready to accept (detected) a new connection. SocketChannel's registered with
-//                 *   the `selector should not appear here.
-//                 */
-//                if (key.isAcceptable()) {
-//                    /*
-//                     * `listeningSC` is not a "new" channel - it is one of the ServerSocketChannels we registered
-//                     *  with the selector in the `initializeChannels` method.
-//                     */
-//                    ServerSocketChannel listeningSC = (ServerSocketChannel) key.channel();
-//                    // We use a `SocketChanel` for established connections. `newChannel.isAcceptable()` will ALWAYS return False
-//                    SocketChannel newChannel = listeningSC.accept();
-//                    // All requests on this channel will be sent to "non-blocking"
-//                    newChannel.configureBlocking(false);
-//                    // Using identity comparison to determine which channel this is and act as a switch statement:
-//                    // Currently, the only connections that should be persistent are those between addressing server processes.
-//                    if (listeningSC == clientListenerChannel) {
-//                        try {
-//                            connectClientToHost(newChannel);
-//                        } catch (IOException ioe) {
-//                            System.err.println("Error sending chat server host address to client: " + ioe.getMessage());
-//                            ioe.printStackTrace();
-//                        }
-//                    } else if (listeningSC == replicaListenerChannel) {
-//                        /*
-//                         Only replicas are given a persistent connection, so we must
-//                         register the `newChannel` with the `selector` which will add a `SelectionKey`
-//                         for that channel and monitor it until it is explicitly closed.
-//                         */
-//                        newChannel.register(selector, SelectionKey.OP_READ); // SocketChannel set to persistent non-blocking I/O
-//                        registerReplicaServer(newChannel);
-//                        // The Primary `AddressingServer` maintains a persistent connection to replicas. Store the channel in an array.
-//                        this.replicaChannels.add(newChannel);
-//                    } else if (listeningSC == chatServerListenerChannel) {
-//                        try {
-//                            registerChatServer(newChannel);
-//                            // TODO: Share the entire {@code addressLog} with chat servers when they register.
-//                        } catch (IOException ioe) {
-//                            System.err.println("Error retrieving chat server IP address: " + ioe.getMessage());
-//                            ioe.printStackTrace();
-//                        }
-//                    }
-//                }
-//
-//                /*
-//                 * Only keys tied to channels that were registered with OP_READ
-//                 * (as we are doing above with `newChannel`) will return True when invoking `isReadable()`.
-//                 * Typically, only a SocketChannel would ever be registered with OP_READ.
-//                 */
-//                if (key.isReadable()) {
-//                    /*
-//                     Since replica servers are the only persistent connections, the logic contained
-//                     in this conditional pertains solely to our replication implentation.
-//                     */
-//                }
-//            }
-//        }
-//    }
+
 
     public void start() throws IOException {
         initializeChannels();
         // Create a dispatcher that uses this instance’s request handler methods
-        AddrServerRequestDispatcher dispatcher = new AddrServerRequestDispatcher(this);
-        networkManager.startEventLoop(dispatcher);
+        AddrServerRequestDispatcher requestDispatcher = new AddrServerRequestDispatcher(this);
+        AddrServerReadDispatcher readDispatcher = new AddrServerReadDispatcher(this);
+        // TODO - fix this so it happens in the AddressingServer constructor (make an overload for networkManager)
+//        networkManager.setReplicaManager(replicaManager); // Cannot add to constructor
+//        networkManager.setChatServerRegistry(chatServerRegistry); //
+        networkManager.startEventLoop(requestDispatcher, readDispatcher);
     }
 
     public void registerPrimaryAddrServer() {
@@ -447,9 +377,12 @@ public class AddressingServer {
 
         try {
             server.start();
+
         } catch (IOException ioe) {
+
             System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());
             ioe.printStackTrace();
+
         }
     }
 

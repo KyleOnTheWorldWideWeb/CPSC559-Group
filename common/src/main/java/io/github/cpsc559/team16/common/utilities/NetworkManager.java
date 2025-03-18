@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.common.utilities;
 
 import java.io.IOException;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -58,15 +59,20 @@ public interface NetworkManager {
      * When an event occurs, it is dispatched to the appropriate handler.
      * </p>
      *
-     * @param dispatcher The dispatcher responsible for routing accepted connections to the appropriate handlers.
+     * @param dispatcher1 The dispatcher responsible for routing accepted connections to the appropriate handlers.
+     * @param dispatcher2 The dispatcher responsible for routing accepted connections to the appropriate handlers.
      * @throws IOException If an I/O error occurs while selecting or processing events.
      */
-    void startEventLoop(ConnectionDispatcher dispatcher) throws IOException;
+    void startEventLoop(ConnectionDispatcher dispatcher1, ReadDispatcher dispatcher2) throws IOException;
 
     /**
      * Defines how incoming connections are dispatched to their respective handlers.
      */
     interface ConnectionDispatcher {
         void dispatch(SocketChannel channel, ServerSocketChannel listenerSC) throws IOException;
+    }
+
+    interface ReadDispatcher {
+        void dispatch(SelectionKey key) throws IOException;
     }
 }

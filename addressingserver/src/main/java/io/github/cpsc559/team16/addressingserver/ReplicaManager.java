@@ -1,5 +1,6 @@
 package io.github.cpsc559.team16.addressingserver;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
@@ -164,7 +165,7 @@ public class ReplicaManager {
             ByteBuffer buffer = ByteBuffer.wrap(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
             // Push the update to each replica's channel
-            for (SocketChannel replicaChannel : replicaChannels) {
+            for (SocketChannel replicaChannel : replicaChannels.values()) {
                 try {
                     while (buffer.hasRemaining()) {
                         replicaChannel.write(buffer);
@@ -176,6 +177,24 @@ public class ReplicaManager {
             }
         } catch (JsonProcessingException e) {
             System.err.println("Failed to serialize ChatServerInfo update: " + e.getMessage());
+        }
+    }
+
+    public void handleUpdateMessage(String jsonMessage, ChatServerRegistry chatServerRegistry) {
+        try {
+            // Deserialize the JSON into a ServerUpdateMessage
+            ServerUpdateMessage updateMessage = ServerUpdateMessage.fromJson(jsonMessage, ServerUpdateMessage.class);
+            if ("CHAT_SERVER_UPDATE".equals(updateMessage.getMsgType())) {
+                // Deserialize the payload into a ChatServerInfo object
+                ChatServerInfo chatServerInfo = objectMapper.readValue(updateMessage.getPayload(), ChatServerInfo.class);
+                // Update the local ChatServerRegistry with the new record
+                chatServerRegistry.registerServer(chatServerInfo.getPID(), chatServerInfo);
+                System.out.println("Replica updated with ChatServerInfo: " + chatServerInfo);
+            } else {
+                System.err.println("Unknown update message type: " + updateMessage.getMsgType());
+            }
+        } catch (JsonProcessingException e) {
+            System.err.println("Failed to process update message: " + e.getMessage());
         }
     }
 

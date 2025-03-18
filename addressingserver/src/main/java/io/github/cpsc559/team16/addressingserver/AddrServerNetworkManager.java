@@ -1,9 +1,12 @@
 package io.github.cpsc559.team16.addressingserver;
-import io.github.cpsc559.team16.common.utilities.NetworkManager;
 
+
+import io.github.cpsc559.team16.common.utilities.NetworkManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.channels.*;
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 
 public class AddrServerNetworkManager implements NetworkManager {
@@ -12,6 +15,19 @@ public class AddrServerNetworkManager implements NetworkManager {
      * This allows the AddressingServer to monitor multiple channels using a single thread.
      */
     private final Selector selector;
+
+
+
+    private ReplicaManager replicaManager;
+    public void setReplicaManager(ReplicaManager replicaManager) {
+        this.replicaManager = replicaManager;
+    }
+
+
+    private ChatServerRegistry chatServerRegistry;
+    public void setChatServerRegistry(ChatServerRegistry chatServerRegistry) {
+        this.chatServerRegistry = chatServerRegistry;
+    }
 
     public AddrServerNetworkManager() throws IOException {
         selector = Selector.open();
@@ -64,11 +80,11 @@ public class AddrServerNetworkManager implements NetworkManager {
      * processes the event, and removes the key(event) from the selector to prevent re-processing.
      * </p>
      *
-     * @param dispatcher The dispatcher responsible for routing accepted connections to the appropriate handlers.
+     * @param requestDispatcher The dispatcher responsible for routing accepted connections to the appropriate handlers.
      * @throws IOException If an I/O error occurs while selecting or processing events.
      */
     @Override
-    public void startEventLoop(NetworkManager.ConnectionDispatcher dispatcher) throws IOException {
+    public void startEventLoop(NetworkManager.ConnectionDispatcher requestDispatcher, NetworkManager.ReadDispatcher readDispatcher) throws IOException {
         while (true) {
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();
@@ -79,7 +95,7 @@ public class AddrServerNetworkManager implements NetworkManager {
              */
             Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
 
-            while (keys.hasNext()) {      // Loop until there are no more keys (channels with I/O events).
+            while (keys.hasNext()) {               // Loop until there are no more keys (channels with I/O events).
                 SelectionKey key = keys.next();    // Retrieve a new key
                 keys.remove();                     // Remove the key used in the last iteration of this loop.
 
@@ -106,7 +122,7 @@ public class AddrServerNetworkManager implements NetworkManager {
                     channel.configureBlocking(false);
 
                     // Dispatches the new connection to the appropriate handler based on the listenerSC type.
-                    dispatcher.dispatch(channel, listenerSC);
+                    requestDispatcher.dispatch(channel, listenerSC);
                 }
 
                 /*
@@ -115,10 +131,28 @@ public class AddrServerNetworkManager implements NetworkManager {
                  * Typically, only a SocketChannel would ever be registered with OP_READ.
                  */
                 if (key.isReadable()) {
-                    /*
-                     * Since replica servers are the only persistent connections, the logic contained
-                     * in this conditional pertains solely to our replication implementation.
-                     */
+
+                   try{
+                       readDispatcher.dispatch(key);
+                   } catch (IOException ioe) {
+                       System.err.println("Error with Replica read event");
+                   }
+//                    // This branch handles persistent connections, such as replica channels.
+//                    SocketChannel channel = (SocketChannel) key.channel();
+//                    ByteBuffer buffer = ByteBuffer.allocate(1024);
+//                    int bytesRead = channel.read(buffer);
+//                    if (bytesRead == -1) {
+//                        key.cancel();
+//                        channel.close();
+//                        System.out.println("Replica connection closed by remote host.");
+//                        continue;
+//                    }
+//                    buffer.flip();
+//                    String jsonMessage = StandardCharsets.UTF_8.decode(buffer).toString();
+//                    System.out.println("Received update message: " + jsonMessage);
+//
+//                    // You need to have your local ChatServerRegistry available (e.g., from your AddressingServer)
+//                    replicaManager.handleUpdateMessage(jsonMessage, this.chatServerRegistry);
                 }
             }
         }
@@ -127,5 +161,9 @@ public class AddrServerNetworkManager implements NetworkManager {
 
     public interface ConnectionDispatcher {
         void dispatch(SocketChannel channel, ServerSocketChannel listenerSC) throws IOException;
+    }
+
+    public interface ReadDispatcher {
+        void dispatch(SelectionKey key) throws IOException;
     }
 }

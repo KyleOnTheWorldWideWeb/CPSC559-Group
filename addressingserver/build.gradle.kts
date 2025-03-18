@@ -478,3 +478,122 @@ tasks.register("runReplica1Windows") {
 
     }
 }
+
+
+// Task to create a Docker container for the second replica.
+val replica2Container = tasks.register<DockerCreateContainer>("buildReplica2Container") {
+    group = "docker-addressing_server_replica"
+    description = "Creates a Docker container for Replica2 using the latest addressingserver image (addrserver:latest)"
+
+    // Remove the previous replica2 container if it exists and ensure the image is built
+    dependsOn("safeRemoveReplica2Container", "buildAddrServerImage")
+    imageId.set("addrserver:latest")
+    containerName.set("replica2_container")
+
+    // Configure environment variables for the second replica
+    withEnvVar("AS_ROLE", "BACKUP")
+    withEnvVar("HOST_ADDRESS", "0.0.0.0")
+    // Use different ports than Replica1 and the primary:
+    withEnvVar("AS_CLIENT_PORT", "49820")
+    withEnvVar("AS_REPLICA_PORT", "49821")
+    withEnvVar("AS_CHATSERVER_PORT", "49822")
+    withEnvVar("PRIMARY_HOST", "addrserver_container")
+    withEnvVar("PRIMARY_PORT", "49801")
+
+    // Define port bindings for Replica2
+    val replica2Ports = listOf("49820:49820", "49821:49821", "49822:49822")
+    hostConfig.portBindings.set(replica2Ports)
+
+    doLast {
+        println("Addressing server replica container built - Name: ${containerName.get()}")
+    }
+}
+
+// Task to kill the second replica container if it is running.
+tasks.register<DockerKillContainer>("killReplica2Container") {
+    group = "docker-addressing_server_replica"
+    description = "Kills the Replica2 container (replica2_container) if it is running."
+    targetContainerId("replica2_container")
+    onlyIf {
+        try {
+            val containerInfo = dockerClient.inspectContainerCmd("replica2_container").exec()
+            containerInfo.state.running
+        } catch (e: Exception) {
+            false
+        }
+    }
+    doLast {
+        println("Container 'replica2_container' has been killed.")
+    }
+}
+
+// Task to remove the second replica container if it exists and is not running.
+tasks.register<DockerRemoveContainer>("removeReplica2Container") {
+    group = "docker-addressing_server_replica"
+    description = "Removes the Replica2 container if it is not running."
+    targetContainerId("replica2_container")
+    force.set(true)
+    onlyIf {
+        try {
+            val containerInfo = dockerClient.inspectContainerCmd("replica2_container").exec()
+            !containerInfo.state.running
+        } catch (e: Exception) {
+            false
+        }
+    }
+    doLast {
+        println("Container 'replica2_container' has been removed.")
+    }
+}
+
+// Composite task to safely remove the second replica container.
+tasks.register("safeRemoveReplica2Container") {
+    group = "docker-addressing_server_replica"
+    description = "Kills the Replica2 container if running; otherwise removes it if it exists."
+    dependsOn("killReplica2Container", "removeReplica2Container")
+}
+
+// Task to start the second replica container.
+tasks.register<DockerStartContainer>("startNewReplica2Container") {
+    group = "docker-addressing_server_replica"
+    description = "Builds a new Replica2 container and starts it."
+    dependsOn(replica2Container)
+    targetContainerId("replica2_container")
+}
+
+// Task to stream logs from the second replica container.
+tasks.register<DockerLogsContainer>("streamReplica2Logs") {
+    group = "docker-addressing_server_replica"
+    description = "Streams logs from the Replica2 container to the console."
+    targetContainerId("replica2_container")
+    follow.set(true)
+}
+
+// Composite task to fully remove and rebuild the second replica container from a fresh image.
+tasks.register("runReplica2WipeImg") {
+    group = "docker-addressing_server_replica"
+    description = "Builds and runs a Replica2 container from a new image - deletes the current image and container.\n" +
+            "\t(Dockerfile -> AddrServer Image -> Replica2 Container)."
+    dependsOn("safeRemoveReplica2Container")
+    dependsOn("startNewReplica2Container", "streamReplica2Logs")
+    doLast {
+        println("Replica2 container started from new image 'addrserver:latest'. Previous image removed from disk.")
+    }
+}
+
+// Task to run the second replica container on Windows, opening a new terminal for its output.
+tasks.register("runReplica2Windows") {
+    group = "docker-addressing_server_replica"
+    description = "Runs Replica2 similar to runReplica2WipeImg but opens a new terminal for container output on Windows."
+    dependsOn("safeRemoveReplica2Container")
+    dependsOn("startNewReplica2Container")
+    doLast {
+        println("Replica2 container started from new image 'addrserver:latest'. Previous image removed from disk.")
+        println("Launching a new Windows terminal for Replica2 output.......")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+        val attachCommand = "docker attach replica2_container"
+        project.exec {
+            commandLine("cmd", "/c", "start", "cmd", "/k", attachCommand)
+        }
+    }
+}
