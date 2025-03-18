@@ -109,6 +109,21 @@ public class ChatServer {
         }
     }
 
+    /**
+     * Broadcasts messages from the queue to all connected clients and peer servers.
+     * <p>
+     * This method runs continuously, retrieving messages from the queue and
+     * distributing
+     * them to all connected clients. If the message originates from a client, it is
+     * also
+     * appended to the chat log. Additionally, the message is forwarded to all peer
+     * servers.
+     * </p>
+     * <p>
+     * If the thread is interrupted, an error message is logged, and the method
+     * exits.
+     * </p>
+     */
     private static void broadcastMessages() {
         try {
             while (true) {
@@ -132,13 +147,23 @@ public class ChatServer {
         }
     }
 
+    /**
+     * Forwards a message to all connected peer servers.
+     * <p>
+     * This method iterates through the list of peer servers and sends the provided
+     * message to each peer by calling {@code announceIncomingMessages}. If no peer
+     * servers are available, it logs an error and exits without sending.
+     * </p>
+     *
+     * @param message The {@link BaseMessage} to be forwarded to peer servers.
+     */
     private static void forwardMessageToPeers(BaseMessage message) {
-        System.out.println("IN FORWARDING");
+        // System.out.println("IN FORWARDING");
         if (peerServers.isEmpty()) {
             System.err.println("No peer servers available. Message not sent.");
             return;
         }
-        System.out.println("Total peers available: " + peerServers.size());
+        // System.out.println("Total peers available: " + peerServers.size());
 
         for (Map.Entry<String, ServerInfo> peerEntry : peerServers.entrySet()) {
             String peerKey = peerEntry.getKey();
@@ -204,11 +229,11 @@ public class ChatServer {
             }
 
             ID = Integer.parseInt(response);
-            CHATLOG_FILE = "src/main/java/io/github/cpsc559/team16/Logs/chatlog_" + ID + ".log";
-            INDEX_FILE = "src/main/java/io/github/cpsc559/team16/Logs/index_" + ID + ".json";
+            CHATLOG_FILE = "src/main/java/com/example/Logs/chatlog_" + ID + ".log";
+            INDEX_FILE = "src/main/java/com/example/Logs/index_" + ID + ".json";
             chatLog = new ChatLog(CHATLOG_FILE, INDEX_FILE);
 
-            System.out.println("Chat server registered with PID: " + response);
+            // System.out.println("Chat server registered with PID: " + response);
 
             // **Read the list of registered chat servers**
             StringBuilder serverListJson = new StringBuilder();
@@ -254,7 +279,7 @@ public class ChatServer {
                 return;
             }
 
-            System.out.println("Received list of registered chat servers:");
+            // System.out.println("Received list of registered chat servers:");
             // int lowestPeerID = Integer.MAX_VALUE;
             // String lowestPeerAddress = null;
             // int lowestPeerPort = -1;
@@ -285,14 +310,14 @@ public class ChatServer {
 
                 new Thread(() -> connectToPeerServer(peerAddress, peerPort, peerID)).start();
             }
-            System.out.println("Final peer list: " + peerServers.keySet());
+            // System.out.println("Final peer list: " + peerServers.keySet());
 
             // if (lowestPeerAddress != null && lowestPeerPort != -1) {
             // requestChatLogFromPeer(lowestPeerAddress, lowestPeerPort, lowestPeerID);
             // }
 
         } catch (Exception e) {
-            System.err.println("Error processing chat server list: " + e.getMessage());
+            // System.err.println("Error processing chat server list: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -310,7 +335,7 @@ public class ChatServer {
                 InputStream inputStream = peerSocket.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
 
-            System.out.println("[INFO] Requesting chatlog from peer server: " + peerID);
+            // System.out.println("[INFO] Requesting chatlog from peer server: " + peerID);
 
             // Send request for chatlog
             String requestMessage = "REQUEST_CHATLOG\n";
@@ -475,6 +500,22 @@ public class ChatServer {
         }
     }
 
+    /**
+     * Handles the announcement of incoming messages from a peer server.
+     * <p>
+     * This method acknowledges the announcement, reads the incoming JSON-formatted
+     * message,
+     * checks for duplicates, and if the message is new, it adds it to the message
+     * queue
+     * for further processing.
+     * </p>
+     *
+     * @param reader The {@link BufferedReader} used to read the incoming message
+     *               from the peer.
+     * @param writer The {@link PrintWriter} used to send acknowledgments to the
+     *               peer.
+     * @throws IOException If an I/O error occurs while reading from the peer.
+     */
     private static void handleIncomingMessageAnnouncement(BufferedReader reader, PrintWriter writer)
             throws IOException {
         writer.println("ACK:READY_FOR_MESSAGES");
@@ -495,7 +536,7 @@ public class ChatServer {
 
             // **Check if message was already received**
             if (receivedMessages.containsKey(message.getMessageId())) {
-                System.out.println("[INFO] Duplicate message detected. Skipping.");
+                // System.out.println("[INFO] Duplicate message detected. Skipping.");
                 return; // Do not process or forward it again
             }
 
@@ -557,7 +598,7 @@ public class ChatServer {
             String line;
             while ((line = logReader.readLine()) != null) {
                 // **Debugging: Print each line being sent**
-                System.out.println("[DEBUG] Sending chatlog line: " + line);
+                // System.out.println("[DEBUG] Sending chatlog line: " + line);
                 writer.println(line);
                 writer.flush();
             }
@@ -582,7 +623,7 @@ public class ChatServer {
                 try {
 
                     // **Debugging: Print each received message before parsing**
-                    System.out.println("[DEBUG] Received chatlog line: " + line);
+                    // System.out.println("[DEBUG] Received chatlog line: " + line);
 
                     // Deserialize using BaseMessage's fromJson function
                     BaseMessage baseMessage = BaseMessage.fromJson(line, ClientServerMessage.class);
@@ -602,7 +643,7 @@ public class ChatServer {
                         receivedMessages.put(message.getMessageId(), true);
 
                         chatLog.appendMessage(message); // Append only if not already present
-                        System.out.println("[INFO] Chatlog merged: " + message.getMessageId());
+                        // System.out.println("[INFO] Chatlog merged: " + message.getMessageId());
 
                     }
                 } catch (Exception e) {
