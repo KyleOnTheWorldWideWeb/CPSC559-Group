@@ -10,9 +10,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.github.cpsc559.team16.utilities.BaseMessage;
-import io.github.cpsc559.team16.utilities.ClientServerMessage;
+import io.github.cpsc559.team16.common.utilities.BaseMessage;
+import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 
 public class ClientHandler implements Runnable {
     private Socket socket;

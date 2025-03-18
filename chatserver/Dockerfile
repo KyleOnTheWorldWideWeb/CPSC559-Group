@@ -13,9 +13,14 @@ COPY .env /app/.env
 # Install bash
 RUN apt-get update && apt-get install -y bash
 
-# Expose the port the application runs on
-ENV PORT 2424
-EXPOSE ${PORT}
+# Expose the ports the chat server uses
+ENV CS_CLIENT_PORT=2424
+ENV CS_PEER_PORT=2425
+ENV CS_ADDRSERVER_PORT=2426
+EXPOSE ${CS_CLIENT_PORT}
+EXPOSE ${CS_PEER_PORT}
+EXPOSE ${CS_ADDRSERVER_PORT}
+
 
 # Run the application
 ENTRYPOINT ["bash", "-c", "source /app/.env && java -jar chatserver.jar"]

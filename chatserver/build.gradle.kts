@@ -5,6 +5,7 @@ import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 import com.bmuschko.gradle.docker.tasks.AbstractDockerRemoteApiTask
 import org.gradle.api.tasks.TaskAction
 import java.io.File
+import java.util.*
 
 // Applying necessary plugins for Java application dev. and Docker support
 plugins {
@@ -19,8 +20,10 @@ plugins {
 */
 
 dependencies {
-    implementation(project(":utilities"))                                   // Adds dependency on the utilities module
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")    // JSON support
+    implementation(project(":common"))                                   // Adds dependency on the utilities module
+    implementation(project(":addressingserver"))
+    implementation(project(":client"))
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")            // JUnit 5 testing framework
 }
 
@@ -28,6 +31,12 @@ dependencies {
 application {
     mainClass.set("io.github.cpsc559.team16.chatserver.ChatServer")
 }
+
+// Loading the port bindings from the chatserver .env file
+val envProperties = Properties().apply {
+    file(".env").inputStream().use { load(it) }
+}
+
 
 // Configure the default jar task to build the chatserver JAR file
 tasks.jar {
@@ -52,7 +61,8 @@ tasks.register<Jar>("chatserverFatJar") {
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
 
     from(sourceSets.main.get().output)
-    from(project(":utilities").sourceSets.main.get().output)
+    // Explicitly include the compiled classes from the common module
+    from(project(":common").sourceSets.main.get().output)
 
     from({
         configurations.runtimeClasspath.get().filter { it.exists() }.map { zipTree(it) }
@@ -164,23 +174,21 @@ val chatserverContainer = tasks.register<DockerCreateContainer>("buildChatServer
     group = "docker-chatserver"
     description = "Creates a Docker container using the latest chatserver image (chatserver:latest)"
 
-    dependsOn("safeRemoveChatServerContainer")
+    dependsOn("safeRemoveChatServerContainer", "buildChatServerImage")
     imageId.set("chatserver:latest")
     containerName.set("chatserver_container")
 
-    // Add environment variables from the .env file
-    val envFile = File(".env")
-    if (envFile.exists()) {
-        envFile.forEachLine { line ->
-            val (key, value) = line.split("=")
-            envVars.put(key, value)
-        }
-    }
-
-    // Map the port from the environment variable
-    val port = envVars.get().getOrDefault("PORT", "2424")
-    hostConfig.portBindings.set(listOf("$port:$port"))
-
+    // Bind the environment variables to the ports
+    hostConfig.portBindings.set(
+            listOf(
+                    "${envProperties.getProperty("CS_CLIENT_PORT")}:${envProperties.getProperty("CS_CLIENT_PORT")}",
+                    "${envProperties.getProperty("CS_PEER_PORT")}:${envProperties.getProperty("CS_PEER_PORT")}",
+                    "${envProperties.getProperty("CS_ADDRSERVER_PORT")}:${envProperties.getProperty("CS_ADDRSERVER_PORT")}"
+            )
+    )
+    println("CS_CLIENT_PORT=${envProperties.getProperty("CS_CLIENT_PORT")}")
+    println("CS_PEER_PORT=${envProperties.getProperty("CS_PEER_PORT")}")
+    println("CS_ADDRSERVER_PORT=${envProperties.getProperty("CS_ADDRSERVER_PORT")}")
     doLast {
         println("ChatServer Container Built - Name: ${containerName.get()}")
     }
@@ -201,15 +209,14 @@ tasks.register<DockerLogsContainer>("streamChatServerLogs") {
 tasks.register<DockerStartContainer>("startNewChatServerContainer") {
     group = "docker-chatserver"
     description = "Builds a new container <chatserver_container> and starts it."
-
-    dependsOn(chatserverContainer)
+    dependsOn(chatserverContainer) // This task call will create a new image and then create a container out of that image
     targetContainerId("chatserver_container")
 }
 
 tasks.register("runChatServerRetainImg") {
     group = "docker-chatserver"
     description = "Builds a new container from the <chatserver:latest> Image and starts it."
-    dependsOn("safeRemoveChatServerContainer", "buildChatServerImage", "startNewChatServerContainer", "streamChatServerLogs")
+    dependsOn("safeRemoveChatServerContainer", "startNewChatServerContainer", "streamChatServerLogs")
     doLast {
         println("ChatServer container started with image 'chatserver:latest'.")
     }
@@ -220,5 +227,72 @@ tasks.register("runChatServerWipeImg") {
     group = "docker-chatserver"
     description = "Builds a new container from scratch (Dockerfile->ChatServer Image->ChatServer Container)"
     dependsOn("safeRemoveChatServerContainer", "safeRemoveChatServerImage")
-    dependsOn("buildChatServerImage", "startNewChatServerContainer", "streamChatServerLogs")
+    dependsOn("startNewChatServerContainer", "streamChatServerLogs")
 }
+
+// >-------------------- TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<
+tasks.register("runChatServerWindows") {
+    group = "docker-chatserver"
+    description = "Does the exact same thing as runChatServerWipeImg but opens a new terminal for the containers output!"
+    dependsOn("safeRemoveChatServerContainer", "safeRemoveChatServerImage")
+    dependsOn("startNewChatServerContainer")
+
+    doLast {
+        println("Chat Server container started from new image 'chatserver:latest'. Previous image removed from disk.")
+        println("Launching a new Windows terminal.......")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+
+        // Attach to the running container's shell in a new terminal
+        val attachCommand = "docker attach chatserver_container"
+        project.exec {
+            commandLine("cmd", "/c", "start", "cmd", "/k", attachCommand)
+        }
+
+    }
+}
+
+tasks.register("runChatServerMacOS") {
+    group = "docker-chatserver"
+    description = "Does the exact same thing as runChatServerWipeImg but opens a new terminal for the container's output on macOS!"
+    dependsOn("safeRemoveChatServerContainer", "safeRemoveChatServerImage")
+    dependsOn("startNewChatServerContainer")
+
+    doLast {
+        println("Chat Server container started from new image 'chatserver:latest'. Previous image removed from disk.")
+        println("Launching a new macOS terminal.......")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+
+        val attachCommand = "docker attach chatserver_container"
+        project.exec {
+            commandLine("osascript", "-e", "tell application \"Terminal\" to do script \"$attachCommand\"")
+        }
+    }
+}
+
+tasks.register("runChatServerLinux") {
+    group = "docker-chatserver"
+    description = "Does the exact same thing as runChatServerWipeImg but opens a new terminal for the container's output on Linux!"
+    dependsOn("safeRemoveChatServerContainer", "safeRemoveChatServerImage")
+    dependsOn("startNewChatServerContainer")
+
+    doLast {
+        println("Chat Server container started from new image 'chatserver:latest'. Previous image removed from disk.")
+        println("Launching a new Linux terminal.......")
+        println("\n>------YOU MUST HALT THE PROCESS IN THIS WINDOW MANUALLY WITH CTRL-C------<\n")
+
+        val attachCommand = "docker attach chatserver_container"
+
+        // For GNOME Terminal:
+        project.exec {
+            commandLine("gnome-terminal", "--", "bash", "-c", attachCommand)
+        }
+
+        // If you're on KDE/XFCE/etc., you can replace with:
+        // project.exec {
+        //     commandLine("x-terminal-emulator", "-e", attachCommand)
+        // }
+    }
+}
+
+
+// >-------------------- END OF TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<

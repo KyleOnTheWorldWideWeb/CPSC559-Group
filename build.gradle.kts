@@ -3,8 +3,6 @@ plugins {
     id("com.bmuschko.docker-remote-api") version "9.4.0" apply false // Each module applies it as needed
 }
 
-
-
 subprojects {
     repositories {
         mavenCentral() // Ensures dependencies are pulled from Maven Central
@@ -23,4 +21,11 @@ subprojects {
             add("testImplementation", "org.junit.jupiter:junit-jupiter:5.12.0") // JUnit 5
         }
     }
+}
+
+// >--------------- GRADLE TASKS FOR THE REPOSITORY ------------------<
+
+tasks.register("buildProjectImages") {
+    group = "Docker-Repository"
+    description = "BuildsUses the image building tasks defined in each module"
 }
