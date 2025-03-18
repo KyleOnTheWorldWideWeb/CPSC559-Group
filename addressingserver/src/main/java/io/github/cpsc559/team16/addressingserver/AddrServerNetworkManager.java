@@ -72,7 +72,6 @@ public class AddrServerNetworkManager implements NetworkManager {
         while (true) {
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();
-
             /*
              * When you register a channel with a selector, you get back a SelectionKey.
              * Here, we iterate through all keys (channels) that are "ready" for an I/O operation.

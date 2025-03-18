@@ -3,6 +3,14 @@ package io.github.cpsc559.team16.addressingserver;
 public class AddrServerConfig {
 
     /**
+     * Each AddressingServer process has a distinct id amongst its peers.
+     * {@code pid} is used as a 'tie-breaker' during leader elections.
+     */
+    // CURRENTLY, PID IS TIED TO THE PEER SOCKET THAT THE PROCESS IS USING
+    // TODO - implement method to generate and assign PID to replicas
+    private long pid;
+
+    /**
      * The network address of this Addressing Server.
      * The Primary Addressing Server posts this address to the
      * A-record in the static DNS.
@@ -30,6 +38,7 @@ public class AddrServerConfig {
      */
     private final int chatServerPort;
 
+
     /**
      * AddressingServer processes are either:
      * <ul>
@@ -52,6 +61,7 @@ public class AddrServerConfig {
      *     <li>Replica port</li>
      *     <li>Chat server port</li>
      *     <li>Server role (PRIMARY or BACKUP)</li>
+     *     <li>Server pid (Process ID)</li>
      * </ul></p>
      */
     public AddrServerConfig() {
@@ -59,7 +69,7 @@ public class AddrServerConfig {
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
         String roleEnv = System.getenv().getOrDefault("AS_ROLE", "BACKUP").trim().toUpperCase();
         this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.BACKUP;
-        this.hostAddress = System.getenv("HOST_ADDRESS");
+        this.hostAddress = System.getenv("HOST_ADDRESS").trim();
         this.clientPort = Integer.parseInt(System.getenv().get("AS_CLIENT_PORT").trim());
         this.replicaPort = Integer.parseInt(System.getenv().get("AS_REPLICA_PORT").trim());
         this.chatServerPort = Integer.parseInt(System.getenv().get("AS_CHATSERVER_PORT").trim());
@@ -93,6 +103,13 @@ public class AddrServerConfig {
      */
     public void setRole(ServerRole role) {
         this.role = role;
+    }
+
+    public void setPID(Long pid) {
+        this.pid = pid;
+    }
+    public Long getPID() {
+        return this.pid;
     }
 
     public enum ServerRole {

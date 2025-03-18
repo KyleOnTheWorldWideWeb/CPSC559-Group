@@ -182,9 +182,15 @@ val addrServerContainer = tasks.register<DockerCreateContainer>("buildAddrServer
                     "${envProperties.getProperty("AS_CHATSERVER_PORT")}:${envProperties.getProperty("AS_CHATSERVER_PORT")}"
             )
     )
-    println("AS_CLIENT_PORT=${envProperties.getProperty("AS_CLIENT_PORT")}")
-    println("AS_REPLICA_PORT=${envProperties.getProperty("AS_REPLICA_PORT")}")
-    println("AS_CHATSERVER_PORT=${envProperties.getProperty("AS_CHATSERVER_PORT")}")
+    // ADD THE REST OF THE ENVIRONMENT VARIABLES
+    withEnvVar("AS_ROLE", envProperties.getProperty("AS_ROLE"))
+    withEnvVar("HOST_ADDRESS", envProperties.getProperty("HOST_ADDRESS"))
+
+    println("AS_ROLE = ${envProperties.getProperty("AS_ROLE")}")
+    println("HOST_ADDRESS = ${envProperties.getProperty("HOST_ADDRESS")}")
+    println("AS_CLIENT_PORT = ${envProperties.getProperty("AS_CLIENT_PORT")}")
+    println("AS_REPLICA_PORT = ${envProperties.getProperty("AS_REPLICA_PORT")}")
+    println("AS_CHATSERVER_PORT = ${envProperties.getProperty("AS_CHATSERVER_PORT")}")
     // Printing the container name and image ID to console
     doLast {
         println("addressingserver Container built - Name: ${containerName.get()}")
@@ -359,7 +365,7 @@ val replica1Container = tasks.register<DockerCreateContainer>("buildReplicaConta
     group = "docker-addressing_server_replica"
     description = "Creates a Docker container for a replica using the latest addressingserver image (addrserver:latest)"
 
-    dependsOn("safeRemoveAddrServerContainer", "buildAddrServerImage")
+    dependsOn("safeRemoveReplica1Container", "buildAddrServerImage")
     imageId.set("addrserver:latest")
     containerName.set("replica1_container")
 
@@ -446,7 +452,7 @@ tasks.register("runReplica1WipeImg") {
     group = "docker-addressing_server_replica"
     description = "Builds and runs a Replica1 Container from a new Image - deletes the current Image and Container.\n" +
             "\t\t\t(Dockerfile -> AddrServer Image -> Replica1 Container)."
-    dependsOn("safeRemoveReplica1Container", "safeRemoveAddrServerImage")
+    dependsOn("safeRemoveReplica1Container")
     dependsOn("startNewReplica1Container", "streamReplica1Logs")
     doLast {
         println("Replica1 container started from new image 'addrserver:latest'. Previous image removed from disk.")
@@ -456,7 +462,7 @@ tasks.register("runReplica1WipeImg") {
 tasks.register("runReplica1Windows") {
     group = "docker-addressing_server_replica"
     description = "Does the exact same thing as runAddrServerWipeImg but opens a new terminal for the containers output!"
-    dependsOn("safeRemoveReplica1Container", "safeRemoveAddrServerImage")
+    dependsOn("safeRemoveReplica1Container")
     dependsOn("startNewReplica1Container")
 
     doLast {

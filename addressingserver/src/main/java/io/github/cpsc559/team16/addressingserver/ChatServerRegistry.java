@@ -107,7 +107,7 @@ public class ChatServerRegistry {
                 System.err.println("WARNING: A server with ID " + serverPID + " already existed. Overwriting existing entry.");
                 // TODO: add logic to skip a range of ID values and re-insert the overwritten record - "previous"
             } else {
-                System.out.print("\n**ChatServer** registered successfully with ID: %d\n\n" + serverPID);
+                System.out.println("\n**ChatServer** successfully registered with ID: " + serverPID + "\n");
                 debugPrintAllServers();
             }
             return serverPID;
@@ -123,25 +123,22 @@ public class ChatServerRegistry {
      * Logs the details of this ChatServerInfo object to the console for debugging purposes.
      */
     public void debugPrintServer(ChatServerInfo s) {
-        System.out.println("---------- ChatServerInfo Debug ----------");
-        System.out.printf("Host Address : %s%n", s.getHostAddress());
-        System.out.printf("Client Port  : %d%n", s.getClientPort());
-        System.out.printf("Peer Port    : %d%n", s.getPeerPort());
-        System.out.printf("Client Count : %d%n", s.getClientCount());
-        System.out.printf("Status       : %s%n", s.getStatus());
-        System.out.println("--------------------------------------");
+        System.out.println("\t---------- ChatServerInfo Record ----------");
+        System.out.printf("\tProcess ID : %s%n", s.getPID());
+        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
+        System.out.printf("\tClient Port  : %d%n", s.getClientPort());
+        System.out.printf("\tPeer Port    : %d%n", s.getPeerPort());
+        System.out.printf("\tClient Count : %d%n", s.getClientCount());
+        System.out.printf("\tStatus       : %s%n", s.getStatus());
+        System.out.println("\t-------------------------------------------");
     }
 
     public void debugPrintAllServers() {
+        System.out.println("|--------------- Currently Registered ChatServer's ---------------|");
         for (ChatServerInfo s : this.chatServerRecords.values()){
-            System.out.println("---------- Current ChatServerInfo Records ----------");
-            System.out.printf("Host Address : %s%n", s.getHostAddress());
-            System.out.printf("Client Port  : %d%n", s.getClientPort());
-            System.out.printf("Peer Port    : %d%n", s.getPeerPort());
-            System.out.printf("Client Count : %d%n", s.getClientCount());
-            System.out.printf("Status       : %s%n", s.getStatus());
-            System.out.println("----------------------------------------------------");
+            debugPrintServer(s);
         }
+        System.out.println("|-----------------------------------------------------------------|");
     }
 
 }

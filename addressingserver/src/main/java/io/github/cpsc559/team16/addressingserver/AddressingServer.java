@@ -40,6 +40,17 @@ public class AddressingServer {
     private final ChatServerRegistry chatServerRegistry;
 
     /**
+     * The process responsible for managing {@code AddrServerInfo} records.
+     */
+    private final AddrServerRegistry addrServerRegistry;
+
+    /**
+     * The process responsible for managing interactions between the Primary
+     * {@code AddressingServer} and its replicas.
+     */
+    private final ReplicaManager replicaManager;
+
+    /**
      * The number of chat servers that have been registered.
      * Count begins at 1, not zero, because normals don't start at zero.
      */
@@ -65,31 +76,7 @@ public class AddressingServer {
      */
     private ServerSocketChannel replicaListenerChannel;
 
-    /**
-     * Each AddressingServer process has a distinct id amongst its peers.
-     * {@code pid} is used as a 'tie-breaker' during leader elections.
-     */
-    // CURRENTLY, PID IS TIED TO THE PEER SOCKET THAT THE PROCESS IS USING
-            // TODO - implement method to generate and assign PID to replicas
-    private long pid;
 
-    /**
-     * This address log is used by each AddressingServer to keep records
-     * of all other addressing servers in the network.
-     * <p>
-     * All AddressingServer processes will have {@code ChatServerInfo.maxClientCount} = 0
-     * </p>
-     */
-    private ArrayList<AddrServerInfo> replicaRecords;
-
-    /**
-     * Contains the set of all open channels between the Primary {@code AddressingServer} and its Replicas.
-     * <p>
-     * The implementation of our push protocol for consistency and leader election for fault tolerance is such that
-     * every server in the data structure will be used during updates and elections, so a simple DS (array) is ideal.
-     * </p>
-     */
-    private ArrayList<SocketChannel> replicaChannels;
 
     /**
      * Represents the leadership status of an addressing server.
@@ -100,9 +87,16 @@ public class AddressingServer {
      *     <li>{@code BACKUP} - This server is a Passive Replica for failover.</li>
      * </ul>
      */
-    public enum ServerRole {
-        PRIMARY, BACKUP
+    private AddrServerConfig.ServerRole role;
+
+    public AddrServerConfig.ServerRole getRole() {
+        return role;
     }
+
+    public void setRole(AddrServerConfig.ServerRole role) {
+        this.role = role;
+    }
+
 
 
     /**
@@ -121,8 +115,8 @@ public class AddressingServer {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
         chatServerRegistry = new ChatServerRegistry();
-        replicaRecords = new ArrayList<>();
-        replicaChannels = new ArrayList<>();
+        addrServerRegistry = new AddrServerRegistry();
+        replicaManager = new ReplicaManager();
     }
 
 
@@ -237,21 +231,22 @@ public class AddressingServer {
      * @param newReplicaChannel the {@link SocketChannel} representing the incoming connection from a replica {@code AddressingServer}.
      * @throws IOException if an I/O error occurs while obtaining the remote address.
      */
-    private void registerReplicaServer(SocketChannel newReplicaChannel) throws IOException {
-        // Retrieving the remote address from the SocketChannel and casting it to InetSocketAddress.
-        InetSocketAddress remoteAddress = (InetSocketAddress) newReplicaChannel.getRemoteAddress();
-        // Extracting the IP address of the replica from the established connection.
-        String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
-
-        this.replicaRecords.add(new AddrServerInfo(generatePID(), replicaHostAddr, 49800, 49801, 49802 ));
-        String message = "ACK!";
-        ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-
-        while (buffer.hasRemaining()) {
-            newReplicaChannel.write(buffer);
-        }
-        newReplicaChannel.close();
-    }
+//    private void registerReplicaServer(SocketChannel newReplicaChannel) throws IOException {
+//        // Retrieving the remote address from the SocketChannel and casting it to InetSocketAddress.
+//        InetSocketAddress remoteAddress = (InetSocketAddress) newReplicaChannel.getRemoteAddress();
+//        // Extracting the IP address of the replica from the established connection.
+//        String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
+//        // Any addressing server that is registering itself is clearly a replica, so register it as a BACKUP
+//        this.replicaRecords.add(new AddrServerInfo(generatePID(), replicaHostAddr,
+//                49800, 49801, 49802, AddrServerConfig.ServerRole.BACKUP));
+//        String message = "ACK!";
+//        ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
+//
+//        while (buffer.hasRemaining()) {
+//            newReplicaChannel.write(buffer);
+//        }
+//        newReplicaChannel.close();
+//    }
 
 
     /**
@@ -310,15 +305,12 @@ public class AddressingServer {
     public void handleReplicaConnection(SocketChannel channel) {
         // TODO - May need to add conditional so only the primary activates this code
         try {
-            networkManager.openPersistentChannel(channel);
-            registerReplicaServer(channel);
+            networkManager.openPersistentChannel(channel); // Add the channel to the selector
+            replicaManager.registerReplica(config.getPID(), generatePID(), channel, this.addrServerRegistry);
         } catch (IOException ioe) {
             System.err.println("Error registering/opening persistent channel with peer server: " + ioe.getMessage());
             ioe.printStackTrace();
         }
-        // The Primary `AddressingServer` maintains a persistent connection to replicas so that it
-        // can push updates to them. Store the channel in an array.
-        this.replicaChannels.add(channel);
     }
 
     /**
@@ -412,17 +404,46 @@ public class AddressingServer {
         networkManager.startEventLoop(dispatcher);
     }
 
+    public void registerPrimaryAddrServer() {
+        Long pid = generatePID();
+        config.setPID(pid); // Assign a process id to the primary
+        System.out.println(config.getHostAddress());
+        addrServerRegistry.registerAddrServer(pid, config.getHostAddress(),
+                config.getClientPort(), config.getReplicaPort(), config.getChatServerPort(), config.getRole());
+    }
+
     public static void main(String[] args) {
         /* This timeout is necessary for proper output in the new terminal window..
-        * ... without it, the initial output to console occurs before the terminal is open.
-        */
+         * ... without it, the initial output to console occurs before the terminal is open.
+         */
         try {
             TimeUnit.SECONDS.sleep(1);
-        } catch (Exception e) {System.err.println(e.getMessage());}
-
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
         System.out.printf("Addressing Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
 
         AddressingServer server = new AddressingServer();
+
+        String serverRole = System.getenv("AS_ROLE");
+
+        if (serverRole != null) {
+            if (serverRole.equals("PRIMARY")) {
+                System.out.println("AS_ROLE is set to: " + serverRole);
+                // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
+                server.registerPrimaryAddrServer(); // Puts the addressing server into the AddrServerRegistry
+            } else if (serverRole.equals("BACKUP")) {
+                System.out.println("AS_ROLE is set to: " + serverRole);
+                // TODO - retrieve the address of the primary addressing server from the Domain A record
+                server.replicaManager.registerBackupWithPrimary("0.0.0.0", 49801,
+                        server.networkManager, server.config.getClientPort(), server.config.getReplicaPort(), server.config.getChatServerPort());
+                // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
+                // Register with PRIMARY AddressingServer
+            } else {
+                System.out.println("AS_ROLE is not set. Defaulting to BACKUP");
+            }
+        }
+
 
         try {
             server.start();
