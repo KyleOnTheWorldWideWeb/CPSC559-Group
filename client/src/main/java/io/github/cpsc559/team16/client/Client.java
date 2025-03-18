@@ -13,11 +13,11 @@ import java.util.logging.Logger;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder; // requires jline dependency
+import org.jline.terminal.TerminalBuilder;
 
-import com.fasterxml.jackson.databind.ObjectMapper; // requires jline dependency
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.github.cpsc559.team16.utilities.ClientServerMessage; // requires jline dependency
+import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 
 /*
  * Base class for IRC-style application client. 
@@ -226,7 +226,7 @@ public class Client {
     public void sendMessage(ClientServerMessage msg) {
         try {
             out.println(msg.toJson());
-        } catch (IOException e) {
+        } catch (Exception e) {
             messageQueue.add(msg); // put the message back onto the queue, it should be sent on the next round
             reconnect();
         }
