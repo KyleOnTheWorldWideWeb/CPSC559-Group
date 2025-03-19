@@ -1,0 +1,27 @@
+Demo 4 & presentation planning meeting
+
+Action items:
+	- how did the last demo go?
+
+	- the docker container situation
+		- what can we do to fix it?
+
+	- demo 4: fault tolerance:
+		- how do clients handle failures?
+			- when a client fails?
+			- when a server the client is connected to fails?
+		- how do servers handle failures?
+			- when a connected client fails?
+			- when a neighboring server fails?
+			- when the addressing server fails? (and this server detects it)
+		- how does the addressing server handle failures?
+			- when a client fails?
+			- when a server in the cluster fails?
+			- when the primary address server fails?
+			- when one of the backup address server(s) fails?
+		
+	- demo 4: leader election?
+		- where are we doing for leader election
+
+	- 
+	
