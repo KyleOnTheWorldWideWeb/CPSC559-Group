@@ -275,17 +275,6 @@ public class AddressingServer {
     // >------------ END OF REPLICA NETWORK HANDLING LOGIC -------------------<
 
 
-    public void start() throws IOException {
-        initializeChannels();
-        // Create a dispatcher that uses this instance’s request handler methods
-        AddrServerRequestDispatcher requestDispatcher = new AddrServerRequestDispatcher(this);
-        AddrServerReadDispatcher readDispatcher = new AddrServerReadDispatcher(this);
-        // TODO - fix this so it happens in the AddressingServer constructor (make an overload for networkManager)
-//        networkManager.setReplicaManager(replicaManager); // Cannot add to constructor
-//        networkManager.setChatServerRegistry(chatServerRegistry); //
-        networkManager.startEventLoop(requestDispatcher, readDispatcher);
-    }
-
     public void registerPrimaryAddrServer() {
         Long pid = generatePID();
         config.setPID(pid); // Assign a process id to the primary
@@ -293,6 +282,20 @@ public class AddressingServer {
         addrServerRegistry.registerAddrServer(pid, config.getHostAddress(),
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort(), config.getRole());
     }
+
+    public void start() throws IOException {
+        initializeChannels();
+        // Create a dispatcher that uses this instance’s request handler methods
+        AddrServerRequestDispatcher requestDispatcher = new AddrServerRequestDispatcher(this);
+        AddrServerReadDispatcher readDispatcher = new AddrServerReadDispatcher(this);
+        networkManager.startEventLoop(requestDispatcher, readDispatcher);
+        // TODO - fix this so it happens in the AddressingServer constructor (make an overload for networkManager)
+//        networkManager.setReplicaManager(replicaManager); // Cannot add to constructor
+//        networkManager.setChatServerRegistry(chatServerRegistry); //
+
+    }
+
+
 
     public static void main(String[] args) {
         /* This timeout is necessary for proper output in the new terminal window..

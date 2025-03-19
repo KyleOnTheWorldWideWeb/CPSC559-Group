@@ -122,7 +122,13 @@ public class AddrServerNetworkManager implements NetworkManager {
                     channel.configureBlocking(false);
 
                     // Dispatches the new connection to the appropriate handler based on the listenerSC type.
-                    requestDispatcher.dispatch(channel, listenerSC);
+                    try {
+                        requestDispatcher.dispatch(channel, listenerSC);
+                    } catch (IllegalStateException ise) {
+                        System.err.println("Error occurred while dispatching read event -->" + ise.getMessage());
+                        ise.printStackTrace();
+                        return; //
+                    }
                 }
 
                 /*
@@ -131,39 +137,17 @@ public class AddrServerNetworkManager implements NetworkManager {
                  * Typically, only a SocketChannel would ever be registered with OP_READ.
                  */
                 if (key.isReadable()) {
-
-                   try{
+                   try {
                        readDispatcher.dispatch(key);
-                   } catch (IOException ioe) {
-                       System.err.println("Error with Replica read event");
+                   } catch (IllegalStateException ise) {
+                       System.err.println("Error occurred while dispatching read event -->" + ise.getMessage());
+                       ise.printStackTrace();
+                       return; // Any AddressingServer without a role is a problem waiting to happen.
+                       // Best for it to finish execution and take a long nap.
                    }
-//                    // This branch handles persistent connections, such as replica channels.
-//                    SocketChannel channel = (SocketChannel) key.channel();
-//                    ByteBuffer buffer = ByteBuffer.allocate(1024);
-//                    int bytesRead = channel.read(buffer);
-//                    if (bytesRead == -1) {
-//                        key.cancel();
-//                        channel.close();
-//                        System.out.println("Replica connection closed by remote host.");
-//                        continue;
-//                    }
-//                    buffer.flip();
-//                    String jsonMessage = StandardCharsets.UTF_8.decode(buffer).toString();
-//                    System.out.println("Received update message: " + jsonMessage);
-//
-//                    // You need to have your local ChatServerRegistry available (e.g., from your AddressingServer)
-//                    replicaManager.handleUpdateMessage(jsonMessage, this.chatServerRegistry);
+
                 }
             }
         }
-    }
-
-
-    public interface ConnectionDispatcher {
-        void dispatch(SocketChannel channel, ServerSocketChannel listenerSC) throws IOException;
-    }
-
-    public interface ReadDispatcher {
-        void dispatch(SelectionKey key) throws IOException;
     }
 }

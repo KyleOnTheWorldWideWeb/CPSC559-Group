@@ -49,13 +49,16 @@ public class AddrServerRequestDispatcher implements NetworkManager.ConnectionDis
     public void dispatch(SocketChannel channel, ServerSocketChannel listener) throws IllegalStateException {
         if (listener.equals(server.getClientListenerChannel())) {
             server.handleClientConnection(channel);
+
         } else if (listener.equals(server.getReplicaListenerChannel())) {
             // Guard Condition. Replicas/Backups outnumber Primary -> check for REPLICA first.
             if (server.getConfig().getRole() == AddrServerConfig.ServerRole.REPLICA) {
                 server.replicaHandlePeerConnection(channel);
+
             }
             else if (server.getConfig().getRole() == AddrServerConfig.ServerRole.PRIMARY){
                 server.handleReplicaConnection(channel);
+                
             }
             else {
                 throw new IllegalStateException("Unexpected server role: " + server.getConfig().getRole()

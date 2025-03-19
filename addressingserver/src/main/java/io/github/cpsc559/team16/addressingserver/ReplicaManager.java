@@ -1,7 +1,10 @@
 package io.github.cpsc559.team16.addressingserver;
 
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -22,7 +25,7 @@ public class ReplicaManager {
      * The key is the replica's unique identifier (Long) and the value is the associated SocketChannel.
      * This allows the manager to efficiently track and send updates to all replicas.
      */
-    private final Map <Long, SocketChannel> replicaChannels;
+    private final Map <Long, NIOMessageChannel> replicaChannels;
 
     /**
      * ObjectMapper instance used for serializing and deserializing JSON messages.
@@ -58,7 +61,7 @@ public class ReplicaManager {
         String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
         // TODO - I need to retrieve this information from the Replica!
         registry.registerAddrServer(replicaPID, replicaHostAddr, 49810, 49811, 49812, AddrServerConfig.ServerRole.REPLICA);
-        this.replicaChannels.put(replicaPID, newReplicaChannel);
+        this.replicaChannels.put(replicaPID, new NIOMessageChannel(newReplicaChannel));
         // Send ACK to confirm registration
         sendPIDAck(newReplicaChannel, primaryPID);
         System.out.println("Replica registered: " + replicaHostAddr + " (PID: " + replicaPID + ")");
@@ -83,23 +86,20 @@ public class ReplicaManager {
     public void pushUpdatesToReplicas(String updateMessage) {
         ByteBuffer buffer = ByteBuffer.wrap(updateMessage.getBytes(StandardCharsets.UTF_8));
 
-        for (SocketChannel replicaChannel : replicaChannels.values()) {
+        for (NIOMessageChannel replicaChannel : replicaChannels.values()) {
             try {
-                while (buffer.hasRemaining()) {
-                    replicaChannel.write(buffer);
-                }
-                buffer.rewind(); // Reset buffer for next replica
+                // TODO - Add code now that I have a messaging class
             } catch (IOException e) {
                 System.err.println("Failed to push update to replica: " + e.getMessage());
             }
         }
     }
 
-    public Map<Long, SocketChannel> getReplicaChannels() {
+    public Map<Long, NIOMessageChannel> getReplicaChannels() {
         return this.replicaChannels;
     }
 
-    public void registerBackupWithPrimary(String primaryHost, int primaryReplicaPort,
+    public void registerBackupWithPrimary(String primaryHostAddress, int primaryReplicaPort,
                                           AddrServerNetworkManager networkManager, int clientPort, int peerPort, int chatServerPort) {
         try {
             // Create a non-blocking SocketChannel to reach the primary’s replica port
@@ -111,7 +111,7 @@ public class ReplicaManager {
             while (!channel.finishConnect()) {
                 Thread.sleep(100);
             }
-
+            // TODO - Update all of this now that I have a messaging class
             // Send a simple handshake message to let the primary know we are a BACKUP
             // In practice, you would send actual metadata (our host address, ports, etc.).
             String handshake = "REGISTER BACKUP "
@@ -136,7 +136,7 @@ public class ReplicaManager {
                 String ack = StandardCharsets.UTF_8.decode(ackBuffer).toString();
                 System.out.println("Received primary ACK: " + ack);
                 long primaryPID = Long.parseLong(ack.trim());
-                this.replicaChannels.put(primaryPID, channel);
+                this.replicaChannels.put(primaryPID, new NIOMessageChannel(channel));
             } else {
                 System.out.println("No ACK received.");
             }
@@ -165,7 +165,7 @@ public class ReplicaManager {
             ByteBuffer buffer = ByteBuffer.wrap(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
             // Push the update to each replica's channel
-            for (SocketChannel replicaChannel : replicaChannels.values()) {
+            for (NIOMessageChannel replicaChannel : replicaChannels.values()) {
                 try {
                     while (buffer.hasRemaining()) {
                         replicaChannel.write(buffer);

@@ -6,8 +6,6 @@ public class AddrServerConfig {
      * Each AddressingServer process has a distinct id amongst its peers.
      * {@code pid} is used as a 'tie-breaker' during leader elections.
      */
-    // CURRENTLY, PID IS TIED TO THE PEER SOCKET THAT THE PROCESS IS USING
-    // TODO - implement method to generate and assign PID to replicas
     private long pid;
 
     /**
