@@ -17,8 +17,8 @@ services:  # Defines the services (Docker containers) that will be run.
     image: addressingserver:latest
     container_name: addressingserver
     build:
-      context: ./addressingserver
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.addressingserver
     environment:
       - AS_CLIENT_PORT=49800
       - AS_REPLICA_PORT=49801
@@ -26,48 +26,37 @@ services:  # Defines the services (Docker containers) that will be run.
       - HOST_ADDRESS=addressingserver
     networks:
       - chat_network
-    ports:
-      - "49800-49802:49800-49802"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:49802"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+
+
 
   chatserver:
     image: chatserver:latest
     container_name: chatserver
     build:
-      context: ./chatserver
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.chatserver
     environment:
       - CS_PORT=2424
       - CS_PEER_PORT=2425
       - CS_ADDRSERVER_PORT=49802
       - HOST_ADDRESS=addressingserver
-    depends_on:
-      addressingserver:
-        condition: service_healthy
     networks:
       - chat_network
-    ports:
-      - "2424-2426:2424-2426"
+
 
   client:
     image: client:latest
     container_name: client
     build:
-      context: ./client
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.client
     environment:
       - CLIENT_PORT=3000
       - HOST_ADDRESS=client
-    depends_on:
-      - chatserver
+
     networks:
       - chat_network
-    ports:
-      - "3000:3000"
+
 
 networks:
   chat_network:
@@ -76,5 +65,5 @@ networks:
 # ... that is created during the build or execution of the container(s), IS NOT deleted when the container is removed.
 # This is very powerful because it allows us to update our repository (new version), and in turn build new containers...configs:
 # ... without losing the data (chat logs) from previous versions.
-volumes:
-  db-data:  # Defines a named volume (currently unused in this config but can be used for persistent storage)
+# volumes:
+#   db-data:  # Defines a named volume (currently unused in this config but can be used for persistent storage)

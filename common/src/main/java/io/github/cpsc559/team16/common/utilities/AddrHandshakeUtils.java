@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 public class AddrHandshakeUtils {
 
@@ -38,6 +39,6 @@ public class AddrHandshakeUtils {
     public static Map<String, Object> readHandshakeData(Socket socket) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         String jsonMessage = reader.readLine();
-        return objectMapper.readValue(jsonMessage, Map.class);
+        return objectMapper.readValue(jsonMessage, new TypeReference<Map<String, Object>>() {});
     }
 }

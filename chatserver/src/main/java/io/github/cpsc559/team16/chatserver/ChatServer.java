@@ -111,6 +111,28 @@ public class ChatServer {
      */
     private Map<SocketChannel, Client> clientChannels;
 
+    private void initializeChannels() throws IOException {
+        selector = Selector.open();
+
+        // Initialize the client listener channel
+        clientListenerChannel = ServerSocketChannel.open();
+        clientListenerChannel.configureBlocking(false);
+        clientListenerChannel.socket().bind(new InetSocketAddress(clientPort));
+        clientListenerChannel.register(selector, SelectionKey.OP_ACCEPT);
+
+        // Initialize the peer listener channel
+        peerListenerChannel = ServerSocketChannel.open();
+        peerListenerChannel.configureBlocking(false);
+        peerListenerChannel.socket().bind(new InetSocketAddress(peerPort));
+        peerListenerChannel.register(selector, SelectionKey.OP_ACCEPT);
+
+        // Initialize the addressing server listener channel
+        addrServerListenerChannel = ServerSocketChannel.open();
+        addrServerListenerChannel.configureBlocking(false);
+        addrServerListenerChannel.socket().bind(new InetSocketAddress(addrServerPort));
+        addrServerListenerChannel.register(selector, SelectionKey.OP_ACCEPT);
+    }
+
 
 
     public ChatServer() {
@@ -203,22 +225,36 @@ public class ChatServer {
         }
 
         // Read the port from the environment variable, default to 2424 if not set
+        ChatServer server = new ChatServer();
+        try {
+            server.initializeChannels();
+        } catch (IOException e) {
+            System.err.println("Failed to initialize channels: " + e.getMessage());
+            e.printStackTrace();
+            return;
+        }
+
+
         int port = Integer.parseInt(System.getenv().getOrDefault("CHATSERVER_PORT", "2424"));
         System.out.printf("Chat Server PORT: %d%n", port);
         System.out.printf("Chat Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
-
+        System.out.println("Host address section \n");
         // Get the HOST_ADDRESS from the environment variable
-        String hostAddress = System.getenv().getOrDefault("HOST_ADDRESS", "addressingserver");
-
+        String hostAddress = System.getenv().getOrDefault("HOST_ADDRESS", "0.0.0.0");
+        System.out.printf("Host address: %s%n", hostAddress);
         // Attempt to connect to the addressing server
         boolean handshakeSuccessful = false;
         int attempts = 1;
         while (!handshakeSuccessful && attempts < 11) {
             System.out.print("ChatServer is attempting to connect to addressing server.......");
-            try (SocketChannel addrServerChannel = SocketChannel.open()) {
-                addrServerChannel.configureBlocking(true);
+            try (
+                SocketChannel addrServerChannel = SocketChannel.open()) {
+                addrServerChannel.configureBlocking(false);
                 addrServerChannel.connect(new InetSocketAddress(hostAddress, Integer.parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "49802"))));
-
+                // Ensure the connection is established before writing
+                while (!addrServerChannel.finishConnect()) {
+                    // Wait or perform other tasks
+                }
                 // Create a JSON object with the necessary information
                 Map<String, Object> handshakeData = new HashMap<>();
                 handshakeData.put("addrServerPort", Integer.parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "49802")));
@@ -264,7 +300,7 @@ public class ChatServer {
             return;
         }
 
-        ChatServer server = new ChatServer();
+        
         try {
             server.mainEventLoop();
         } catch (Exception ioe) {

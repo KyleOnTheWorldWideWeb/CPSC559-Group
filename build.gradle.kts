@@ -29,3 +29,7 @@ tasks.register("buildProjectImages") {
     group = "Docker-Repository"
     description = "BuildsUses the image building tasks defined in each module"
 }
+
+// tasks.register("buildAddressingServer"){
+//     group=""
+// }

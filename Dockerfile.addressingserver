@@ -1,0 +1,23 @@
+# Stage 1: Build the application
+FROM gradle:jdk23-alpine AS build
+WORKDIR /app/
+COPY . .
+WORKDIR /app/
+RUN gradle buildAddressingServer
+
+# Stage 2: Run the application
+FROM eclipse-temurin:23-jdk
+WORKDIR /app/
+COPY --from=build /app/addressingserver/build/libs/addressingserver.jar /app/addressingserver.jar
+
+# Expose the ports the application runs on
+ENV AS_CLIENT_PORT=49800
+ENV AS_REPLICA_PORT=49801
+ENV AS_CHATSERVER_PORT=49802
+ENV AS_NETWORK="chat_network"
+EXPOSE ${AS_CLIENT_PORT}
+EXPOSE ${AS_REPLICA_PORT}
+EXPOSE ${AS_CHATSERVER_PORT}
+
+# Defines the default program run by the Docker Container
+CMD ["java", "-jar", "addressingserver.jar"]

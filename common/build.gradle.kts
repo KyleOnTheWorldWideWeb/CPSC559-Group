@@ -1,13 +1,17 @@
 plugins {
-    id("java-library") // Allows other modules (client, chatserver, etc.) to consume this as a dependency
+    id("java")
 }
 
 dependencies {
-    // Add any dependencies needed for utilities
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")
 }
 
-tasks.withType<Jar> {
-    archiveBaseName.set("common") // Set JAR name
-    from(sourceSets.main.get().output) // Ensure all classes are included in the JAR
+tasks.register<Jar>("commonJar") {
+    group = "build"
+    archiveFileName.set("common.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("libs"))
+    from(sourceSets.main.get().output)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES")
 }
