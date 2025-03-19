@@ -57,7 +57,7 @@ public class ReplicaManager {
         InetSocketAddress remoteAddress = (InetSocketAddress) newReplicaChannel.getRemoteAddress();
         String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
         // TODO - I need to retrieve this information from the Replica!
-        registry.registerAddrServer(replicaPID, replicaHostAddr, 49810, 49811, 49812, AddrServerConfig.ServerRole.BACKUP);
+        registry.registerAddrServer(replicaPID, replicaHostAddr, 49810, 49811, 49812, AddrServerConfig.ServerRole.REPLICA);
         this.replicaChannels.put(replicaPID, newReplicaChannel);
         // Send ACK to confirm registration
         sendPIDAck(newReplicaChannel, primaryPID);

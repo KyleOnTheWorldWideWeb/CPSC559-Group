@@ -117,6 +117,35 @@ public class ChatServerRegistry {
         }
     }
 
+    /**
+     * FOR USE IN REPLICATION STAGE OF PROJECT - ACTUALLY, ONLY NEEDED IF CHAT SERVERS DON'T PASS IN
+     * THEIR DETAILS DURING A CONNECTION, OR IF THEY DON'T ALL USE THE SAME PORT.
+     *
+     * @param channel
+     */
+//    private void setChatServerPort(ServerSocketChannel channel) {
+//        try {
+//            chatServerChannel.bind(new InetSocketAddress(0));
+//            this.chatServerPort = ((InetSocketAddress) channel.getLocalAddress()).getPort();
+//            System.out.println("Listening for Chat Servers on Port: " + this.chatServerPort);
+//        } catch (IOException ioe) {
+//            System.err.println("Chat server failed to bind: " + ioe.getMessage());
+//        }
+//    }
+
+    // To be completed for Replication
+//    /**
+//     * Replaces the current address log with the one received from a remote server.
+//     * <p>
+//     * The new address log is transmitted over the network, deserialized, and then assigned by reference.
+//     * This ensures that the server uses the most up-to-date address log information.
+//     * </p>
+//     *
+//     * @param newAddressLog the address log object received from the network
+//     */
+//    public void updateAddressLogFromNetwork(Map<Long,ChatServerInfo> newAddressLog) {
+//
+//    }
 
 
     /**

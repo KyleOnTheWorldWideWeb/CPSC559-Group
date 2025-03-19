@@ -68,7 +68,7 @@ public class AddrServerConfig {
         System.out.println("----> Addressing server environment variables:");
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
         String roleEnv = System.getenv().getOrDefault("AS_ROLE", "BACKUP").trim().toUpperCase();
-        this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.BACKUP;
+        this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.REPLICA;
         this.hostAddress = System.getenv("HOST_ADDRESS").trim();
         this.clientPort = Integer.parseInt(System.getenv().get("AS_CLIENT_PORT").trim());
         this.replicaPort = Integer.parseInt(System.getenv().get("AS_REPLICA_PORT").trim());
@@ -113,7 +113,7 @@ public class AddrServerConfig {
     }
 
     public enum ServerRole {
-        PRIMARY, BACKUP
+        PRIMARY, REPLICA
     }
 
 }

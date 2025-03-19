@@ -69,10 +69,13 @@ public interface NetworkManager {
      * Defines how incoming connections are dispatched to their respective handlers.
      */
     interface ConnectionDispatcher {
-        void dispatch(SocketChannel channel, ServerSocketChannel listenerSC) throws IOException;
+        void dispatch(SocketChannel channel, ServerSocketChannel listenerSC);
     }
 
+    /**
+     * Defines how data streams on established {@code NIO SocketChannels} are dispatched to their respective handlers.
+     */
     interface ReadDispatcher {
-        void dispatch(SelectionKey key) throws IOException;
+        void dispatch(SelectionKey key);
     }
 }

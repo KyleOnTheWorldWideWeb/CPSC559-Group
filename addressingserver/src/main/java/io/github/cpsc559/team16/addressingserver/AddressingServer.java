@@ -3,10 +3,6 @@ package io.github.cpsc559.team16.addressingserver;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -14,14 +10,13 @@ import java.util.concurrent.TimeUnit;
 
 
 // Internal (Project) Dependencies
-import io.github.cpsc559.team16.addressingserver.ChatServerInfo.ServerStatus;
-import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
-import io.github.cpsc559.team16.common.utilities.NetworkManager;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
 
 public class AddressingServer {
+
+
 
     /**
      * The network configuration for this {@code AddressingServer} process.
@@ -87,17 +82,10 @@ public class AddressingServer {
      *     <li>{@code BACKUP} - This server is a Passive Replica for failover.</li>
      * </ul>
      */
-    private AddrServerConfig.ServerRole role;
 
-    public AddrServerConfig.ServerRole getRole() {
-        return role;
+    public AddrServerConfig getConfig() {
+        return config;
     }
-
-    public void setRole(AddrServerConfig.ServerRole role) {
-        this.role = role;
-    }
-
-
 
     /**
      * Constructs an AddressingServer with an {@code AddrServerConfig} object storing its network details.
@@ -121,35 +109,8 @@ public class AddressingServer {
 
 
 
-    // To be completed for Replication
-//    /**
-//     * Replaces the current address log with the one received from a remote server.
-//     * <p>
-//     * The new address log is transmitted over the network, deserialized, and then assigned by reference.
-//     * This ensures that the server uses the most up-to-date address log information.
-//     * </p>
-//     *
-//     * @param newAddressLog the address log object received from the network
-//     */
-//    public void updateAddressLogFromNetwork(Map<Long,ChatServerInfo> newAddressLog) {
-//
-//    }
 
-    /**
-     * FOR USE IN REPLICATION STAGE OF PROJECT
-     * // TODO - Implement methods for all three channels in the 559Project - Replication Iteration
-     *
-     * @param channel
-     */
-//    private void setChatServerPort(ServerSocketChannel channel) {
-//        try {
-//            chatServerChannel.bind(new InetSocketAddress(0));
-//            this.chatServerPort = ((InetSocketAddress) channel.getLocalAddress()).getPort();
-//            System.out.println("Listening for Chat Servers on Port: " + this.chatServerPort);
-//        } catch (IOException ioe) {
-//            System.err.println("Chat server failed to bind: " + ioe.getMessage());
-//        }
-//    }
+
 
 
     /**
@@ -225,29 +186,6 @@ public class AddressingServer {
         newChatServerChannel.close();
     }
 
-    /**
-     * Registers a replica server by retrieving its IP address from the provided SocketChannel.
-     *
-     * @param newReplicaChannel the {@link SocketChannel} representing the incoming connection from a replica {@code AddressingServer}.
-     * @throws IOException if an I/O error occurs while obtaining the remote address.
-     */
-//    private void registerReplicaServer(SocketChannel newReplicaChannel) throws IOException {
-//        // Retrieving the remote address from the SocketChannel and casting it to InetSocketAddress.
-//        InetSocketAddress remoteAddress = (InetSocketAddress) newReplicaChannel.getRemoteAddress();
-//        // Extracting the IP address of the replica from the established connection.
-//        String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
-//        // Any addressing server that is registering itself is clearly a replica, so register it as a BACKUP
-//        this.replicaRecords.add(new AddrServerInfo(generatePID(), replicaHostAddr,
-//                49800, 49801, 49802, AddrServerConfig.ServerRole.BACKUP));
-//        String message = "ACK!";
-//        ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-//
-//        while (buffer.hasRemaining()) {
-//            newReplicaChannel.write(buffer);
-//        }
-//        newReplicaChannel.close();
-//    }
-
 
     /**
      * Initializes the AddressingServer network access by binding all required NIO channels.
@@ -264,6 +202,8 @@ public class AddressingServer {
             System.err.println("Failed to establish AddressingServer connections: " + ioe.getMessage());
         }
     }
+
+    // >------------ END OF PRIMARY NETWORK HANDLING LOGIC -------------------<
 
     public ServerSocketChannel getChatServerListenerChannel() {
         return chatServerListenerChannel;
@@ -287,8 +227,6 @@ public class AddressingServer {
         }
     }
 
-
-
     public void handleChatServerRegistration(SocketChannel channel) {
         try {
             registerChatServer(channel);
@@ -297,12 +235,6 @@ public class AddressingServer {
             System.err.println("Error retrieving chat server IP address: " + ioe.getMessage());
             ioe.printStackTrace();
         }
-    }
-
-
-
-    public void handleReplicaUpdate(String incomingData) {
-
     }
 
     /*
@@ -321,6 +253,26 @@ public class AddressingServer {
         }
     }
 
+
+    public void primaryHandleReadEvent(SelectionKey key) {
+
+    }
+
+    // >------------ END OF PRIMARY NETWORK HANDLING LOGIC -------------------<
+
+
+
+    // >------------ START OF REPLICA NETWORK HANDLING LOGIC -----------------<
+    public void replicaHandlePeerConnection(SocketChannel channel) {
+
+    }
+
+    public void replicaHandleReadEvent(SelectionKey key) {
+
+    }
+
+
+    // >------------ END OF REPLICA NETWORK HANDLING LOGIC -------------------<
 
 
     public void start() throws IOException {
@@ -362,15 +314,12 @@ public class AddressingServer {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
                 server.registerPrimaryAddrServer(); // Puts the addressing server into the AddrServerRegistry
-            } else if (serverRole.equals("BACKUP")) {
+            } else {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
                 server.replicaManager.registerBackupWithPrimary("0.0.0.0", 49801,
                         server.networkManager, server.config.getClientPort(), server.config.getReplicaPort(), server.config.getChatServerPort());
                 // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
-                // Register with PRIMARY AddressingServer
-            } else {
-                System.out.println("AS_ROLE is not set. Defaulting to BACKUP");
             }
         }
 

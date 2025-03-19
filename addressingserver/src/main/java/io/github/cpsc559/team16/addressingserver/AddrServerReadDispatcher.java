@@ -3,11 +3,20 @@ package io.github.cpsc559.team16.addressingserver;
 import io.github.cpsc559.team16.common.utilities.NetworkManager;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
-import java.nio.channels.SocketChannel;
-import java.nio.charset.StandardCharsets;
 
+/**
+ * Handles read events from registered {@code SocketChannel}'s and routes them based on the server's role.
+ * <p>
+ * This class is responsible for delegating read events to the appropriate handlers.
+ * It differentiates between:
+ * </p>
+ * <ul>
+ *     <li>{@code PRIMARY} - Processes incoming updates from replicas.</li>
+ *     <li>{@code REPLICA} - Receives data from the primary server.</li>
+ * </ul>
+ * If the server role is unrecognized, an {@link IllegalStateException} is thrown to halt execution.
+ */
 public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     private final AddressingServer server;
 
@@ -16,33 +25,29 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     }
 
 
+    /**
+     * Dispatches a read event based on the current role of the AddressingServer.
+     * <p>
+     * This method determines how to process incoming data depending on whether the server
+     * is acting as a {@code PRIMARY} or a {@code REPLICA}. If the server is in an unknown state,
+     * an {@link IllegalStateException} is thrown to halt execution.
+     * </p>
+     *
+     * @param key The {@code SelectionKey} representing the channel that has data ready to be read.
+     * @throws IllegalStateException If the server role is not recognized (neither PRIMARY nor REPLICA).
+     */
     @Override
-    public void dispatch(SelectionKey key) throws IOException {
-        if (server.getRole() == AddrServerConfig.ServerRole.BACKUP) {
-
+    public void dispatch(SelectionKey key) throws IllegalStateException {
+        // Guard Condition. Replicas/Backups outnumber Primary -> check for REPLICA first.
+        if (server.getConfig().getRole() == AddrServerConfig.ServerRole.REPLICA) {
+            server.replicaHandleReadEvent(key);
+        }
+        else if (server.getConfig().getRole() == AddrServerConfig.ServerRole.PRIMARY) {
+            server.primaryHandleReadEvent(key);
+        }
+        else {
+            throw new IllegalStateException("Unexpected server role: " + server.getConfig().getRole()
+                    + ". Halting process ID: " + server.getConfig().getPID() + ".");
         }
     }
-//    @Override
-//    public void dispatch(SelectionKey key) throws IOException {
-//        // Get the channel associated with this key
-//        SocketChannel channel = (SocketChannel) key.channel();
-//        ByteBuffer buffer = ByteBuffer.allocate(1024);
-//        int bytesRead = channel.read(buffer);
-//
-//        if (bytesRead == -1) {
-//            // Remote closed connection; cancel key and close channel.
-//            key.cancel();
-//            channel.close();
-//            System.out.println("Connection closed by remote host.");
-//            return;
-//        }
-//
-//        // Prepare buffer for reading and decode it to a String.
-//        buffer.flip();
-//        String jsonMessage = StandardCharsets.UTF_8.decode(buffer).toString();
-//        System.out.println("Received update message: " + jsonMessage);
-//
-//        // Pass the JSON message to the server to handle the update (e.g., a ChatServerInfo update)
-//        server.handleReplicaUpdate(jsonMessage);
-//    }
 }
