@@ -159,7 +159,7 @@ public class NIOMessageChannel {
     public String receiveMessage() throws IOException {
         while (true) {
             if (!fillMessageBuffer()) {
-                return null; // Connection closed OR no new data available
+                return null; // Connection closed OR no new data . This stops an infinite loop from occuring in case a newline character doesn't exist.
             }
             // Check if we have a complete message (at least one `\n` exists)
             int newlineIndex = messageBuffer.indexOf("\n");

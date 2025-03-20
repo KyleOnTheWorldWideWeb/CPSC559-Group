@@ -1,6 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 import io.github.cpsc559.team16.common.utilities.NetworkManager;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 
@@ -46,8 +49,16 @@ public class AddrServerRequestDispatcher implements NetworkManager.ConnectionDis
      * @throws IllegalStateException If the server is in an unexpected role (neither PRIMARY nor REPLICA).
      */
     @Override
-    public void dispatch(SocketChannel channel, ServerSocketChannel listener) throws IllegalStateException {
-        if (listener.equals(server.getClientListenerChannel())) {
+    public void dispatch(SocketChannel channel) throws IllegalStateException {
+        try {
+            int port = (InetSocketAddress) channel.getLocalAddress().getPort();
+        } catch (ClosedChannelException cce) {
+            System.out.println("Channel is closed: " + cce.getMessage());
+        } catch (IOException ioe) {
+
+        }
+
+        if () {
             server.handleClientConnection(channel);
 
         } else if (listener.equals(server.getReplicaListenerChannel())) {

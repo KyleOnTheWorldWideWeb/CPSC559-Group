@@ -116,9 +116,9 @@ public class AddrServerNetworkManager implements NetworkManager {
 
                     // All requests on this channel will be sent to "non-blocking"
                     channel.configureBlocking(false);
-                    // Dispatches the new connection to the appropriate handler based on the listenerSC type.
+                    // Transfers control of the new SocketChannel to the request dispatcher.
                     try {
-                        requestDispatcher.dispatch(channel, listenerSC);
+                        requestDispatcher.dispatch(channel);
                     } catch (IllegalStateException ise) {
                         // Any AddressingServer without a role is a problem waiting to happen.
                         // Best for it to finish execution and take a long nap.

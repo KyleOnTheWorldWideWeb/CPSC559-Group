@@ -208,47 +208,10 @@ public class PeerManager {
     }
 
     public void pushChatServerUpdate(ChatServerInfo chatServerInfo) {
-        try {
-            // Serialize the ChatServerInfo object to JSON
-            String chatServerJson = objectMapper.writeValueAsString(chatServerInfo);
-            // Create a ServerUpdateMessage with the type indicator "CHAT_SERVER_UPDATE"
-            ServerUpdateMessage updateMessage = new ServerUpdateMessage("Primary", "Replica", "CHAT_SERVER_UPDATE", chatServerJson);
-            // Serialize the update message to JSON
-            String jsonMessage = updateMessage.toJson();
-//            ByteBuffer buffer = ByteBuffer.wrap(jsonMessage.getBytes(StandardCharsets.UTF_8));
-//
-//            // Push the update to each replica's channel
-//            for (NIOMessageChannel replicaChannel : replicaChannels.values()) {
-//                try {
-//                    while (buffer.hasRemaining()) {
-//                        replicaChannel.write(buffer);
-//                    }
-//                    buffer.rewind(); // Prepare buffer for next replica
-//                } catch (IOException e) {
-//                    System.err.println("Failed to push update to replica: " + e.getMessage());
-//                }
-//            }
-        } catch (JsonProcessingException e) {
-            System.err.println("Failed to serialize ChatServerInfo update: " + e.getMessage());
-        }
     }
 
     public void handleUpdateMessage(String jsonMessage, ChatServerRegistry chatServerRegistry) {
-        try {
-            // Deserialize the JSON into a ServerUpdateMessage
-            ServerUpdateMessage updateMessage = ServerUpdateMessage.fromJson(jsonMessage, ServerUpdateMessage.class);
-            if ("CHAT_SERVER_UPDATE".equals(updateMessage.getMsgType())) {
-                // Deserialize the payload into a ChatServerInfo object
-                ChatServerInfo chatServerInfo = objectMapper.readValue(updateMessage.getPayload(), ChatServerInfo.class);
-                // Update the local ChatServerRegistry with the new record
-                chatServerRegistry.registerServer(chatServerInfo.getPID(), chatServerInfo);
-                System.out.println("Replica updated with ChatServerInfo: " + chatServerInfo);
-            } else {
-                System.err.println("Unknown update message type: " + updateMessage.getMsgType());
-            }
-        } catch (JsonProcessingException e) {
-            System.err.println("Failed to process update message: " + e.getMessage());
-        }
+
     }
 
 }
