@@ -1,13 +1,15 @@
 package io.github.cpsc559.team16.addressingserver;
 
 
-import io.github.cpsc559.team16.common.utilities.NetworkManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.*;
-import java.nio.charset.StandardCharsets;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.Iterator;
+
+import io.github.cpsc559.team16.common.utilities.NetworkManager;
 
 public class AddrServerNetworkManager implements NetworkManager {
     /**
@@ -132,11 +134,11 @@ public class AddrServerNetworkManager implements NetworkManager {
                  */
                 if (key.isReadable()) {
 
-                   try{
-                       readDispatcher.dispatch(key);
-                   } catch (IOException ioe) {
-                       System.err.println("Error with Replica read event");
-                   }
+                //    {
+                    readDispatcher.dispatch(key);
+                //    } catch (IOException ioe) {
+                //        System.err.println("Error with Replica read event");
+                //    }
 //                    // This branch handles persistent connections, such as replica channels.
 //                    SocketChannel channel = (SocketChannel) key.channel();
 //                    ByteBuffer buffer = ByteBuffer.allocate(1024);

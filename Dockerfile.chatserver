@@ -1,0 +1,22 @@
+# Stage 1: Build the application
+FROM gradle:jdk23-alpine AS build
+WORKDIR /app
+COPY . .
+WORKDIR /app/
+RUN gradle buildChatServer
+
+# Stage 2: Run the application
+FROM eclipse-temurin:23-jdk
+WORKDIR /app
+COPY --from=build /app/chatserver/build/libs/chatserver.jar /app/chatserver.jar
+
+# Expose the ports the application runs on
+ENV CS_CLIENT_PORT=2424
+ENV CS_PEER_PORT=2425
+ENV CS_ADDRSERVER_PORT=49802
+EXPOSE ${CS_CLIENT_PORT}
+EXPOSE ${CS_PEER_PORT}
+EXPOSE ${CS_ADDRSERVER_PORT}
+
+# Defines the default program run by the Docker Container
+CMD ["java", "-jar", "chatserver.jar"]

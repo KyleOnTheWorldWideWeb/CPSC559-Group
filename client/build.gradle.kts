@@ -14,6 +14,11 @@ plugins {
     id("com.bmuschko.docker-remote-api")     // Adds Docker support via the bmuschko Gradle plugin. This automates Docker builds.
 }
 
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(23))
+    }
+}
 /*
     Declaring Dependencies for the client module only - Dependencies should be declared before tasks.
     This ensures all modules know their dependencies before any Gradle tasks run.
@@ -91,7 +96,11 @@ tasks.register<Jar>("clientFatJar") {
     }
 }
 
-
+tasks.register("buildClient") {
+    group = "build"
+    description = "Builds the client3 server with common library dependencies."
+    dependsOn(":common:commonJar", "clientFatJar")
+}
 /*
     Task to build and package the client JAR before the Docker image is created.
     It ensures that the fat JAR is compiled and available.

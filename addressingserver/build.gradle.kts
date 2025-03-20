@@ -69,6 +69,12 @@ tasks.register<Jar>("addressingserverFatJar") {
     }
 }
 
+tasks.register("buildAddressingServer") {
+    group = "build"
+    description = "Builds the addressing server with common library dependencies."
+    dependsOn(":common:commonJar", "addressingserverFatJar")
+}
+
 // Task to build and package the addressingserver JAR before the Docker image is created.
 tasks.register("buildAddrServerJar") {
     group = "build"

@@ -2,6 +2,7 @@ plugins {
     id("java")
     id("application")
 }
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(23))
@@ -10,31 +11,28 @@ java {
 
 dependencies {
     implementation(project(":common"))
-    implementation(project(":client"))
-    implementation(project(":addressingserver"))
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")
 }
 
 application {
-    mainClass.set("io.github.cpsc559.team16.chatserver.ChatServer")
+    mainClass.set("io.github.cpsc559.team16.addressingserver.AddressingServer")
 }
 
-tasks.register<Jar>("chatserverFatJar") {
+tasks.register<Jar>("addressingserverFatJar") {
     group = "build"
-    archiveFileName.set("chatserver.jar")
+    archiveFileName.set("addressingserver.jar")
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
     manifest {
-        attributes("Main-Class" to "io.github.cpsc559.team16.chatserver.ChatServer")
+        attributes("Main-Class" to "io.github.cpsc559.team16.addressingserver.AddressingServer")
     }
     from(sourceSets.main.get().output)
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    exclude("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES")
 }
 
-tasks.register("buildChatServer") {
+tasks.register("buildAddressingServer") {
     group = "build"
-    description = "Builds the chatserver server with common library dependencies."
-    dependsOn(":common:commonJar", "chatserverFatJar")
+    description = "Builds the addressing server with common library dependencies."
+    dependsOn(":common:commonJar", "addressingserverFatJar")
 }
