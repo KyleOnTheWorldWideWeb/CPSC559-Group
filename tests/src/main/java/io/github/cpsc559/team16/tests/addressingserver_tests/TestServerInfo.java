@@ -1,4 +1,4 @@
-package io.github.cpsc559.team16.tests.addressingservertests;
+package io.github.cpsc559.team16.tests.addressingserver_tests;
 
 import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;

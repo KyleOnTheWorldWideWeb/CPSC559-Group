@@ -15,17 +15,24 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Manages replica registration, synchronization, and communication.
- * This class is responsible for handling primary-replica interactions.
+ * Manages peer registration, synchronization, and communication.
+ * <p>
+ * This class handles interactions between Addressing Server instances, including:
+ * <ul>
+ *     <li>Primary server registering replicas.</li>
+ *     <li>Replicas communicating with each other.</li>
+ *     <li>Peer-to-peer failover coordination.</li>
+ * </ul>
+ * </p>
  */
-public class ReplicaManager {
+public class PeerManager {
 
     /**
      * A thread-safe map storing active replica channels.
      * The key is the replica's unique identifier (Long) and the value is the associated SocketChannel.
      * This allows the manager to efficiently track and send updates to all replicas.
      */
-    private final Map <Long, NIOMessageChannel> replicaChannels;
+    private final Map <SocketChannel, NIOMessageChannel> peerChannels;
 
     /**
      * ObjectMapper instance used for serializing and deserializing JSON messages.
@@ -34,14 +41,50 @@ public class ReplicaManager {
     ObjectMapper objectMapper;
 
     /**
-     * Constructs a new ReplicaManager.
+     * Constructs a new PeerManager.
      *
      * <p>Initializes the JSON ObjectMapper and creates an empty ConcurrentHashMap to hold replica channels.</p>
      */
-    public ReplicaManager() {
+    public PeerManager() {
         this.objectMapper = new ObjectMapper();
-        this.replicaChannels = new ConcurrentHashMap<>();
+        this.peerChannels = new ConcurrentHashMap<>();
     }
+
+
+    public void removeNIOChannelByKey(SocketChannel channel) {
+        try {
+            peerChannels.remove(channel);
+        } catch (Exception e) {
+            System.err.println("Attempt to remove NIOChannel by key failed: "+ e.getMessage());
+        }
+    }
+
+    /**
+     * Removes a peer entry from the {@code peerChannels} map based on the given {@code NIOMessageChannel}.
+     * <p>
+     * This method searches the map for an entry where the associated {@code NIOMessageChannel}
+     * matches the provided instance. If a match is found, the corresponding entry is removed.
+     * </p>
+     *
+     * <p><strong>Behavior:</strong></p>
+     * <ul>
+     *     <li>If the channel exists in the map, it is removed, and a message is printed confirming removal.</li>
+     *     <li>If no matching channel is found, a warning message is logged.</li>
+     * </ul>
+     *
+     * @param channel The {@link NIOMessageChannel} instance to be removed.
+     */
+    public void removeChannel(NIOMessageChannel channel) {
+        // Use Java Streams to remove the entry efficiently
+        boolean removed = peerChannels.entrySet().removeIf(entry -> entry.getValue().equals(channel));
+
+        if (removed) {
+            System.out.println("🗑 Removed peer: " + channel.getSocketChannel());
+        } else {
+            System.out.println("⚠ No matching peer found for the given channel.");
+        }
+    }
+
 
     /**
      * Registers a new replica server in the network. The replicas information is stored in
@@ -51,20 +94,20 @@ public class ReplicaManager {
      * and stored locally in the {@code replicaChannels} ArrayList.
      * </p>
      *
-     * @param newReplicaChannel The socket channel for the new replica connection.
+     * @param newPeerChannel The socket channel for the new replica connection.
      * @throws IOException If an error occurs while retrieving network info.
      *
-     * @see ReplicaManager#replicaChannels
+     * @see PeerManager#peerChannels
      */
-    public void registerReplica(Long primaryPID, Long replicaPID, SocketChannel newReplicaChannel, AddrServerRegistry registry) throws IOException {
-        InetSocketAddress remoteAddress = (InetSocketAddress) newReplicaChannel.getRemoteAddress();
+    public void registerPeer(Long primaryPID, Long peerPID, SocketChannel newPeerChannel, AddrServerRegistry registry) throws IOException {
+        InetSocketAddress remoteAddress = (InetSocketAddress) newPeerChannel.getRemoteAddress();
         String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
         // TODO - I need to retrieve this information from the Replica!
-        registry.registerAddrServer(replicaPID, replicaHostAddr, 49810, 49811, 49812, AddrServerConfig.ServerRole.REPLICA);
-        this.replicaChannels.put(replicaPID, new NIOMessageChannel(newReplicaChannel));
+        registry.registerAddrServer(peerPID, replicaHostAddr, 49810, 49811, 49812, AddrServerConfig.ServerRole.REPLICA);
+        this.peerChannels.put(newPeerChannel, new NIOMessageChannel(newPeerChannel, peerPID));
         // Send ACK to confirm registration
-        sendPIDAck(newReplicaChannel, primaryPID);
-        System.out.println("Replica registered: " + replicaHostAddr + " (PID: " + replicaPID + ")");
+        sendPIDAck(newPeerChannel, primaryPID);
+        System.out.println("Replica registered: " + replicaHostAddr + " (PID: " + peerPID + ")");
     }
 
     /**
@@ -78,29 +121,37 @@ public class ReplicaManager {
     }
 
 
-    /**
-     * Pushes updates to all replicas.
-     *
-     * @param updateMessage The update message to send.
-     */
-    public void pushUpdatesToReplicas(String updateMessage) {
-        ByteBuffer buffer = ByteBuffer.wrap(updateMessage.getBytes(StandardCharsets.UTF_8));
 
-        for (NIOMessageChannel replicaChannel : replicaChannels.values()) {
+    public void sendServerInfo(String serverInfoJSON) {
+        for (NIOMessageChannel replicaChannel : peerChannels.values()) {
             try {
-                // TODO - Add code now that I have a messaging class
+                replicaChannel.sendMessage(serverInfoJSON);
             } catch (IOException e) {
-                System.err.println("Failed to push update to replica: " + e.getMessage());
+                System.err.println("Failed to send message to replica: " + e.getMessage());
             }
         }
     }
 
-    public Map<Long, NIOMessageChannel> getReplicaChannels() {
-        return this.replicaChannels;
+    /**
+     * Pushes updates to all replicas.
+     *
+     */
+    public void pushUpdatesToReplicas(ServerInfo serverInfo) {
+        try {
+            // Serialize the ChatServerInfo object to JSON
+            String serverInfoJSON = objectMapper.writeValueAsString(serverInfo);
+            sendServerInfo(serverInfoJSON);
+        } catch (JsonProcessingException e) {
+            System.err.println("Failed to serialize ServerInfo object: " + e.getMessage());
+        }
     }
 
-    public void registerBackupWithPrimary(String primaryHostAddress, int primaryReplicaPort,
-                                          AddrServerNetworkManager networkManager, int clientPort, int peerPort, int chatServerPort) {
+    public Map<SocketChannel, NIOMessageChannel> getPeerChannels() {
+        return this.peerChannels;
+    }
+
+    public void registerReplicaWithPrimary(String primaryHostAddress, int primaryReplicaPort,
+                                           AddrServerNetworkManager networkManager, int clientPort, int peerPort, int chatServerPort) {
         try {
             // Create a non-blocking SocketChannel to reach the primary’s replica port
             SocketChannel channel = SocketChannel.open();
@@ -135,8 +186,9 @@ public class ReplicaManager {
                 ackBuffer.flip();
                 String ack = StandardCharsets.UTF_8.decode(ackBuffer).toString();
                 System.out.println("Received primary ACK: " + ack);
+                // TODO - STORE THE PRIMARY PID FOR THE REPLICA TO KNOW WITHOUT HAVING TO LOOP THROUGH CHANNELS
                 long primaryPID = Long.parseLong(ack.trim());
-                this.replicaChannels.put(primaryPID, new NIOMessageChannel(channel));
+                this.peerChannels.put(channel, new NIOMessageChannel(channel, primaryPID));
             } else {
                 System.out.println("No ACK received.");
             }
@@ -162,19 +214,19 @@ public class ReplicaManager {
             ServerUpdateMessage updateMessage = new ServerUpdateMessage("Primary", "Replica", "CHAT_SERVER_UPDATE", chatServerJson);
             // Serialize the update message to JSON
             String jsonMessage = updateMessage.toJson();
-            ByteBuffer buffer = ByteBuffer.wrap(jsonMessage.getBytes(StandardCharsets.UTF_8));
-
-            // Push the update to each replica's channel
-            for (NIOMessageChannel replicaChannel : replicaChannels.values()) {
-                try {
-                    while (buffer.hasRemaining()) {
-                        replicaChannel.write(buffer);
-                    }
-                    buffer.rewind(); // Prepare buffer for next replica
-                } catch (IOException e) {
-                    System.err.println("Failed to push update to replica: " + e.getMessage());
-                }
-            }
+//            ByteBuffer buffer = ByteBuffer.wrap(jsonMessage.getBytes(StandardCharsets.UTF_8));
+//
+//            // Push the update to each replica's channel
+//            for (NIOMessageChannel replicaChannel : replicaChannels.values()) {
+//                try {
+//                    while (buffer.hasRemaining()) {
+//                        replicaChannel.write(buffer);
+//                    }
+//                    buffer.rewind(); // Prepare buffer for next replica
+//                } catch (IOException e) {
+//                    System.err.println("Failed to push update to replica: " + e.getMessage());
+//                }
+//            }
         } catch (JsonProcessingException e) {
             System.err.println("Failed to serialize ChatServerInfo update: " + e.getMessage());
         }

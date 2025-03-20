@@ -1,4 +1,4 @@
-package io.github.cpsc559.team16.tests.addressingservertests;
+package io.github.cpsc559.team16.tests.addressingserver_tests;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;

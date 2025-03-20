@@ -1,5 +1,5 @@
 # Use a single base image
-FROM eclipse-temurin:23-jdk
+FROM eclipse-temurin:21-jdk
 
 # Set the working directory inside the container
 WORKDIR /app

@@ -4,9 +4,7 @@ package io.github.cpsc559.team16.addressingserver;
 import io.github.cpsc559.team16.common.utilities.NetworkManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.channels.*;
-import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 
 public class AddrServerNetworkManager implements NetworkManager {
@@ -18,9 +16,9 @@ public class AddrServerNetworkManager implements NetworkManager {
 
 
 
-    private ReplicaManager replicaManager;
-    public void setReplicaManager(ReplicaManager replicaManager) {
-        this.replicaManager = replicaManager;
+    private PeerManager peerManager;
+    public void setReplicaManager(PeerManager peerManager) {
+        this.peerManager = peerManager;
     }
 
 

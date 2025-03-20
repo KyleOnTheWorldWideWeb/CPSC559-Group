@@ -43,7 +43,7 @@ public class AddressingServer {
      * The process responsible for managing interactions between the Primary
      * {@code AddressingServer} and its replicas.
      */
-    private final ReplicaManager replicaManager;
+    private final PeerManager peerManager;
 
     /**
      * The number of chat servers that have been registered.
@@ -104,7 +104,7 @@ public class AddressingServer {
         }
         chatServerRegistry = new ChatServerRegistry();
         addrServerRegistry = new AddrServerRegistry();
-        replicaManager = new ReplicaManager();
+        peerManager = new PeerManager();
     }
 
 
@@ -246,7 +246,7 @@ public class AddressingServer {
         // TODO - May need to add conditional so only the primary activates this code
         try {
             networkManager.openPersistentChannel(channel); // Add the channel to the selector
-            replicaManager.registerReplica(config.getPID(), generatePID(), channel, this.addrServerRegistry);
+            peerManager.registerPeer(config.getPID(), generatePID(), channel, this.addrServerRegistry);
         } catch (IOException ioe) {
             System.err.println("Error registering/opening persistent channel with peer server: " + ioe.getMessage());
             ioe.printStackTrace();
@@ -261,6 +261,30 @@ public class AddressingServer {
     // >------------ END OF PRIMARY NETWORK HANDLING LOGIC -------------------<
 
 
+//    public List<String> getMessages(SelectionKey key) {
+//        peerManager.getReplicaChannels()
+//    }
+
+//    public void replicaHandleReadEvent(SelectionKey key) {
+//        SocketChannel channel = (SocketChannel) key.channel();
+//        NIOMessageChannel nioChannel = peerManager.getReplicaChannel(channel);
+//
+//        if (nioChannel == null) {
+//            System.err.println("⚠ No registered primary for this channel.");
+//            return;
+//        }
+//
+//        try {
+//            nioChannel.fillMessageBuffer();
+//            processReplicaData(nioChannel);
+//
+//        } catch (ConnectionClosedException e) {
+//            System.out.println("🗑 Removing closed channel from replica: " + e.getMessage());
+//            key.cancel();
+//            peerManager(nioChannel);
+//            closeChannel(channel);
+//        } catch (IOException e)
+//    }
 
     // >------------ START OF REPLICA NETWORK HANDLING LOGIC -----------------<
     public void replicaHandlePeerConnection(SocketChannel channel) {
@@ -290,7 +314,7 @@ public class AddressingServer {
         AddrServerReadDispatcher readDispatcher = new AddrServerReadDispatcher(this);
         networkManager.startEventLoop(requestDispatcher, readDispatcher);
         // TODO - fix this so it happens in the AddressingServer constructor (make an overload for networkManager)
-//        networkManager.setReplicaManager(replicaManager); // Cannot add to constructor
+//        networkManager.setReplicaManager(peerManager); // Cannot add to constructor
 //        networkManager.setChatServerRegistry(chatServerRegistry); //
 
     }
@@ -320,7 +344,7 @@ public class AddressingServer {
             } else {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
-                server.replicaManager.registerBackupWithPrimary("0.0.0.0", 49801,
+                server.peerManager.registerReplicaWithPrimary("0.0.0.0", 49801,
                         server.networkManager, server.config.getClientPort(), server.config.getReplicaPort(), server.config.getChatServerPort());
                 // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
             }

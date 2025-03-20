@@ -2,7 +2,7 @@
 # FROM eclipse-temurin:23-jdk pulls an Image of JDK23 directly from a repository hosted by eclipse
 # Now any Java executables (.jar) or source code (.java) copied into the image will use tools from JDK23
 # This ensures that any docker container built from this image will use the same version of Java AND run on any machine that has docker.
-FROM eclipse-temurin:23-jdk
+FROM eclipse-temurin:21-jdk
 
 # Set the working directory inside the container
 # This is where Docker will place
