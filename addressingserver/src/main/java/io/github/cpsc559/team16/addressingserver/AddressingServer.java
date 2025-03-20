@@ -73,16 +73,6 @@ public class AddressingServer {
 
 
 
-    /**
-     * Represents the leadership status of an addressing server.
-     * Addressing server backups are `Passive Replicas` - they only sync data with
-     * the primary server and do not handle requests until failover occurs.
-     * <ul>
-     *     <li>{@code PRIMARY} - This server is the Primary Addressing Server.</li>
-     *     <li>{@code BACKUP} - This server is a Passive Replica for failover.</li>
-     * </ul>
-     */
-
     public AddrServerConfig getConfig() {
         return config;
     }
@@ -97,18 +87,15 @@ public class AddressingServer {
      */
     public AddressingServer() {
         this.config = new AddrServerConfig();
+        peerManager = new PeerManager();
         try {
-            this.networkManager = new AddrServerNetworkManager();
+            this.networkManager = new AddrServerNetworkManager(peerManager);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
         chatServerRegistry = new ChatServerRegistry();
         addrServerRegistry = new AddrServerRegistry();
-        peerManager = new PeerManager();
     }
-
-
-
 
 
 
@@ -309,6 +296,7 @@ public class AddressingServer {
 
     public void start() throws IOException {
         initializeChannels();
+
         // Create a dispatcher that uses this instance’s request handler methods
         AddrServerRequestDispatcher requestDispatcher = new AddrServerRequestDispatcher(this);
         AddrServerReadDispatcher readDispatcher = new AddrServerReadDispatcher(this);

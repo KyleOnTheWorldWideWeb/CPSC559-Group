@@ -4,6 +4,7 @@ import io.github.cpsc559.team16.common.utilities.NetworkManager;
 
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
+import java.nio.channels.SocketChannel;
 
 /**
  * Handles read events from registered {@code SocketChannel}'s and routes them based on the server's role.
@@ -33,17 +34,17 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      * an {@link IllegalStateException} is thrown to halt execution.
      * </p>
      *
-     * @param key The {@code SelectionKey} representing the channel that has data ready to be read.
+     *
      * @throws IllegalStateException If the server role is not recognized (neither PRIMARY nor REPLICA).
      */
     @Override
-    public void dispatch(SelectionKey key) throws IllegalStateException {
+    public void dispatch(SocketChannel channel, String message) throws IllegalStateException {
         // Guard Condition. Replicas/Backups outnumber Primary -> check for REPLICA first.
         if (server.getConfig().getRole() == AddrServerConfig.ServerRole.REPLICA) {
-            server.replicaHandleReadEvent(key);
+            //server.replicaHandleReadEvent(key);
         }
         else if (server.getConfig().getRole() == AddrServerConfig.ServerRole.PRIMARY) {
-            server.primaryHandleReadEvent(key);
+            //server.primaryHandleReadEvent(key);
         }
         else {
             throw new IllegalStateException("Unexpected server role: " + server.getConfig().getRole()

@@ -8,7 +8,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class ChatServerRegistry {
 
-
     /**
      * A mapping of unique chat server IDs to their corresponding {@link ChatServerInfo} records.
      * <p>

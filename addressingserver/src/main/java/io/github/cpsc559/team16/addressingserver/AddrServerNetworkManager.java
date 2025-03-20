@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.addressingserver;
 
-
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 import io.github.cpsc559.team16.common.utilities.NetworkManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -15,19 +16,15 @@ public class AddrServerNetworkManager implements NetworkManager {
     private final Selector selector;
 
 
-
     private PeerManager peerManager;
+
     public void setReplicaManager(PeerManager peerManager) {
         this.peerManager = peerManager;
     }
 
 
-    private ChatServerRegistry chatServerRegistry;
-    public void setChatServerRegistry(ChatServerRegistry chatServerRegistry) {
-        this.chatServerRegistry = chatServerRegistry;
-    }
-
-    public AddrServerNetworkManager() throws IOException {
+    public AddrServerNetworkManager(PeerManager peerManager) throws IOException {
+        this.peerManager = peerManager;
         selector = Selector.open();
     }
 
@@ -82,7 +79,8 @@ public class AddrServerNetworkManager implements NetworkManager {
      * @throws IOException If an I/O error occurs while selecting or processing events.
      */
     @Override
-    public void startEventLoop(NetworkManager.ConnectionDispatcher requestDispatcher, NetworkManager.ReadDispatcher readDispatcher) throws IOException {
+    public void startEventLoop(NetworkManager.ConnectionDispatcher requestDispatcher,
+                               NetworkManager.ReadDispatcher readDispatcher) throws IOException {
         while (true) {
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();
@@ -118,14 +116,13 @@ public class AddrServerNetworkManager implements NetworkManager {
 
                     // All requests on this channel will be sent to "non-blocking"
                     channel.configureBlocking(false);
-
                     // Dispatches the new connection to the appropriate handler based on the listenerSC type.
                     try {
                         requestDispatcher.dispatch(channel, listenerSC);
                     } catch (IllegalStateException ise) {
-                        System.err.println("Error occurred while dispatching read event -->" + ise.getMessage());
-                        ise.printStackTrace();
-                        return; //
+                        // Any AddressingServer without a role is a problem waiting to happen.
+                        // Best for it to finish execution and take a long nap.
+                        System.err.println("Error occurred while dispatching new network connection event -->" + ise.getMessage());
                     }
                 }
 
@@ -135,15 +132,27 @@ public class AddrServerNetworkManager implements NetworkManager {
                  * Typically, only a SocketChannel would ever be registered with OP_READ.
                  */
                 if (key.isReadable()) {
-                   try {
-                       readDispatcher.dispatch(key);
-                   } catch (IllegalStateException ise) {
-                       System.err.println("Error occurred while dispatching read event -->" + ise.getMessage());
-                       ise.printStackTrace();
-                       return; // Any AddressingServer without a role is a problem waiting to happen.
-                       // Best for it to finish execution and take a long nap.
-                   }
-
+                    SocketChannel channel = (SocketChannel) key.channel();
+                    NIOMessageChannel nioChannel = peerManager.getPeerChannels().get(channel);
+                    try {
+                        /* Reading a message throws a custom ConnectionClosedException if the SocketChannel
+                         * associated with it has been closed -> the key should be removed along with both channels.
+                         */
+                        String message = nioChannel.receiveMessage();
+                        readDispatcher.dispatch(channel, message);
+                    } catch (ConnectionClosedException cce) {
+                        NIOMessageChannel ch = peerManager.getPeerChannels().get(channel);
+                        Long pid = ch.getServerPID();
+                        peerManager.removeNIOChannelByKey(channel);
+                        key.cancel();
+                        channel.close();
+                        System.out.println("Removing closed peer (Server ID: " + pid + "): " + cce.getMessage());
+                    } catch (IllegalStateException ise) {
+                        System.err.println("Error occurred while dispatching read event -->" + ise.getMessage());
+                        ise.printStackTrace();
+                        return; // Any AddressingServer without a role is a problem waiting to happen.
+                        // Best for it to finish execution and take a long nap.
+                    }
                 }
             }
         }

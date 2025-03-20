@@ -99,7 +99,8 @@ public class PeerManager {
      *
      * @see PeerManager#peerChannels
      */
-    public void registerPeer(Long primaryPID, Long peerPID, SocketChannel newPeerChannel, AddrServerRegistry registry) throws IOException {
+    public void registerPeer(Long primaryPID, Long peerPID, SocketChannel newPeerChannel,
+                             AddrServerRegistry registry) throws IOException {
         InetSocketAddress remoteAddress = (InetSocketAddress) newPeerChannel.getRemoteAddress();
         String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
         // TODO - I need to retrieve this information from the Replica!

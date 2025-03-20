@@ -76,6 +76,6 @@ public interface NetworkManager {
      * Defines how data streams on established {@code NIO SocketChannels} are dispatched to their respective handlers.
      */
     interface ReadDispatcher {
-        void dispatch(SelectionKey key);
+        void dispatch(SocketChannel channel, String message);
     }
 }

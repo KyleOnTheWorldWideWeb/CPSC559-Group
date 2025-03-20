@@ -127,7 +127,7 @@ public class NIOMessageChannel {
      *         (or if the connection was closed).
      * @throws IOException If an I/O error occurs while reading from the channel.
      */
-    public boolean fillMessageBuffer() throws ConnectionClosedException, IOException {
+    public boolean fillMessageBuffer() throws IOException {
         int bytesRead = channel.read(streamBuffer);
         // NOTE - with NIO sockets, a channel can be closed, and the key will remain. We must remove
         // the closed channel from any data structure it is stored in, and remove the key from the selector.
@@ -196,9 +196,7 @@ public class NIOMessageChannel {
         if (!fillMessageBuffer()) {
             return null;  // Connection closed OR no new data available
         }
-
         List<String> messages = new ArrayList<>();
-
         // Extract ALL complete messages
         int newlineIndex;
         while ((newlineIndex = messageBuffer.indexOf("\n")) != -1) {
