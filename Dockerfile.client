@@ -1,18 +1,20 @@
 # Stage 1: Build the application
-FROM gradle:jdk23-alpine AS build
+FROM gradle:jdk21-alpine AS build
 WORKDIR /app
 COPY . .
 WORKDIR /app/
 RUN gradle buildClient
 
 # Stage 2: Run the application
-FROM eclipse-temurin:23-jdk
+FROM eclipse-temurin:21-jdk
 WORKDIR /app
 COPY --from=build /app/client/build/libs/client.jar /app/client.jar
 
 # Expose the ports the application runs on
 ENV CLIENT_PORT=3000
 EXPOSE ${CLIENT_PORT}
+
+ENV ADDRESS_SERVER_IP=172.20.0.2
 
 # Defines the default program run by the Docker Container
 CMD ["java", "-jar", "client.jar"]

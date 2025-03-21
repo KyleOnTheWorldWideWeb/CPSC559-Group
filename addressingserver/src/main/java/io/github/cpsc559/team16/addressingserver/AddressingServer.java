@@ -1,15 +1,15 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
-import java.nio.ByteBuffer;
-import java.nio.channels.*;
-import java.nio.charset.StandardCharsets;
-import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey; // Used for conditionals that don't rely on non-null checks
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-
-// Internal (Project) Dependencies
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
@@ -317,7 +317,8 @@ public class AddressingServer {
             } else {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
-                server.replicaManager.registerBackupWithPrimary("0.0.0.0", 49801,
+                // TODO: retrieve the primary host address from the environment variable
+                server.replicaManager.registerBackupWithPrimary("172.20.0.2", 49801,
                         server.networkManager, server.config.getClientPort(), server.config.getReplicaPort(), server.config.getChatServerPort());
                 // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
             }

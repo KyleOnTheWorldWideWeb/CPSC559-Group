@@ -14,11 +14,6 @@ plugins {
     id("com.bmuschko.docker-remote-api")     // Adds Docker support via the bmuschko Gradle plugin. This automates Docker builds.
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(23))
-    }
-}
 /*
     Declaring Dependencies for the client module only - Dependencies should be declared before tasks.
     This ensures all modules know their dependencies before any Gradle tasks run.
@@ -37,10 +32,10 @@ application {
     mainClass.set("io.github.cpsc559.team16.client.ClientTest") // Inform Gradle which class contains the main method for launching the app.
 }
 
-// Loading the port bindings from the client .env file
-val envProperties = Properties().apply {
-    file(".env").inputStream().use { load(it) }
-}
+// // Loading the port bindings from the client .env file
+// val envProperties = Properties().apply {
+//     file(".env").inputStream().use { load(it) }
+// }
 
 
 // Configure the default jar task to build the client JAR file

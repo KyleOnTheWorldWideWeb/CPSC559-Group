@@ -28,10 +28,10 @@ application {
     mainClass.set("io.github.cpsc559.team16.addressingserver.AddressingServer")
 }
 
-// Loading the port bindings from the addressingserver .env file
-val envProperties = Properties().apply {
-    file(".env").inputStream().use { load(it) }
-}
+// // Loading the port bindings from the addressingserver .env file
+// val envProperties = Properties().apply {
+//     file(".env").inputStream().use { load(it) }
+// }
 
 // Configure the default jar task to build the addressingserver JAR file
 tasks.jar {

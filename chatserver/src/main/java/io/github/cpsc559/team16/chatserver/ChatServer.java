@@ -5,18 +5,15 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
 import io.github.cpsc559.team16.client.Client;
@@ -210,6 +207,7 @@ public class ChatServer {
 
         // Read the port from the environment variable, default to 2424 if not set
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "2424"));
+        String ADDRESS_SERVER_IP = System.getenv().getOrDefault("ADDRESS_SERVER_IP", "0.0.0.0");
         System.out.printf("Chat Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
 
         // Start the message broadcasting thread
@@ -221,7 +219,7 @@ public class ChatServer {
         // implementation.
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.print("ChatServer is attempting to connect to addressing server.......");
-            try (Socket addrServerSocket = new Socket("host.docker.internal", 49802)) {
+            try (Socket addrServerSocket = new Socket(ADDRESS_SERVER_IP, 49802)) {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(addrServerSocket.getInputStream(), StandardCharsets.UTF_8));
                 String ack = reader.readLine();
                 System.out.println(ack);

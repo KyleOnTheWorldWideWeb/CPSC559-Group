@@ -14,20 +14,36 @@ services:  # Defines the services (Docker containers) that will be run.
       #- "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication)
 
   addressingserver:
+      image: addressingserver:latest
+      container_name: addressingserver
+      build:
+        context: .
+        dockerfile: Dockerfile.addressingserver
+      environment:
+        - AS_CLIENT_PORT=49800
+        - AS_REPLICA_PORT=49801
+        - AS_CHATSERVER_PORT=49802
+        - AS_NETWORK=chat_network
+        - AS_ROLE=PRIMARY
+      networks:
+        chat_network:
+          ipv4_address: 172.20.0.2
+      deploy:
+        replicas: 1
+
+  addressingserver_replicas:
     image: addressingserver:latest
-    container_name: addressingserver
-    build:
-      context: .
-      dockerfile: Dockerfile.addressingserver
     environment:
       - AS_CLIENT_PORT=49800
       - AS_REPLICA_PORT=49801
       - AS_CHATSERVER_PORT=49802
-      - HOST_ADDRESS=addressingserver
+      - AS_NETWORK=chat_network
+      - AS_ROLE=BACKUP
+      - HOST_ADDRESS=172.20.0.2
     networks:
       - chat_network
-
-
+    deploy:
+      replicas: 3
 
   chatserver:
     image: chatserver:latest
@@ -39,10 +55,9 @@ services:  # Defines the services (Docker containers) that will be run.
       - CS_PORT=2424
       - CS_PEER_PORT=2425
       - CS_ADDRSERVER_PORT=49802
-      - HOST_ADDRESS=addressingserver
+      - ADDRESS_SERVER_IP=172.20.0.2
     networks:
       - chat_network
-
 
   client:
     image: client:latest
@@ -53,14 +68,16 @@ services:  # Defines the services (Docker containers) that will be run.
     environment:
       - CLIENT_PORT=3000
       - HOST_ADDRESS=client
-
+      - ADDRESS_HOST=172.20.0.2
     networks:
       - chat_network
-
 
 networks:
   chat_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 # This is different from the volume we define in a service. This is how we can ensure that any data...configs:
 # ... that is created during the build or execution of the container(s), IS NOT deleted when the container is removed.
 # This is very powerful because it allows us to update our repository (new version), and in turn build new containers...configs:

@@ -2,11 +2,6 @@ plugins {
     id("java")
     id("application")
 }
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(23))
-    }
-}
 
 dependencies {
     implementation(project(":common"))

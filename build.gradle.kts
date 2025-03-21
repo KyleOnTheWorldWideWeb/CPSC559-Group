@@ -10,7 +10,7 @@ subprojects {
     // Ensure that JDK23 is used across ALL modules
     plugins.withType<JavaPlugin>().configureEach {
         extensions.configure<JavaPluginExtension> {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(23))
+            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
         }
     }
 
