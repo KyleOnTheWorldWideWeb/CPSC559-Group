@@ -1,7 +1,13 @@
 package io.github.cpsc559.team16.addressingserver;
 
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
+import java.io.IOException;
+import java.nio.channels.SocketChannel;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -9,17 +15,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatServerRegistry {
 
     /**
-     * A mapping of unique chat server IDs to their corresponding {@link ChatServerInfo} records.
+     * A mapping of unique chat server IDs to their corresponding {@link ChatServerRecord} records.
      * <p>
-     * A {@code ChatServerInfo} record is created for each {@code ChatServer},
+     * A {@code ChatServerRecord} record is created for each {@code ChatServer},
      * and subsequently updated anytime the {@code ChatServer} reports any changes to its state
      * to the Primary {@code AddressingServer} for each registered chat server in the network.
      * </p>
      */
-    private Map<Long, ChatServerInfo> chatServerRecords = new ConcurrentHashMap<>();
+    private Map<Long, ChatServerRecord> chatServerRecords = new ConcurrentHashMap<>();
 
 
-    public Map<Long, ChatServerInfo> getRecords() {
+    public Map<Long, ChatServerRecord> getRecords() {
         return chatServerRecords;
     }
 
@@ -31,15 +37,15 @@ public class ChatServerRegistry {
      * by resetting the chat server records.
      * </p>
      *
-     * @param newChatServerRecords a {@code Map} of chat server IDs to {@link ChatServerInfo} objects representing the new address log.
+     * @param newChatServerRecords a {@code Map} of chat server IDs to {@link ChatServerRecord} objects representing the new address log.
      */
-    public void setChatServerRecords(Map<Long, ChatServerInfo> newChatServerRecords) {
+    public void setChatServerRecords(Map<Long, ChatServerRecord> newChatServerRecords) {
         this.chatServerRecords = newChatServerRecords;
     }
 
 
-    public void registerServer(Long id, ChatServerInfo record) {
-        chatServerRecords.put(id, record);
+    public void addRecord(Long chatServerPID, ChatServerRecord record) throws IOException {
+        this.chatServerRecords.put(chatServerPID, record);
     }
 
     public boolean deregisterServer(Long id) {
@@ -52,17 +58,17 @@ public class ChatServerRegistry {
      * @return an {@link Optional} containing the active host address in the format "hostAddress:clientPort",
      *         or {@code Optional.empty()} if no active host exists.
      */
-    public Optional<ChatServerInfo> getActiveServer() {
+    public Optional<ChatServerRecord> getActiveServer() {
         return chatServerRecords.values().stream()
-                .filter(server -> server.getStatus() == ChatServerInfo.ServerStatus.ACTIVE)
+                .filter(server -> server.getStatus() == ChatServerRecord.ServerStatus.ACTIVE)
                 .findFirst();
     }
 
     public Optional<String> getActiveHost() {
-        Optional<ChatServerInfo> activeServer = getActiveServer();
+        Optional<ChatServerRecord> activeServer = getActiveServer();
 
         if (activeServer.isPresent()) {
-            ChatServerInfo host = activeServer.get();
+            ChatServerRecord host = activeServer.get();
             try {
                 host.addClient();
             } catch (ChatServerFullException csfe) {
@@ -78,10 +84,10 @@ public class ChatServerRegistry {
 
     /**
      * Creates a record for a chat server by generating a unique ID and inserting its
-     * ChatServerInfo record into the global addressLog.
+     * ChatServerRecord record into the global addressLog.
      * <p>
      * This method generates a unique ID using {@code generatePID()}, creates a new
-     * {@link ChatServerInfo} object with the given parameters, and then inserts it into the addressLog. If a record
+     * {@link ChatServerRecord} object with the given parameters, and then inserts it into the addressLog. If a record
      * with the same ID already exists, it logs a warning message (and overwrites it).
      * </p>
      *
@@ -97,10 +103,10 @@ public class ChatServerRegistry {
     public long createChatServerRecord(Long serverPID, String chatHostAddress, int addrServerPort, int chatClientPort,
                                         int chatPeerPort, int maxClientCount) {
         try {
-            ChatServerInfo newServer = new ChatServerInfo(serverPID, chatHostAddress, addrServerPort,
+            ChatServerRecord newServer = new ChatServerRecord(serverPID, chatHostAddress, addrServerPort,
                     chatPeerPort, chatClientPort, maxClientCount);
             // Check if the key already existed (should be null for a new key)
-            ChatServerInfo previous = this.chatServerRecords.put(serverPID, newServer);
+            ChatServerRecord previous = this.chatServerRecords.put(serverPID, newServer);
 
             if (previous != null) {
                 System.err.println("WARNING: A server with ID " + serverPID + " already existed. Overwriting existing entry.");
@@ -142,16 +148,16 @@ public class ChatServerRegistry {
 //     *
 //     * @param newAddressLog the address log object received from the network
 //     */
-//    public void updateAddressLogFromNetwork(Map<Long,ChatServerInfo> newAddressLog) {
+//    public void updateAddressLogFromNetwork(Map<Long,ChatServerRecord> newAddressLog) {
 //
 //    }
 
 
     /**
-     * Logs the details of this ChatServerInfo object to the console for debugging purposes.
+     * Logs the details of this ChatServerRecord object to the console for debugging purposes.
      */
-    public void debugPrintServer(ChatServerInfo s) {
-        System.out.println("\t---------- ChatServerInfo Record ----------");
+    public void debugPrintServer(ChatServerRecord s) {
+        System.out.println("\t---------- ChatServerRecord Record ----------");
         System.out.printf("\tProcess ID : %s%n", s.getPID());
         System.out.printf("\tHost Address : %s%n", s.getHostAddress());
         System.out.printf("\tClient Port  : %d%n", s.getClientPort());
@@ -163,7 +169,7 @@ public class ChatServerRegistry {
 
     public void debugPrintAllServers() {
         System.out.println("|--------------- Currently Registered ChatServer's ---------------|");
-        for (ChatServerInfo s : this.chatServerRecords.values()){
+        for (ChatServerRecord s : this.chatServerRecords.values()){
             debugPrintServer(s);
         }
         System.out.println("|-----------------------------------------------------------------|");

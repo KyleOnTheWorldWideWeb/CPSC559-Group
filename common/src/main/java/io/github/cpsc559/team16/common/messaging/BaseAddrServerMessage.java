@@ -2,6 +2,8 @@ package io.github.cpsc559.team16.common.messaging;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.cpsc559.team16.common.dto.*;
+
 
 /**
  * Represents a standardized message format used for communication between Addressing Servers,
@@ -47,11 +49,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * // Updating Chat Server Info
  * {
  *   "msgType": "UPDATE",
- *   "objectType": "ChatServerInfo",
+ *   "objectType": "ChatServerRecord",
  *   "senderPID": 7,
  *   "senderRole": "PRIMARY",
  *   "targetRole": "REPLICA",
- *   "payload": { <serialized ChatServerInfo object> }
+ *   "payload": { <serialized ChatServerRecord object> }
  * }
  * </pre>
  */
@@ -64,11 +66,13 @@ public class BaseAddrServerMessage<T> {
      * The possible values include:
      * </p>
      * <ul>
+     *     <li><strong>REGISTER</strong> - Requesting the Primary {@code AddressingServer} to register this server.</li>
      *     <li><strong>UPDATE</strong> - A data update, such as a change in chat server status or client count.</li>
      *     <li><strong>REQUEST</strong> - A request for information, such as retrieving updated records.</li>
      *     <li><strong>PING</strong> - Used for failure detection, ensuring peers are still responsive.</li>
      *     <li><strong>NOTIFICATION</strong> - A general event notification, such as a server joining or leaving the network.</li>
      *     <li><strong>ELECTION</strong> - Used for Addressing Server leadership election messages.</li>
+     *     <li><strong>ACK</strong> - Used for custom one-time responses.</li>
      * </ul>
      * <p>
      * This field works in conjunction with {@code objectType} to provide additional context
@@ -84,11 +88,11 @@ public class BaseAddrServerMessage<T> {
      * recipients to properly process and interpret the message. The possible values include:
      * </p>
      * <ul>
-     *     <li><strong>ChatServerInfo</strong> - Contains details about a registered chat server, such as host address and active client count.</li>
-     *     <li><strong>AddrServerInfo</strong> - Provides information about an Addressing Server, including its role (PRIMARY or REPLICA).</li>
+     *     <li><strong>ChatServerRecord</strong> - Contains details about a registered chat server, such as host address and active client count.</li>
+     *     <li><strong>AddrServerRecord</strong> - Provides information about an Addressing Server, including its role (PRIMARY or REPLICA).</li>
      *     <li><strong>ClientCount</strong> - Indicates an update to the number of active clients connected to a chat server.</li>
      *     <li><strong>ServerFailure</strong> - A notification that a chat server or addressing server has failed.</li>
-     *     <li><strong>ElectionVote</strong> - Used during an election process to determine a new PRIMARY server.</li>
+     *     <li><strong>ElectionMessage</strong> - Used during an election process to determine a new PRIMARY server.</li>
      * </ul>
      * <p>
      * This field ensures that recipients can process incoming messages appropriately,
@@ -150,11 +154,12 @@ public class BaseAddrServerMessage<T> {
         return new ObjectMapper().writeValueAsString(this);
     }
 
+
     /**
      * Deserializes a JSON string into a {@code BaseAddrServerMessage} object with a specified payload type.
      *
      * @param json The JSON string representing the message.
-     * @param payloadClass The class type of the payload (e.g., ChatServerInfo.class).
+     * @param payloadClass The class type of the payload (e.g., ChatServerRecord.class).
      * @return A deserialized {@code BaseAddrServerMessage<T>} instance with a properly typed payload.
      * @throws JsonProcessingException If an error occurs during deserialization.
      */
@@ -162,4 +167,54 @@ public class BaseAddrServerMessage<T> {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.readValue(json, objectMapper.getTypeFactory().constructParametricType(BaseAddrServerMessage.class, payloadClass));
     }
+
+    /**
+     * Resolves a string objectType into a corresponding Java class.
+     *
+     * @param objectType The string identifier of the payload's type.
+     * @return The corresponding Java class, or {@code null} if unrecognized.
+     */
+    private Class<?> resolveObjectTypeToClass(String objectType) {
+        return switch (objectType) {
+            case "AddrServerRecord" -> io.github.cpsc559.team16.common.dto.AddrServerRecord.class;
+            case "ChatServerRecord" -> io.github.cpsc559.team16.common.dto.ChatServerRecord.class;
+            case "ClientCount"    -> Integer.class;
+            case "ServerFailure"  -> String.class;
+            case "ElectionVote"   -> io.github.cpsc559.team16.common.dto.ElectionVote.class;
+            case "Long"           -> Long.class;
+            case "String"         -> String.class;
+            case "NONE"           -> Object.class;
+            default               -> null;
+        };
+    }
+
+    /**
+     * Casts the payload to the type declared in the {@code objectType} field.
+     *
+     * <p>This method enforces that the declared {@code objectType} matches the requested class type.</p>
+     *
+     * @param expectedClass The class you expect the payload to be.
+     * @return The payload cast to the expected type.
+     * @param <U> The expected payload type.
+     * @throws IllegalStateException if the declared objectType does not match the expected type.
+     */
+    @SuppressWarnings("unchecked")
+    public <U> U safeCastPayload(Class<U> expectedClass) {
+        // Resolve the class from the objectType string
+        Class<?> resolvedType = resolveObjectTypeToClass(this.objectType);
+
+        if (resolvedType == null) {
+            throw new IllegalStateException("Unrecognized objectType: " + objectType);
+        }
+
+        if (!expectedClass.equals(resolvedType)) {
+            throw new IllegalStateException("Expected type " + expectedClass.getSimpleName()
+                    + " but objectType indicates " + resolvedType.getSimpleName());
+        }
+
+        return (U) payload;
+    }
+
+
+
 }

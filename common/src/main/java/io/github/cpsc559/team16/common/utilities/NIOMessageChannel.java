@@ -49,7 +49,7 @@ public class NIOMessageChannel {
     /**
      * The unique identifier of the server associated with this channel.
      */
-    private final Long serverPID;
+    private Long serverPID;
 
     /**
      * A {@link ByteBuffer} used as an intermediate storage buffer for network data.
@@ -76,10 +76,13 @@ public class NIOMessageChannel {
      *
      * @param channel The SocketChannel to wrap.
      */
-    public NIOMessageChannel(SocketChannel channel, Long serverPID) {
+    public NIOMessageChannel(SocketChannel channel) {
         this.channel = channel;
         this.streamBuffer = ByteBuffer.allocate(1024);  // Adjustable buffer size
-        this.serverPID = serverPID;
+    }
+
+    public void setServerPID(Long pid) {
+        this.serverPID = pid;
     }
 
     /**

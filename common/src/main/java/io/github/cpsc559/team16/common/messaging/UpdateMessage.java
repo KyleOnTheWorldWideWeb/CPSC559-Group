@@ -7,7 +7,7 @@ package io.github.cpsc559.team16.common.messaging;
  * This class simplifies the creation of update messages by pre-setting {@code msgType} to "UPDATE."
  * </p>
  *
- * @param <T> The type of data being sent as the payload (e.g., {@code ChatServerInfo}, {@code AddrServerInfo}).
+ * @param <T> The type of data being sent as the payload (e.g., {@code ChatServerRecord}, {@code AddrServerRecord}).
  */
 public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
 
@@ -20,11 +20,11 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
      * <pre>
      *   {
      *   "msgType": "UPDATE",
-     *   "objectType": "ElectionVote",
+     *   "objectType": "ElectionMessage",
      *   "senderPID": 72,
      *   "senderRole": "CHATSERVER",
      *   "targetRole": "REPLICA",
-     *   "payload": { `serialized ElectionVote object` }
+     *   "payload": { `serialized ElectionMessage object` }
      *   }
      * </pre>
      *

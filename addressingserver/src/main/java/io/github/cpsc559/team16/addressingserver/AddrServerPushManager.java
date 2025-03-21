@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -17,10 +18,10 @@ public class AddrServerPushManager {
     /**
      * Pushes an update about a newly registered or updated chat server to all replicas.
      *
-     * @param chatServerInfo The chat server information to be sent.
+     * @param chatServerRecord The chat server information to be sent.
      */
-    public void pushChatServerUpdate(ChatServerInfo chatServerInfo) {
-        String updateMessage = formatUpdateMessage(chatServerInfo);
+    public void pushChatServerUpdate(ChatServerRecord chatServerRecord) {
+        String updateMessage = formatUpdateMessage(chatServerRecord);
         ByteBuffer buffer = ByteBuffer.wrap(updateMessage.getBytes(StandardCharsets.UTF_8));
 
         for (SocketChannel replicaChannel : replicaChannels) {
@@ -35,7 +36,7 @@ public class AddrServerPushManager {
         }
     }
 
-    private String formatUpdateMessage(ChatServerInfo chatServerInfo) {
-        return "UPDATE " + chatServerInfo.getPID() + " " + chatServerInfo.getHostAddress() + ":" + chatServerInfo.getClientPort();
+    private String formatUpdateMessage(ChatServerRecord chatServerRecord) {
+        return "UPDATE " + chatServerRecord.getPID() + " " + chatServerRecord.getHostAddress() + ":" + chatServerRecord.getClientPort();
     }
 }

@@ -38,8 +38,8 @@ public class TestNIOMessageChannel {
             System.out.println(" Channels successfully connected!");
 
             //  Wrap them in `NIOMessageChannel`
-            NIOMessageChannel clientMessageChannel = new NIOMessageChannel(clientChannel, Long.valueOf(105L));
-            NIOMessageChannel serverMessageChannel = new NIOMessageChannel(serverChannel, Long.valueOf(105L));
+            NIOMessageChannel clientMessageChannel = new NIOMessageChannel(clientChannel);
+            NIOMessageChannel serverMessageChannel = new NIOMessageChannel(serverChannel);
 
             //  Define the test message
             String testMessage = "Hello, NIO!";
@@ -91,8 +91,8 @@ public class TestNIOMessageChannel {
             System.out.println("Channels successfully connected!");
 
             // Wrap them in `NIOMessageChannel`
-            NIOMessageChannel clientMessageChannel = new NIOMessageChannel(clientChannel, Long.valueOf(105L));
-            NIOMessageChannel serverMessageChannel = new NIOMessageChannel(serverChannel, Long.valueOf(105L));
+            NIOMessageChannel clientMessageChannel = new NIOMessageChannel(clientChannel);
+            NIOMessageChannel serverMessageChannel = new NIOMessageChannel(serverChannel);
 
             // Define test messages
             String[] messagesToSend = {"Hello", "How are you?", "Goodbye!"};
@@ -155,8 +155,8 @@ public class TestNIOMessageChannel {
             System.out.println("Channels successfully connected!");
 
             // Wrap them in `NIOMessageChannel`
-            NIOMessageChannel clientMessageChannel = new NIOMessageChannel(clientChannel, Long.valueOf(105L));
-            NIOMessageChannel serverMessageChannel = new NIOMessageChannel(serverChannel, Long.valueOf(105L));
+            NIOMessageChannel clientMessageChannel = new NIOMessageChannel(clientChannel);
+            NIOMessageChannel serverMessageChannel = new NIOMessageChannel(serverChannel);
 
             // Define a large test message that exceeds `streamBuffer` size (1024 bytes)
             String largeMessage = "A".repeat(5000) + "\n";  // A 5000-character message
@@ -198,7 +198,7 @@ public class TestNIOMessageChannel {
     public static void testHandleIOExceptionOnSend() {
         try {
             SocketChannel mockChannel = SocketChannel.open();
-            NIOMessageChannel messageChannel = new NIOMessageChannel(mockChannel, Long.valueOf(105L));
+            NIOMessageChannel messageChannel = new NIOMessageChannel(mockChannel);
 
             mockChannel.close(); // Force IOException
 
@@ -215,7 +215,7 @@ public class TestNIOMessageChannel {
     public static void testHandleIOExceptionOnReceive() {
         try {
             SocketChannel mockChannel = SocketChannel.open();
-            NIOMessageChannel messageChannel = new NIOMessageChannel(mockChannel, Long.valueOf(105L));
+            NIOMessageChannel messageChannel = new NIOMessageChannel(mockChannel);
 
             mockChannel.close(); // Force IOException
 

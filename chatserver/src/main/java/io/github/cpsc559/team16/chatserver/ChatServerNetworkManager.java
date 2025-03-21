@@ -38,26 +38,8 @@ public class ChatServerNetworkManager implements NetworkManager {
 
     @Override
     public void startEventLoop(ConnectionDispatcher dispatcher1, ReadDispatcher dispatcher2) throws IOException {
-        while (true) {
-            selector.select();
 
-            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-            while (keys.hasNext()) {
-                SelectionKey key = keys.next();
-                keys.remove();
-                if (!key.isValid()) {
-                    continue;
-                }
-                if (key.isAcceptable()) {
-                    ServerSocketChannel listenerSC = (ServerSocketChannel) key.channel();
-                    SocketChannel channel = listenerSC.accept();
-                    channel.configureBlocking(false);
-                    dispatcher1.dispatch(channel, listenerSC);
-                }
-                if (key.isReadable()) {
-                    // Handle incoming messages from clients or other chat servers
-                }
-            }
-        }
+
+
     }
 }

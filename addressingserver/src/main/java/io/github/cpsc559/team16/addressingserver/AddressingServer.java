@@ -34,16 +34,28 @@ public class AddressingServer {
      */
     private final ChatServerRegistry chatServerRegistry;
 
+    public ChatServerRegistry getChatServerRegistry() {
+        return chatServerRegistry;
+    }
+
     /**
-     * The process responsible for managing {@code AddrServerInfo} records.
+     * The process responsible for managing {@code AddrServerRecord} records.
      */
     private final AddrServerRegistry addrServerRegistry;
+
+
 
     /**
      * The process responsible for managing interactions between the Primary
      * {@code AddressingServer} and its replicas.
      */
     private final PeerManager peerManager;
+
+    public PeerManager getPeerManager() {
+        return peerManager;
+    }
+
+    private final PersistentConnectionManager connectionManager;
 
     /**
      * The number of chat servers that have been registered.
@@ -69,7 +81,7 @@ public class AddressingServer {
      * This channel is used for establishing (but not maintaining) peer-to-peer communication between
      * the primary addressing server and its backup replicas.
      */
-    private ServerSocketChannel replicaListenerChannel;
+    private ServerSocketChannel peerListenerChannel;
 
 
 
@@ -88,8 +100,9 @@ public class AddressingServer {
     public AddressingServer() {
         this.config = new AddrServerConfig();
         peerManager = new PeerManager();
+        connectionManager = new PersistentConnectionManager(this.config.getReplicaPort(), this.config.getChatServerPort());
         try {
-            this.networkManager = new AddrServerNetworkManager(peerManager);
+            this.networkManager = new AddrServerNetworkManager(connectionManager, peerManager);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
@@ -105,7 +118,7 @@ public class AddressingServer {
      *
      * @return a unique {@code Long} representing the chat server's ID.
      */
-    private Long generatePID() {
+    public Long generatePID() {
         return ++this.pidCounter;
     }
 
@@ -183,7 +196,7 @@ public class AddressingServer {
     public void initializeChannels() {
         try {
             clientListenerChannel = networkManager.openListenerChannel(config.getClientPort());
-            replicaListenerChannel = networkManager.openListenerChannel(config.getReplicaPort());
+            peerListenerChannel = networkManager.openListenerChannel(config.getReplicaPort());
             chatServerListenerChannel = networkManager.openListenerChannel(config.getChatServerPort());
         } catch (IOException ioe) {
             System.err.println("Failed to establish AddressingServer connections: " + ioe.getMessage());
@@ -200,8 +213,8 @@ public class AddressingServer {
         return clientListenerChannel;
     }
 
-    public ServerSocketChannel getReplicaListenerChannel() {
-        return replicaListenerChannel;
+    public ServerSocketChannel getPeerListenerChannel() {
+        return peerListenerChannel;
     }
 
     // Handles incoming client connections
@@ -229,16 +242,17 @@ public class AddressingServer {
     register the `newChannel` with the `selector` which will add a `SelectionKey`
     for that channel and monitor it until it is explicitly closed.
     */
-    public void handleReplicaConnection(SocketChannel channel) {
-        // TODO - May need to add conditional so only the primary activates this code
-        try {
-            networkManager.openPersistentChannel(channel); // Add the channel to the selector
-            peerManager.registerPeer(config.getPID(), generatePID(), channel, this.addrServerRegistry);
-        } catch (IOException ioe) {
-            System.err.println("Error registering/opening persistent channel with peer server: " + ioe.getMessage());
-            ioe.printStackTrace();
-        }
-    }
+//    public void handleReplicaConnection(SocketChannel channel) {
+//        // TODO - May need to add conditional so only the primary activates this code
+//        try {
+//            // NOPE - the persistent channel already exists now
+//            //networkManager.openPersistentChannel(channel); // Add the channel to the selector
+//            peerManager.registerPeer(channel, this.connectionManager.getNIOChannel(channel) ,generatePID(),this.addrServerRegistry);
+//        } catch (IOException ioe) {
+//            System.err.println("Error registering/opening persistent channel with peer server: " + ioe.getMessage());
+//            ioe.printStackTrace();
+//        }
+//    }
 
 
     public void primaryHandleReadEvent(SelectionKey key) {
@@ -298,7 +312,7 @@ public class AddressingServer {
         initializeChannels();
 
         // Create a dispatcher that uses this instance’s request handler methods
-        AddrServerRequestDispatcher requestDispatcher = new AddrServerRequestDispatcher(this);
+        AddrServerConnectionDispatcher requestDispatcher = new AddrServerConnectionDispatcher(this);
         AddrServerReadDispatcher readDispatcher = new AddrServerReadDispatcher(this);
         networkManager.startEventLoop(requestDispatcher, readDispatcher);
         // TODO - fix this so it happens in the AddressingServer constructor (make an overload for networkManager)
@@ -332,8 +346,8 @@ public class AddressingServer {
             } else {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
-                server.peerManager.registerReplicaWithPrimary("0.0.0.0", 49801,
-                        server.networkManager, server.config.getClientPort(), server.config.getReplicaPort(), server.config.getChatServerPort());
+                server.peerManager.registerWithPrimary(server.connectionManager,"host.docker.internal", 49801,
+                         server.config.getClientPort(), server.config.getReplicaPort(), server.config.getChatServerPort());
                 // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
             }
         }

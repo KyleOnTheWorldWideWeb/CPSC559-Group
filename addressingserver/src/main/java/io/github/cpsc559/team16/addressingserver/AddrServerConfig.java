@@ -1,5 +1,7 @@
 package io.github.cpsc559.team16.addressingserver;
 
+import io.github.cpsc559.team16.common.dto.ServerRole;
+
 public class AddrServerConfig {
 
     /**
@@ -45,9 +47,6 @@ public class AddrServerConfig {
      * </ul>
      *
      */
-    public enum ServerRole {
-        PRIMARY, REPLICA
-    }
     private ServerRole role;
 
 

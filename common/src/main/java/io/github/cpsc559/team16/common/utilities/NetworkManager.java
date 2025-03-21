@@ -1,5 +1,7 @@
 package io.github.cpsc559.team16.common.utilities;
 
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -69,13 +71,13 @@ public interface NetworkManager {
      * Defines how incoming connections are dispatched to their respective handlers.
      */
     interface ConnectionDispatcher {
-        void dispatch(SocketChannel channel, ServerSocketChannel listenerSC);
+        void dispatch(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message);
     }
 
     /**
      * Defines how data streams on established {@code NIO SocketChannels} are dispatched to their respective handlers.
      */
     interface ReadDispatcher {
-        void dispatch(SocketChannel channel, String message);
+        void dispatch(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message);
     }
 }

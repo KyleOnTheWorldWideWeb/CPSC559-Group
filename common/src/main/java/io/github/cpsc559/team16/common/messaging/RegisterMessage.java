@@ -1,0 +1,81 @@
+package io.github.cpsc559.team16.common.messaging;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ServerRole;
+
+/**
+ * A specialized version of {@code BaseAddrServerMessage} for sending REGISTER messages.
+ * <p>
+ * This message type is used when a ChatServer or AddressingServer process registers
+ * with the Primary AddressingServer.
+ * </p>
+ *
+ * @param <T> The type of the payload, such as {@code ChatServerRecord} or {@code AddrServerRecord}.
+ */
+public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
+
+    // Processes receive a PID upon registration with the PRIMARY {@code AddressingServer}
+    private static final long DEFAULT_PID = 0L;
+
+    /**
+     * Constructs an "REGISTER" message.
+     * <p>
+     * An example of a {@code ChatServer} a primary {@code AddressingServer} a REGISTER for all the ChatServerRecord
+     * records for the distributed system is given below:
+     * </p>
+     * <pre>
+     *   {
+     *   "msgType": "REGISTER",
+     *   "objectType": "",
+     *   "senderPID": 72,
+     *   "senderRole": "CHATSERVER",
+     *   "targetRole": "PRIMARY",
+     *   "payload": { null }
+     *   }
+     * </pre>
+     *
+     * @param objectType The subclass of {@code ServerRecord} being sent - {@code ChatServerRecord} or {@code AddrServerRecord}
+     * @param senderRole The role of the sender (PRIMARY, REPLICA, CHATSERVER).
+     * @param targetRole The role of the receiver - The PRIMARY {@code AddressingServer}.
+     * @param payload    The ServerRecord record to be sent for registering on the network.
+     *
+     * <p>
+     * <strong>NOTE:</strong> All {@code RegisterMessage}'s are sent with a process ID (PID) set to zero, as
+     * all network processes are assigned a pid UPON registration, not before.
+     * </p>
+     */
+    private RegisterMessage(String objectType, String senderRole, String targetRole, T payload) {
+        super("REGISTER", objectType, DEFAULT_PID, senderRole, targetRole, payload);
+    }
+
+    /**
+     * Factory method for registering a ChatServer.
+     *
+     * @param clientPort       The port used for client communication.
+     * @param peerPort         The port used for peer-to-peer chat server communication.
+     * @param addrServerPort   The port used to connect to the AddressingServer.
+     * @param maxClientCount   The server's maximum client capacity.
+     * @return A {@code RegisterMessage} containing a {@code ChatServerRecord} payload.
+     */
+    public static RegisterMessage<ChatServerRecord> fromChatServer(int clientPort, int peerPort, int addrServerPort,
+                                                                   int maxClientCount) {
+        ChatServerRecord record = new ChatServerRecord(
+                DEFAULT_PID, "", clientPort, peerPort, addrServerPort, maxClientCount);
+        return new RegisterMessage<>("ChatServerRecord", "CHATSERVER", "PRIMARY", record);
+    }
+
+    /**
+     * Factory method for registering an AddressingServer replica.
+     *
+     * @param clientPort       Port used for client communication.
+     * @param peerPort         Port used for replica communication.
+     * @param chatServerPort   Port used to receive chat server registrations.
+     * @return A {@code RegisterMessage} containing an {@code AddrServerRecord} payload.
+     */
+    public static RegisterMessage<AddrServerRecord> fromReplica(int clientPort, int peerPort, int chatServerPort) {
+        AddrServerRecord record = new AddrServerRecord(
+                DEFAULT_PID, "", clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
+        return new RegisterMessage<>("AddrServerRecord", "REPLICA", "PRIMARY", record);
+    }
+}
