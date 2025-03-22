@@ -1,11 +1,8 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
-import java.nio.ByteBuffer;
 import java.nio.channels.*;
-import java.nio.charset.StandardCharsets;
 import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
 
 
@@ -55,33 +52,23 @@ public class AddressingServer {
         return peerManager;
     }
 
-    private final PersistentConnectionManager connectionManager;
+    /**
+     * The process responsible for managing interactions between the
+     * {@code AddressingServer} and {@code ChatServer}'s
+     */
+    private final ChatServerManager chatServerManager;
+
+    public ChatServerManager getChatServerManager() {
+        return chatServerManager;
+    }
+
+
 
     /**
      * The number of chat servers that have been registered.
      * Count begins at 1, not zero, because normals don't start at zero.
      */
     private long pidCounter;
-
-    /**
-     * The ServerSocketChannel that listens for incoming connection requests from chat servers.
-     * When a connection is accepted, a new data channel is created for communicating with that chat server.
-     */
-    private ServerSocketChannel chatServerListenerChannel;
-
-    /**
-     * The ServerSocketChannel that listens for incoming connection requests from clients.
-     * When a connection is accepted, a new data channel is created for communicating with that client.
-     * Clients connect to this channel to be assigned to an active chat server.
-     */
-    private ServerSocketChannel clientListenerChannel;
-
-    /**
-     * The ServerSocketChannel that listens for incoming connection requests from replica servers.
-     * This channel is used for establishing (but not maintaining) peer-to-peer communication between
-     * the primary addressing server and its backup replicas.
-     */
-    private ServerSocketChannel peerListenerChannel;
 
 
 
@@ -99,19 +86,16 @@ public class AddressingServer {
      */
     public AddressingServer() {
         this.config = new AddrServerConfig();
-        peerManager = new PeerManager();
-        connectionManager = new PersistentConnectionManager(this.config.getReplicaPort(), this.config.getChatServerPort());
+        this.addrServerRegistry = new AddrServerRegistry();
+        this.peerManager = new PeerManager(addrServerRegistry);
+        this.chatServerRegistry = new ChatServerRegistry();
+        chatServerManager = new ChatServerManager(chatServerRegistry);
         try {
-            this.networkManager = new AddrServerNetworkManager(connectionManager, peerManager);
+            this.networkManager = new AddrServerNetworkManager(peerManager, chatServerManager);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
-        chatServerRegistry = new ChatServerRegistry();
-        addrServerRegistry = new AddrServerRegistry();
     }
-
-
-
 
     /**
      * Generates a unique identifier for a chat server by incrementing the internal counter.
@@ -123,182 +107,6 @@ public class AddressingServer {
     }
 
 
-    /**
-     * Handles a client connection by sending the address of an active chat server.
-     * <p>
-     * This method calls {@code chatServerRegistry.getActiveHost()} to determine the active chat server address.
-     * If an active host is found, its address (formatted as "hostAddress:clientPort") is sent to the client.
-     * Otherwise, a message indicating no active host is available is sent.
-     * </p>
-     * <p>
-     * Since the connection does not need to persist in either case, the message is sent, and the channel is closed.
-     *</p>
-     * @param newClientChannel the {@link SocketChannel} representing the client connection.
-     * @throws IOException if an I/O error occurs while writing to or closing the channel.
-     *
-     * @see io.github.cpsc559.team16.addressingserver.ChatServerRegistry#getActiveHost()
-     * For details about ChatServer host address retrieval
-     */
-    private void connectClientToHost(SocketChannel newClientChannel) throws IOException {
-        Optional<String> activeHost = chatServerRegistry.getActiveHost();
-        String message = activeHost.orElse("No active chat server available.");
-        // Send network address to client as a string in the form ip-address:port
-        ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-        while (buffer.hasRemaining()) {
-            newClientChannel.write(buffer);
-        }
-        /* Clients do not keep a persistent connection to the addressing server
-        * If they have an issue connecting to the ChatServer address they receive, they
-        * simply initiate a new connection and request with the AddressingServer.
-        */
-        newClientChannel.close();
-    }
-
-
-
-    /**
-     * Registers a chat server by retrieving its IP address from the provided SocketChannel
-     * and passing that IP along with port numbers and maximum client count to create a chat server record.
-     * <p>Responds to the chat server with an ACK in the form of it's newly assigned process ID.</p>
-     *
-     * @param newChatServerChannel the {@link SocketChannel} representing the incoming connection from a chat server.
-     * @throws IOException if an I/O error occurs while obtaining the remote address.
-     */
-    private void registerChatServer(SocketChannel newChatServerChannel) throws IOException {
-        // Retrieving the remote address from the SocketChannel and casting it to InetSocketAddress.
-        InetSocketAddress remoteAddress = (InetSocketAddress) newChatServerChannel.getRemoteAddress();
-        // Extracting the IP address of the chat server from the established connection.
-        String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
-        // TODO - Implement proper handshaking protocol for Replication iteration
-        //  The chat server should be telling the AddressingServer what ports its using and its max connections.
-        try {
-            long serverPID = generatePID();
-            this.chatServerRegistry.createChatServerRecord(serverPID, chatServerHostAddr, 2426, 2424, 2425, 3);
-
-            ByteBuffer buffer = ByteBuffer.wrap(Long.toString(serverPID).getBytes(StandardCharsets.UTF_8));
-            while (buffer.hasRemaining()) {
-                newChatServerChannel.write(buffer);
-            }
-        } catch (Exception e) {
-            System.err.println("Failed during an attempt to register the chat server with address: " + chatServerHostAddr);
-            e.printStackTrace();
-        }
-        newChatServerChannel.close();
-    }
-
-
-    /**
-     * Initializes the AddressingServer network access by binding all required NIO channels.
-     * These are "listening channels" used solely to monitor incoming connections.
-     *
-     * @throws IOException if binding any channel or opening the NIO selector fails
-     */
-    public void initializeChannels() {
-        try {
-            clientListenerChannel = networkManager.openListenerChannel(config.getClientPort());
-            peerListenerChannel = networkManager.openListenerChannel(config.getReplicaPort());
-            chatServerListenerChannel = networkManager.openListenerChannel(config.getChatServerPort());
-        } catch (IOException ioe) {
-            System.err.println("Failed to establish AddressingServer connections: " + ioe.getMessage());
-        }
-    }
-
-    // >------------ END OF PRIMARY NETWORK HANDLING LOGIC -------------------<
-
-    public ServerSocketChannel getChatServerListenerChannel() {
-        return chatServerListenerChannel;
-    }
-
-    public ServerSocketChannel getClientListenerChannel() {
-        return clientListenerChannel;
-    }
-
-    public ServerSocketChannel getPeerListenerChannel() {
-        return peerListenerChannel;
-    }
-
-    // Handles incoming client connections
-    public void handleClientConnection(SocketChannel channel) {
-        try {
-            connectClientToHost(channel);
-        } catch (IOException ioe) {
-            System.err.println("Error sending chat server host address to client: " + ioe.getMessage());
-            ioe.printStackTrace();
-        }
-    }
-
-    public void handleChatServerRegistration(SocketChannel channel) {
-        try {
-            registerChatServer(channel);
-            // TODO: Share the entire {@code addressLog} with chat servers when they register.
-        } catch (IOException ioe) {
-            System.err.println("Error retrieving chat server IP address: " + ioe.getMessage());
-            ioe.printStackTrace();
-        }
-    }
-
-    /*
-    Only replicas are given a persistent connection, so we must
-    register the `newChannel` with the `selector` which will add a `SelectionKey`
-    for that channel and monitor it until it is explicitly closed.
-    */
-//    public void handleReplicaConnection(SocketChannel channel) {
-//        // TODO - May need to add conditional so only the primary activates this code
-//        try {
-//            // NOPE - the persistent channel already exists now
-//            //networkManager.openPersistentChannel(channel); // Add the channel to the selector
-//            peerManager.registerPeer(channel, this.connectionManager.getNIOChannel(channel) ,generatePID(),this.addrServerRegistry);
-//        } catch (IOException ioe) {
-//            System.err.println("Error registering/opening persistent channel with peer server: " + ioe.getMessage());
-//            ioe.printStackTrace();
-//        }
-//    }
-
-
-    public void primaryHandleReadEvent(SelectionKey key) {
-
-    }
-
-    // >------------ END OF PRIMARY NETWORK HANDLING LOGIC -------------------<
-
-
-//    public List<String> getMessages(SelectionKey key) {
-//        peerManager.getReplicaChannels()
-//    }
-
-//    public void replicaHandleReadEvent(SelectionKey key) {
-//        SocketChannel channel = (SocketChannel) key.channel();
-//        NIOMessageChannel nioChannel = peerManager.getReplicaChannel(channel);
-//
-//        if (nioChannel == null) {
-//            System.err.println("⚠ No registered primary for this channel.");
-//            return;
-//        }
-//
-//        try {
-//            nioChannel.fillMessageBuffer();
-//            processReplicaData(nioChannel);
-//
-//        } catch (ConnectionClosedException e) {
-//            System.out.println("🗑 Removing closed channel from replica: " + e.getMessage());
-//            key.cancel();
-//            peerManager(nioChannel);
-//            closeChannel(channel);
-//        } catch (IOException e)
-//    }
-
-    // >------------ START OF REPLICA NETWORK HANDLING LOGIC -----------------<
-    public void replicaHandlePeerConnection(SocketChannel channel) {
-
-    }
-
-    public void replicaHandleReadEvent(SelectionKey key) {
-
-    }
-
-
-    // >------------ END OF REPLICA NETWORK HANDLING LOGIC -------------------<
-
 
     public void registerPrimaryAddrServer() {
         Long pid = generatePID();
@@ -308,17 +116,73 @@ public class AddressingServer {
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort(), config.getRole());
     }
 
+    /**
+     * Attempts to register this replica AddressingServer with the PRIMARY AddressingServer.
+     * <p>
+     * This method attempts to open a network connection to the PRIMARY and send a registration
+     * message. If the first attempt fails (e.g., the PRIMARY is temporarily unreachable), it retries
+     * once after a brief pause.
+     * </p>
+     * <p>
+     * If a connection is successfully established, the resulting {@link SocketChannel} is passed
+     * to the {@code AddrServerNetworkManager} to be monitored via its {@code Selector}.
+     * If both attempts fail, an error is logged, and the replica will not be registered.
+     * </p>
+     *
+     * <p><strong>Retry behavior:</strong></p>
+     * <ul>
+     *   <li>Initial connection attempt is made immediately.</li>
+     *   <li>If it fails, a second attempt is made after a short delay (500 ms).</li>
+     *   <li>If both attempts fail, no further retries are attempted in this call.</li>
+     * </ul>
+     *
+     * @see PeerManager#registerWithPrimary(String, int, int, int, int)
+     * @see AddrServerNetworkManager#openPersistentChannel(SocketChannel)
+     */
+    public void registerReplicaAddrServer() {
+        Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
+                "host.docker.internal", 49801,
+                config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
+
+        if (maybeChannel.isEmpty()) {
+            System.err.println("First attempt to register with primary failed. Retrying...");
+            try {
+                Thread.sleep(500); // Optional: brief delay before retry
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("Retry sleep interrupted.");
+            }
+
+            maybeChannel = peerManager.registerWithPrimary(
+                    "host.docker.internal", 49801,
+                    config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
+        }
+
+        if (maybeChannel.isPresent()) {
+            SocketChannel channel = maybeChannel.get();
+            try {
+                networkManager.openPersistentChannel(channel);
+            } catch (IOException ioe) {
+                System.err.println("Error occurred while opening persistent channel to PRIMARY: " + ioe.getMessage());
+            }
+        } else {
+            System.err.println("Failed to register with PRIMARY after 2 attempts.");
+            // Optional: we can escalate the issue by starting a leader election.
+        }
+    }
+
+    /**
+     * Initializes the AddressingServer network access by binding all required NIO channels.
+     * These are "listening channels" used solely to monitor incoming connections.
+     *<p>
+     * Starts the main event loop for this {@code AddressingServer} instance.
+     *</p>
+     *
+     */
     public void start() throws IOException {
-        initializeChannels();
-
-        // Create a dispatcher that uses this instance’s request handler methods
-        AddrServerConnectionDispatcher requestDispatcher = new AddrServerConnectionDispatcher(this);
-        AddrServerReadDispatcher readDispatcher = new AddrServerReadDispatcher(this);
-        networkManager.startEventLoop(requestDispatcher, readDispatcher);
-        // TODO - fix this so it happens in the AddressingServer constructor (make an overload for networkManager)
-//        networkManager.setReplicaManager(peerManager); // Cannot add to constructor
-//        networkManager.setChatServerRegistry(chatServerRegistry); //
-
+        networkManager.openListenerChannels(config.getClientPort(),
+                config.getReplicaPort(), config.getChatServerPort());
+        networkManager.startEventLoop(new AddrServerReadDispatcher(this));
     }
 
 
@@ -346,21 +210,14 @@ public class AddressingServer {
             } else {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
-                server.peerManager.registerWithPrimary(server.connectionManager,"host.docker.internal", 49801,
-                         server.config.getClientPort(), server.config.getReplicaPort(), server.config.getChatServerPort());
-                // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
+                server.registerReplicaAddrServer();
             }
         }
-
-
         try {
             server.start();
-
         } catch (IOException ioe) {
-
             System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());
             ioe.printStackTrace();
-
         }
     }
 

@@ -34,8 +34,28 @@ public class AddrServerRegistry {
      * @param record The {@link AddrServerRecord} object containing the server's details
      *               (e.g., host address, ports, role).
      */
-    public void registerAddrServerRecord(Long id, AddrServerRecord record) {
+    public void putAddrServerRecord(Long id, AddrServerRecord record) {
         addrServerRecords.put(id, record);
+        debugPrintAllServers();
+    }
+
+    /**
+     * Updates an existing AddrServerRecord if one with the same ID exists,
+     * otherwise inserts the new record.
+     *
+     * @param record The AddrServerRecord to insert or update.
+     */
+    public void updateOrInsertRecord(AddrServerRecord record) {
+        Long id = record.getPID();
+        AddrServerRecord existing = addrServerRecords.get(id);
+
+        if (existing != null) {
+            System.out.println("Updating existing AddrServerRecord for ID: " + id);
+        } else {
+            System.out.println("Inserting new AddrServerRecord for ID: " + id);
+        }
+        addrServerRecords.put(id, record);
+        debugPrintAllServers();
     }
 
     public boolean deregisterServer(Long id) {

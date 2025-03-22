@@ -36,7 +36,7 @@ public class RequestMessage<T> extends BaseAddrServerMessage<T> {
      *
      */
     public RequestMessage(String objectType, long senderPID, String senderRole, String targetRole, T payload) {
-        super("REQUEST", objectType, senderPID, senderRole, targetRole, payload);
+        super(MessageTypes.REQUEST, objectType, senderPID, senderRole, targetRole, payload);
     }
 
 

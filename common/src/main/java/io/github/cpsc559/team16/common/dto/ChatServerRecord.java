@@ -1,4 +1,6 @@
 package io.github.cpsc559.team16.common.dto;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 
 /**
@@ -58,7 +60,14 @@ public class ChatServerRecord extends ServerRecord {
      * @param addrServerPort The port used for communication with the addressing server.
      * @param maxClientCount The maximum amount of persistent client connections this server should be assigned.
      */
-    public ChatServerRecord(Long serverID, String hostAddress, int clientPort, int peerPort, int addrServerPort, int maxClientCount) {
+    @JsonCreator
+    public ChatServerRecord(
+            @JsonProperty("pid") Long serverID,
+            @JsonProperty("hostAddress") String hostAddress,
+            @JsonProperty("clientPort") int clientPort,
+            @JsonProperty("peerPort") int peerPort,
+            @JsonProperty("addrServerPort") int addrServerPort,
+            @JsonProperty("maxClientCount") int maxClientCount) {
         /*
          * `serverID` is used as a key for the key:value pairs that make up the unified (consistent)
          *  ChatServerRecord HashMap of records kept by Addressing Servers.
@@ -190,8 +199,8 @@ public class ChatServerRecord extends ServerRecord {
         }
     }
 
-    public void setServerID(Long serverID) {
-        super.setServerID(serverID);
+    public void setPID(Long serverPID) {
+        super.setServerID(serverPID);
     }
 
     public void setHostAddress(String hostAddress) {

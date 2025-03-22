@@ -46,7 +46,7 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      * </p>
      */
     private RegisterMessage(String objectType, String senderRole, String targetRole, T payload) {
-        super("REGISTER", objectType, DEFAULT_PID, senderRole, targetRole, payload);
+        super(MessageTypes.REGISTER, objectType, DEFAULT_PID, senderRole, targetRole, payload);
     }
 
     /**
@@ -62,7 +62,7 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
                                                                    int maxClientCount) {
         ChatServerRecord record = new ChatServerRecord(
                 DEFAULT_PID, "", clientPort, peerPort, addrServerPort, maxClientCount);
-        return new RegisterMessage<>("ChatServerRecord", "CHATSERVER", "PRIMARY", record);
+        return new RegisterMessage<>(ObjectTypes.CHAT_SERVER_RECORD, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
 
     /**
@@ -76,6 +76,6 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
     public static RegisterMessage<AddrServerRecord> fromReplica(int clientPort, int peerPort, int chatServerPort) {
         AddrServerRecord record = new AddrServerRecord(
                 DEFAULT_PID, "", clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
-        return new RegisterMessage<>("AddrServerRecord", "REPLICA", "PRIMARY", record);
+        return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
     }
 }

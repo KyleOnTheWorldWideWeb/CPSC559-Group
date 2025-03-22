@@ -3,10 +3,8 @@ package io.github.cpsc559.team16.addressingserver;
 // For thread management
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 import io.github.cpsc559.team16.common.messaging.*;
@@ -29,17 +27,36 @@ import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.dese
 public class AddrServerNetworkManager implements NetworkManager {
 
     /**
+     * The ServerSocketChannel that listens for incoming connection requests from chat servers.
+     * When a connection is accepted, a new data channel is created for communicating with that chat server.
+     */
+    private ServerSocketChannel chatServerListenerChannel;
+
+    /**
+     * The ServerSocketChannel that listens for incoming connection requests from clients.
+     * When a connection is accepted, a new data channel is created for communicating with that client.
+     * Clients connect to this channel to be assigned to an active chat server.
+     */
+    private ServerSocketChannel clientListenerChannel;
+
+    /**
+     * The ServerSocketChannel that listens for incoming connection requests from replica servers.
+     * This channel is used for establishing (but not maintaining) peer-to-peer communication between
+     * the primary addressing server and its backup replicas.
+     */
+    private ServerSocketChannel peerListenerChannel;
+
+
+    /**
      * The Selector used for multiplexing non-blocking I/O operations on the registered channels.
      * This allows the AddressingServer to monitor multiple channels using a single thread.
      */
     private final Selector selector;
 
-    /**
-     * Manages persistent connections for replicas and chat servers.
-     */
-    private final PersistentConnectionManager persistentConnectionManager;
 
     private final PeerManager peerManager;
+
+    private final ChatServerManager chatServerManager;
 
     private final ExecutorService executorService;
 
@@ -47,12 +64,11 @@ public class AddrServerNetworkManager implements NetworkManager {
     /**
      * Constructs the network manager for the AddressingServer.
      *
-     * @param persistentConnectionManager The manager that handles persistent connections.
      * @throws IOException If the selector fails to initialize.
      */
-    public AddrServerNetworkManager(PersistentConnectionManager persistentConnectionManager, PeerManager peerManager) throws IOException {
-        this.persistentConnectionManager = persistentConnectionManager;
+    public AddrServerNetworkManager(PeerManager peerManager, ChatServerManager csManager) throws IOException {
         this.peerManager = peerManager;
+        this.chatServerManager = csManager;
         this.selector = Selector.open();
         this.executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
@@ -71,16 +87,61 @@ public class AddrServerNetworkManager implements NetworkManager {
      */
     @Override
     public ServerSocketChannel openListenerChannel(int port) throws IOException {
-        ServerSocketChannel channel = ServerSocketChannel.open();
-        channel.configureBlocking(false);
-        channel.socket().bind(new InetSocketAddress(port));
-        channel.register(selector, SelectionKey.OP_ACCEPT);
-        return channel;
+        try {
+            ServerSocketChannel channel = ServerSocketChannel.open();
+            channel.configureBlocking(false);
+            channel.socket().bind(new InetSocketAddress(port));
+            channel.register(selector, SelectionKey.OP_ACCEPT);
+            System.out.println("Listener channel opened on port " + port);
+            return channel;
+        } catch (IOException e) {
+            System.err.println("Failed to open listener channel on port " + port + ": " + e.getMessage());
+            throw e;
+        }
     }
 
+    public void openListenerChannels(int clientPort, int peerPort, int chatServerPort) {
+        try {
+            openListenerChannel(clientPort);
+            this.peerListenerChannel = openListenerChannel(peerPort);
+            this.chatServerListenerChannel = openListenerChannel(chatServerPort);
+        } catch (IOException e) {
+            System.err.println("Failed to open a listener channel: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Registers a {@link SocketChannel} with the internal {@code Selector} to listen for read events.
+     * <p>
+     * This method is used for persistent peer-to-peer or server-to-server connections, allowing
+     * the selector to monitor the channel for non-blocking reads via {@code SelectionKey.OP_READ}.
+     * The channel is also set to non-blocking mode.
+     * </p>
+     *
+     * @param channel The {@code SocketChannel} to register for persistent read monitoring.
+     * @throws IOException If an error occurs during configuration or registration.
+     */
     @Override
     public void openPersistentChannel(SocketChannel channel) throws IOException {
-        channel.register(selector, SelectionKey.OP_READ);
+        try {
+            channel.configureBlocking(false);
+            channel.register(selector, SelectionKey.OP_READ);
+            System.out.println("Registered persistent channel: " + channel.getRemoteAddress());
+        } catch (IOException e) {
+            System.err.println("Failed to register persistent channel: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    private boolean isPersistentConnection(SocketChannel channel) {
+        return peerManager.getPeerChannels().containsKey(channel)
+                || chatServerManager.getChannels().containsKey(channel);
+    }
+
+    private NIOMessageChannel getKnownPersistentChannel(SocketChannel channel) {
+        NIOMessageChannel ch = peerManager.getPeerChannels().get(channel);
+        if (ch != null) return ch;
+        return chatServerManager.getChannels().get(channel);
     }
 
     @Override
@@ -103,12 +164,10 @@ public class AddrServerNetworkManager implements NetworkManager {
      * processes the event, and removes the key(event) from the selector to prevent re-processing.
      * </p>
      *
-     * @param requestDispatcher The dispatcher responsible for routing accepted connections to the appropriate handlers.
      * @throws IOException If an I/O error occurs while selecting or processing events.
      */
     @Override
-    public void startEventLoop(ConnectionDispatcher requestDispatcher,
-                               ReadDispatcher readDispatcher) throws IOException {
+    public void startEventLoop(ReadDispatcher readDispatcher) throws IOException {
         while (true) {
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();
@@ -132,11 +191,17 @@ public class AddrServerNetworkManager implements NetworkManager {
                     ServerSocketChannel listenerSC = (ServerSocketChannel) key.channel();
                     SocketChannel channel = listenerSC.accept();
 
-                    if (channel != null) {
-                        channel.configureBlocking(false);
-                        channel.register(selector, SelectionKey.OP_READ);
-                        System.out.println("Accepted new connection from: " + channel.getRemoteAddress());
+                    if (channel != null) { // Register the channel with the selector and set it to read.
+                        openPersistentChannel(channel);
                     }
+                    // Check to see if the connection came through the ChatServer or PeerServer port.
+                    if (listenerSC.equals(chatServerListenerChannel)) {
+                        // Store the persistent channel in our respective managers.
+                        chatServerManager.getChannels().put(channel, new NIOMessageChannel(channel));
+                    } else if (listenerSC.equals(peerListenerChannel)) {
+                        peerManager.getPeerChannels().put(channel, new NIOMessageChannel(channel));
+                    }
+                    // We don't store persistent channels for clients.
                 }
 
                 /*
@@ -148,11 +213,16 @@ public class AddrServerNetworkManager implements NetworkManager {
 
                     try {
                         // Retrieve existing NIOMessageChannel for persistent connections, or create a new one for clients
-                        NIOMessageChannel persistentNioChannel = persistentConnectionManager.getNIOChannel(channel);
+                        NIOMessageChannel persistentNioChannel = null;
 
-                        // Handle Client Requests (We don't keep a persistent connection with clients)
+                        if (peerManager.getPeerChannels().containsKey(channel)) {
+                            persistentNioChannel = peerManager.getPeerChannels().get(channel);
+                        } else if (chatServerManager.getChannels().containsKey(channel)) {
+                            persistentNioChannel = chatServerManager.getChannels().get(channel);
+                        }
+
                         if (persistentNioChannel == null) {
-                            final NIOMessageChannel tempNioChannel = new NIOMessageChannel(channel);
+                                final NIOMessageChannel tempNioChannel = new NIOMessageChannel(channel);
 
                             // Read the message
                             String messageJson = tempNioChannel.receiveMessage();
@@ -160,7 +230,8 @@ public class AddrServerNetworkManager implements NetworkManager {
                                 return; // No message available
                             }
 
-                            // Deserialize message without assuming a payload class
+                            // Deserialize message without assuming a payload class.
+                            // The dispatcher will know what to do after a sequence of cascading switch statements.
                             BaseAddrServerMessage<?> message = deserializeMessage(messageJson);
                             if (message == null) {
                                 System.err.println("Could not deserialize incoming message.");
@@ -172,8 +243,7 @@ public class AddrServerNetworkManager implements NetworkManager {
                                 try {
                                     readDispatcher.dispatch(channel, tempNioChannel, message);
 
-                                    // Close the channel if it is a temporary client connection
-                                    if (!persistentConnectionManager.isPersistent(channel)) {
+                                    if (!isPersistentConnection(channel)) {
                                         channel.close();
                                         key.cancel();
                                     }
@@ -207,12 +277,11 @@ public class AddrServerNetworkManager implements NetworkManager {
                         }
 
                     } catch (ConnectionClosedException cce) {
-                        // Retrieve the NIOMessageChannel before removing it
-                        NIOMessageChannel ch = persistentConnectionManager.getNIOChannel(channel);
+                        NIOMessageChannel ch = getKnownPersistentChannel(channel);
                         if (ch != null) {
                             Long pid = ch.getServerPID();
-                            persistentConnectionManager.removeConnection(channel);
                             peerManager.removeChannel(channel);
+                            chatServerManager.removeChannel(channel);
                             System.out.println("Removing closed peer (Server ID: " + pid + "): " + cce.getMessage());
                         }
                         key.cancel();

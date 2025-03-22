@@ -1,6 +1,9 @@
 package io.github.cpsc559.team16.common.dto;
 
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class AddrServerRecord extends ServerRecord {
 
     /**
@@ -33,11 +36,22 @@ public class AddrServerRecord extends ServerRecord {
      * @param role           The role of the {@code AddressingServer} process in the network.
      *
      */
-    public AddrServerRecord(Long serverID, String hostAddress, int clientPort, int peerPort, int chatServerPort, ServerRole role) {
+    @JsonCreator
+    public AddrServerRecord(
+            @JsonProperty("pid") Long serverID,
+            @JsonProperty("hostAddress") String hostAddress,
+            @JsonProperty("clientPort") int clientPort,
+            @JsonProperty("peerPort") int peerPort,
+            @JsonProperty("chatServerPort") int chatServerPort,
+            @JsonProperty("role") ServerRole role
+    ) {
         super(serverID, hostAddress, peerPort, clientPort);
         this.chatServerPort = chatServerPort;
         this.role = role;
     }
+
+
+
 
     // --- Getters ---
 

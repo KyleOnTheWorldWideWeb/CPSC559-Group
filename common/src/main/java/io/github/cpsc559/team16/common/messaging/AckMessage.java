@@ -28,7 +28,7 @@ public class AckMessage extends BaseAddrServerMessage<String> {
      * @param senderPID The ID of the process sending the acknowledgment.
      * @param senderRole The role of the sender (e.g., PRIMARY, REPLICA, CHATSERVER).
      * @param targetRole The role of the process being acknowledged (e.g., CHATSERVER, REPLICA).
-     * @param message A short payload string, such as "OK", "Registered", or a custom reason.
+     * @param message A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
     public AckMessage(String objectType, long senderPID, String senderRole, String targetRole, String message) {
         super("ACK", objectType, senderPID, senderRole, targetRole, message);
