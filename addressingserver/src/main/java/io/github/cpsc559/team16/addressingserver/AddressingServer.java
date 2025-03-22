@@ -40,7 +40,9 @@ public class AddressingServer {
      */
     private final AddrServerRegistry addrServerRegistry;
 
-
+    public AddrServerRegistry getAddrServerRegistry() {
+        return addrServerRegistry;
+    }
 
     /**
      * The process responsible for managing interactions between the Primary
@@ -65,11 +67,26 @@ public class AddressingServer {
 
 
     /**
-     * The number of chat servers that have been registered.
+     * The number of servers that have been registered cummulatively since network initialization - i.e. PID's are not recycled or reassigned.
      * Count begins at 1, not zero, because normals don't start at zero.
      */
-    private long pidCounter;
+    private Long pidCounter;
 
+    /**
+     * Sets the internal process ID counter to a specified value.
+     * <p>
+     * This method is typically called during replica promotion, where the newly
+     * elected {@code PRIMARY} {@code AddressingServer} must resume assigning
+     * unique process IDs without conflicting with existing ones. The provided
+     * value should reflect the current highest PID observed across the network.
+     * </p>
+     *
+     * @param currentNetworkMaxPID the highest known PID from all registered processes,
+     *                             used to initialize the counter for new PID assignment.
+     */
+    public void setPidCounter(Long currentNetworkMaxPID) {
+        this.pidCounter = currentNetworkMaxPID;
+    }
 
 
     public AddrServerConfig getConfig() {
@@ -95,6 +112,7 @@ public class AddressingServer {
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
+        this.pidCounter = 1L;
     }
 
     /**

@@ -9,6 +9,14 @@ WORKDIR /app
 # The jar in this case is a "fat jar" which contains all the classes in the client module compiled into one (fat) jar file.
 COPY build/libs/addressingserver.jar /app/addressingserver.jar
 
+# Add the health check script
+COPY healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/local/bin/healthcheck.sh
+
+# Register Docker health check - this runs every 30s by default
+HEALTHCHECK CMD /usr/local/bin/healthcheck.sh
+
+
 # "-cp", "/app/client.jar" sets the classpath to /app/client.jar (the fat jar containing all of the classes in the Client module)
 # "io.github.cpsc559.team16.client.Client" specifies which class contains the main method we want the container to launch at startup.
 #CMD ["java", "-cp", "/app/client.jar", "io.github.cpsc559.team16.client.Client"]

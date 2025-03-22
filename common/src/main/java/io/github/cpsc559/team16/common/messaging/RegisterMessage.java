@@ -61,7 +61,7 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
     public static RegisterMessage<ChatServerRecord> fromChatServer(int clientPort, int peerPort, int addrServerPort,
                                                                    int maxClientCount) {
         ChatServerRecord record = new ChatServerRecord(
-                DEFAULT_PID, "", clientPort, peerPort, addrServerPort, maxClientCount);
+                DEFAULT_PID, null, clientPort, peerPort, addrServerPort, maxClientCount);
         return new RegisterMessage<>(ObjectTypes.CHAT_SERVER_RECORD, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
 
@@ -75,7 +75,7 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      */
     public static RegisterMessage<AddrServerRecord> fromReplica(int clientPort, int peerPort, int chatServerPort) {
         AddrServerRecord record = new AddrServerRecord(
-                DEFAULT_PID, "", clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
+                DEFAULT_PID, null, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
         return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
     }
 }

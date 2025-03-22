@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 import io.github.cpsc559.team16.common.utilities.NetworkManager;
@@ -8,6 +9,8 @@ import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+
+import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
 
 /**
  * Handles read events from registered {@code SocketChannel}'s and routes them based on the server's role.
@@ -35,48 +38,52 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     }
 
 
+
+    /**
+     * Uses an {@link NIOMessageChannel} for safe and abstracted message I/O between two processes
+     * on a {@link SocketChannel}. JSON messages are automatically deserialized into a {@link BaseAddrServerMessage}
+     * and routed through the {@code dispatchMsgType} method - the first in a cascading sequence of routing methods.
+     *
+     * @param channel The {@link SocketChannel} used to receive the message.
+     * @param nioChannel The {@link NIOMessageChannel} used to decode and encode the message.
+     *
+     * @throws ConnectionClosedException if the remote process has closed the connection.
+     * @throws IOException if an I/O error occurs during message reading or processing.
+     */
+    public void dispatch(SocketChannel channel, NIOMessageChannel nioChannel) throws ConnectionClosedException, IOException {
+        String msgJson;
+        while ((msgJson = nioChannel.receiveMessage()) != null) {
+            BaseAddrServerMessage<?> message = deserializeMessage(msgJson);
+            if (message != null) {
+                dispatchMsgType(channel, nioChannel, message);
+            } else {
+                System.err.println("Could not deserialize incoming message: " + msgJson);
+            }
+        }
+    }
+
+
     /**
      * Dispatches a received message based on its type, sender role, and object type.
      *
-     * @param channel The {@link SocketChannel} representing the sender of the message.
+     * @param channel The {@link SocketChannel} used to receive the message.
+     * @param nioChannel The {@link NIOMessageChannel} used to decode and encode the message.
      * @param message The parsed {@link BaseAddrServerMessage} containing the message details.
-     * @throws IOException If an error occurs while processing the message.
+     *
      */
-    public void dispatch(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
+    private void dispatchMsgType(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getMsgType()) {
-            case "ACK":
-                handleAck(channel, nioChannel, message);
-                break;
-
-            case "REGISTER":
-                handleRegistration(channel, nioChannel, message);
-                break;
-
-            case "UPDATE":
-                handleUpdate(channel, nioChannel, message);
-                break;
-
-            case "REQUEST":
-                handleRequest(channel, nioChannel, message);
-                break;
-
-            case "PING":
-                handlePing(channel, nioChannel, message);
-                break;
-
-            case "NOTIFICATION":
-                handleNotification(channel, nioChannel, message);
-                break;
-
-            case "ELECTION":
-                handleElection(channel, nioChannel, message);
-                break;
-
-            default:
-                System.err.println("Unrecognized message type: " + message.getMsgType());
-                break;
+            case "ACK" -> handleAck(channel, nioChannel, message);
+            case "REGISTER" -> handleRegistration(channel, nioChannel, message);
+            case "UPDATE" -> handleUpdate(channel, nioChannel, message);
+            case "REQUEST" -> handleRequest(channel, nioChannel, message);
+            case "PING" -> handlePing(channel, nioChannel, message);
+            case "NOTIFICATION" -> handleNotification(channel, nioChannel, message);
+            case "ELECTION" -> handleElection(channel, nioChannel, message);
+            default -> System.err.println("Unrecognized message type: " + message.getMsgType());
         }
     }
+
 
     /**
      * <NOTE> Can probably remove the channel parameters, but I'm keeping them for now in case an ACK needs to trigger an action.</NOTE>

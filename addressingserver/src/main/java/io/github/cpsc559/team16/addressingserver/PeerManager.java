@@ -120,7 +120,7 @@ public class PeerManager {
                 System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
             }
         }
-        System.out.println("Done sending all records");
+        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
     }
 
     /**

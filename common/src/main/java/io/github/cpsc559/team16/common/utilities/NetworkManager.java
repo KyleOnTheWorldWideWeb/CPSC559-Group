@@ -1,5 +1,6 @@
 package io.github.cpsc559.team16.common.utilities;
 
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 
 import java.io.IOException;
@@ -65,17 +66,11 @@ public interface NetworkManager {
      */
     void startEventLoop(ReadDispatcher readDispatcher) throws IOException;
 
-    /**
-     * Defines how incoming connections are dispatched to their respective handlers.
-     */
-    interface ConnectionDispatcher {
-        void dispatch(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message);
-    }
 
     /**
      * Defines how data streams on established {@code NIO SocketChannels} are dispatched to their respective handlers.
      */
     interface ReadDispatcher {
-        void dispatch(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message);
+        void dispatch(SocketChannel channel, NIOMessageChannel nioChannel) throws ConnectionClosedException, IOException;
     }
 }
