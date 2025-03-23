@@ -256,15 +256,17 @@ val clientContainer = tasks.register<DockerCreateContainer>("buildClientContaine
     // ---------- WE CAN DEFINE PORT BINDING HERE ----------------
     // >---------------- WE CAN DEFINE PORT BINDING AND NETWORKS HERE ---------------------<
     //hostConfig.network.set("my-macvlan-network")
-    hostConfig.portBindings.set(
-            listOf(
-                    "${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}:${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}",
-                    "${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}:${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}",
-            )
-    )
-    println("CLIENT_ADDRSERVER_PORT=${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}")
-    println("CLIENT_CHATSERVER_PORT=${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}")
-    // Printing the container name and image ID to console
+    // See docker compose file.
+    // All env properties are handled there
+    // hostConfig.portBindings.set(
+    //         listOf(
+    //                 "${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}:${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}",
+    //                 "${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}:${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}",
+    //         )
+    // )
+    // println("CLIENT_ADDRSERVER_PORT=${envProperties.getProperty("CLIENT_ADDRSERVER_PORT")}")
+    // println("CLIENT_CHATSERVER_PORT=${envProperties.getProperty("CLIENT_CHATSERVER_PORT")}")
+    // // Printing the container name and image ID to console
     doLast {
         println("Client Container Built - Name: ${containerName.get()}")
     }

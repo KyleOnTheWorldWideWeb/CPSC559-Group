@@ -181,22 +181,24 @@ val addrServerContainer = tasks.register<DockerCreateContainer>("buildAddrServer
     containerName.set("addrserver_container")
     // >---------------- WE CAN DEFINE PORT BINDING AND NETWORKS HERE ---------------------<
     //hostConfig.network.set("my-macvlan-network")
-    hostConfig.portBindings.set(
-            listOf(
-                    "${envProperties.getProperty("AS_CLIENT_PORT")}:${envProperties.getProperty("AS_CLIENT_PORT")}",
-                    "${envProperties.getProperty("AS_REPLICA_PORT")}:${envProperties.getProperty("AS_REPLICA_PORT")}",
-                    "${envProperties.getProperty("AS_CHATSERVER_PORT")}:${envProperties.getProperty("AS_CHATSERVER_PORT")}"
-            )
-    )
+    // ======================================================================================
+    //  Removed this section to be handled in the docker compose file
+    // hostConfig.portBindings.set(
+    //         listOf(
+    //                 "${envProperties.getProperty("AS_CLIENT_PORT")}:${envProperties.getProperty("AS_CLIENT_PORT")}",
+    //                 "${envProperties.getProperty("AS_REPLICA_PORT")}:${envProperties.getProperty("AS_REPLICA_PORT")}",
+    //                 "${envProperties.getProperty("AS_CHATSERVER_PORT")}:${envProperties.getProperty("AS_CHATSERVER_PORT")}"
+    //         )
+    // )
     // ADD THE REST OF THE ENVIRONMENT VARIABLES
-    withEnvVar("AS_ROLE", envProperties.getProperty("AS_ROLE"))
-    withEnvVar("HOST_ADDRESS", envProperties.getProperty("HOST_ADDRESS"))
+    // withEnvVar("AS_ROLE", envProperties.getProperty("AS_ROLE"))
+    // withEnvVar("HOST_ADDRESS", envProperties.getProperty("HOST_ADDRESS"))
 
-    println("AS_ROLE = ${envProperties.getProperty("AS_ROLE")}")
-    println("HOST_ADDRESS = ${envProperties.getProperty("HOST_ADDRESS")}")
-    println("AS_CLIENT_PORT = ${envProperties.getProperty("AS_CLIENT_PORT")}")
-    println("AS_REPLICA_PORT = ${envProperties.getProperty("AS_REPLICA_PORT")}")
-    println("AS_CHATSERVER_PORT = ${envProperties.getProperty("AS_CHATSERVER_PORT")}")
+    // println("AS_ROLE = ${envProperties.getProperty("AS_ROLE")}")
+    // println("HOST_ADDRESS = ${envProperties.getProperty("HOST_ADDRESS")}")
+    // println("AS_CLIENT_PORT = ${envProperties.getProperty("AS_CLIENT_PORT")}")
+    // println("AS_REPLICA_PORT = ${envProperties.getProperty("AS_REPLICA_PORT")}")
+    // println("AS_CHATSERVER_PORT = ${envProperties.getProperty("AS_CHATSERVER_PORT")}")
     // Printing the container name and image ID to console
     doLast {
         println("addressingserver Container built - Name: ${containerName.get()}")
@@ -376,17 +378,18 @@ val replica1Container = tasks.register<DockerCreateContainer>("buildReplicaConta
     containerName.set("replica1_container")
 
     // >---------------- WE CAN DEFINE PORT BINDING AND NETWORKS HERE ---------------------<
-    withEnvVar("AS_ROLE", "BACKUP")
-    withEnvVar("HOST_ADDRESS", "0.0.0.0")
-    withEnvVar("AS_CLIENT_PORT", "49810")
-    withEnvVar("AS_REPLICA_PORT", "49811")
-    withEnvVar("AS_CHATSERVER_PORT", "49812")
-    withEnvVar("PRIMARY_HOST", "addrserver_container")
-    withEnvVar("PRIMARY_PORT", "49801")
-    // NEED TO USE DIFFERENT PORTS THAN THE PRIMARY
-    val replica1Ports = listOf("49810:49810", "49811:49811", "49812:49812")
-    // MAY WANT TO USE hostConfig.exposePorts() IN FUTURE BUILDS
-    hostConfig.portBindings.set(replica1Ports)
+    // Handled in the docker compose file
+    // withEnvVar("AS_ROLE", "BACKUP")
+    // withEnvVar("HOST_ADDRESS", "0.0.0.0")
+    // withEnvVar("AS_CLIENT_PORT", "49810")
+    // withEnvVar("AS_REPLICA_PORT", "49811")
+    // withEnvVar("AS_CHATSERVER_PORT", "49812")
+    // withEnvVar("PRIMARY_HOST", "addrserver_container")
+    // withEnvVar("PRIMARY_PORT", "49801")
+    // // NEED TO USE DIFFERENT PORTS THAN THE PRIMARY
+    // val replica1Ports = listOf("49810:49810", "49811:49811", "49812:49812")
+    // // MAY WANT TO USE hostConfig.exposePorts() IN FUTURE BUILDS
+    // hostConfig.portBindings.set(replica1Ports)
 
     // Printing the container name and image ID to console
     doLast {
@@ -497,18 +500,19 @@ val replica2Container = tasks.register<DockerCreateContainer>("buildReplica2Cont
     containerName.set("replica2_container")
 
     // Configure environment variables for the second replica
-    withEnvVar("AS_ROLE", "BACKUP")
-    withEnvVar("HOST_ADDRESS", "0.0.0.0")
-    // Use different ports than Replica1 and the primary:
-    withEnvVar("AS_CLIENT_PORT", "49820")
-    withEnvVar("AS_REPLICA_PORT", "49821")
-    withEnvVar("AS_CHATSERVER_PORT", "49822")
-    withEnvVar("PRIMARY_HOST", "addrserver_container")
-    withEnvVar("PRIMARY_PORT", "49801")
+    // See docker compose file
+    // withEnvVar("AS_ROLE", "BACKUP")
+    // withEnvVar("HOST_ADDRESS", "0.0.0.0")
+    // // Use different ports than Replica1 and the primary:
+    // withEnvVar("AS_CLIENT_PORT", "49820")
+    // withEnvVar("AS_REPLICA_PORT", "49821")
+    // withEnvVar("AS_CHATSERVER_PORT", "49822")
+    // withEnvVar("PRIMARY_HOST", "addrserver_container")
+    // withEnvVar("PRIMARY_PORT", "49801")
 
-    // Define port bindings for Replica2
-    val replica2Ports = listOf("49820:49820", "49821:49821", "49822:49822")
-    hostConfig.portBindings.set(replica2Ports)
+    // // Define port bindings for Replica2
+    // val replica2Ports = listOf("49820:49820", "49821:49821", "49822:49822")
+    // hostConfig.portBindings.set(replica2Ports)
 
     doLast {
         println("Addressing server replica container built - Name: ${containerName.get()}")

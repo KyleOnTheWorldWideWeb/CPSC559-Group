@@ -27,11 +27,12 @@ dependencies {
 application {
     mainClass.set("io.github.cpsc559.team16.tests.TestRunner")
 }
-
-// Loading the port bindings from the addressingserver .env file
-val envProperties = Properties().apply {
-    file(".env").inputStream().use { load(it) }
-}
+//  All environment variables are now handled from the docker-file. 
+//  If you wanna build test containers you can create specific docker files for running the test.
+// // Loading the port bindings from the addressingserver .env file
+// val envProperties = Properties().apply {
+//     file(".env").inputStream().use { load(it) }
+// }
 
 // Configure the default jar task to build the test module’s JAR file
 tasks.jar {

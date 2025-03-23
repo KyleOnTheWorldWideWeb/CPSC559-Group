@@ -16,6 +16,7 @@ services:  # Defines the services (Docker containers) that will be run.
   addressingserver:
       image: addressingserver:latest
       container_name: addressingserver
+      profiles: ["addressingserver"]
       build:
         context: .
         dockerfile: Dockerfile.addressingserver
@@ -33,6 +34,7 @@ services:  # Defines the services (Docker containers) that will be run.
 
   addressingserver_replicas:
     image: addressingserver:latest
+    profiles: ["serverreplicas"]
     environment:
       - AS_CLIENT_PORT=49800
       - AS_REPLICA_PORT=49801
@@ -48,6 +50,7 @@ services:  # Defines the services (Docker containers) that will be run.
   chatserver:
     image: chatserver:latest
     container_name: chatserver
+    profiles: ["chatserver"]
     build:
       context: .
       dockerfile: Dockerfile.chatserver
@@ -62,6 +65,7 @@ services:  # Defines the services (Docker containers) that will be run.
   client:
     image: client:latest
     container_name: client
+    profiles: ["client"]
     build:
       context: .
       dockerfile: Dockerfile.client
@@ -77,7 +81,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 255.255.255.0/16
 # This is different from the volume we define in a service. This is how we can ensure that any data...configs:
 # ... that is created during the build or execution of the container(s), IS NOT deleted when the container is removed.
 # This is very powerful because it allows us to update our repository (new version), and in turn build new containers...configs:

@@ -33,3 +33,5 @@ tasks.register("buildChatServer") {
     description = "Builds the chatserver server with common library dependencies."
     dependsOn(":common:commonJar", "chatserverFatJar")
 }
+
+// Reminder. All ports, environment variables can be assigned in a docker file or docker compose file.
