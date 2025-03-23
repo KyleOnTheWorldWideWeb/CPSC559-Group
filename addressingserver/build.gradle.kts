@@ -491,7 +491,7 @@ val replica2Container = tasks.register<DockerCreateContainer>("buildReplica2Cont
     containerName.set("replica2_container")
 
     // Configure environment variables for the second replica
-    withEnvVar("AS_ROLE", "BACKUP")
+    withEnvVar("AS_ROLE", "REPLICA")
     withEnvVar("HOST_ADDRESS", "0.0.0.0")
     // Use different ports than Replica1 and the primary:
     withEnvVar("AS_CLIENT_PORT", "49820")

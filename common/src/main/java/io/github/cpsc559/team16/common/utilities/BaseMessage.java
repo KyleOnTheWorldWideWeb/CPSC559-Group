@@ -58,7 +58,7 @@ public abstract class BaseMessage {
 
     @Override
     public String toString() {
-        return "BaseMessage{" +
+        return "BaseAddrServerMessage{" +
                 "sender='" + sender + '\'' +
                 ", receiver='" + receiver + '\'' +
                 ", timeSent=" + timeSent +

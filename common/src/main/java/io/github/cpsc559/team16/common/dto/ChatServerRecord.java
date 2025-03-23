@@ -1,12 +1,14 @@
-package io.github.cpsc559.team16.addressingserver;
+package io.github.cpsc559.team16.common.dto;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 
 /**
  * Used by the AddressingServer class to represent a chat server in the distributed network.
  * <p>
- * An instance of {@code ChatServerInfo} is created for each chat server when it registers with the Primary Addressing Server.
+ * An instance of {@code ChatServerRecord} is created for each chat server when it registers with the Primary Addressing Server.
  */
-public class ChatServerInfo extends ServerInfo {
+public class ChatServerRecord extends ServerRecord {
 
     /**
      * The port used for connections with the addressing server.
@@ -48,20 +50,27 @@ public class ChatServerInfo extends ServerInfo {
 
     // TODO Decide if we are assigning a subset of chat servers to each chat server as its peers -> create instance record.
     /**
-     * Constructs a new {@code ChatServerInfo} instance with the specified parameters, a default
+     * Constructs a new {@code ChatServerRecord} instance with the specified parameters, a default
      * {@code ACTIVE status} and a starting {@code clientCount} of zero.
      *
-     * @param serverID       The unique identifier (key) of the chat server. Needed for the HashMap of ChatServerInfo records kept by Addressing Servers.
+     * @param serverID       The unique identifier (key) of the chat server. Needed for the HashMap of ChatServerRecord records kept by Addressing Servers.
      * @param hostAddress    The network (IP) address of the chat server.
      * @param clientPort     The port used for communication with client processes.
      * @param peerPort       The port used for peer-to-peer communication with other chat servers.
      * @param addrServerPort The port used for communication with the addressing server.
      * @param maxClientCount The maximum amount of persistent client connections this server should be assigned.
      */
-    public ChatServerInfo(Long serverID, String hostAddress, int clientPort, int peerPort, int addrServerPort, int maxClientCount) {
+    @JsonCreator
+    public ChatServerRecord(
+            @JsonProperty("pid") Long serverID,
+            @JsonProperty("hostAddress") String hostAddress,
+            @JsonProperty("clientPort") int clientPort,
+            @JsonProperty("peerPort") int peerPort,
+            @JsonProperty("addrServerPort") int addrServerPort,
+            @JsonProperty("maxClientCount") int maxClientCount) {
         /*
          * `serverID` is used as a key for the key:value pairs that make up the unified (consistent)
-         *  ChatServerInfo HashMap of records kept by Addressing Servers.
+         *  ChatServerRecord HashMap of records kept by Addressing Servers.
          */
         super(serverID, hostAddress, peerPort, clientPort);
         this.addrServerPort = addrServerPort;
@@ -73,7 +82,7 @@ public class ChatServerInfo extends ServerInfo {
 
     /**
      * Attempts to add a new client to the server.
-     * TODO - Decide if we want client ID's or addresses recorded in the ChatServerInfo class
+     * TODO - Decide if we want client ID's or addresses recorded in the ChatServerRecord class
      * Any calling code should perform its own capacity check prior to invocation of this method.
      * It exists as a secondary guard only.
      * <ul>
@@ -188,5 +197,13 @@ public class ChatServerInfo extends ServerInfo {
         } else {
             throw new IllegalStateException("Cannot mark server as ACTIVE unless previously INACTIVE.");
         }
+    }
+
+    public void setPID(Long serverPID) {
+        super.setServerID(serverPID);
+    }
+
+    public void setHostAddress(String hostAddress) {
+        super.setHostAddress(hostAddress);
     }
 }
