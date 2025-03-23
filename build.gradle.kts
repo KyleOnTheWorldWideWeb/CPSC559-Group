@@ -1,18 +1,18 @@
 // Declare plugins at the root level but do not apply them globally
-plugins {
-    id("com.bmuschko.docker-remote-api") version "9.4.0" apply false // Each module applies it as needed
-}
+// plugins {
+//     id("com.bmuschko.docker-remote-api") version "9.4.0" apply false // Each module applies it as needed
+// }
 
 subprojects {
     repositories {
         mavenCentral() // Ensures dependencies are pulled from Maven Central
     }
     // Ensure that JDK23 is used across ALL modules
-    plugins.withType<JavaPlugin>().configureEach {
-        extensions.configure<JavaPluginExtension> {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-        }
-    }
+    // plugins.withType<JavaPlugin>().configureEach {
+    //     extensions.configure<JavaPluginExtension> {
+    //         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    //     }
+    // }
 
     // Only apply this to Java-based subprojects
     plugins.withId("java") {

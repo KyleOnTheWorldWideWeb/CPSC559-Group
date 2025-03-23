@@ -16,9 +16,8 @@ services:  # Defines the services (Docker containers) that will be run.
   addressingserver:
       image: addressingserver:latest
       container_name: addressingserver
-      profiles: ["addressingserver"]
+      profiles: ["addressingserver", "main-single"]
       build:
-        context: .
         dockerfile: Dockerfile.addressingserver
       environment:
         - AS_CLIENT_PORT=49800
@@ -28,7 +27,7 @@ services:  # Defines the services (Docker containers) that will be run.
         - AS_ROLE=PRIMARY
       networks:
         chat_network:
-          ipv4_address: 172.20.0.2
+          ipv4_address: 255.255.0.2
       deploy:
         replicas: 1
 
@@ -41,7 +40,7 @@ services:  # Defines the services (Docker containers) that will be run.
       - AS_CHATSERVER_PORT=49802
       - AS_NETWORK=chat_network
       - AS_ROLE=BACKUP
-      - HOST_ADDRESS=172.20.0.2
+      - HOST_ADDRESS=255.255.0.2
     networks:
       - chat_network
     deploy:
@@ -50,29 +49,27 @@ services:  # Defines the services (Docker containers) that will be run.
   chatserver:
     image: chatserver:latest
     container_name: chatserver
-    profiles: ["chatserver"]
+    profiles: ["chatserver", "main-single"]
     build:
-      context: .
       dockerfile: Dockerfile.chatserver
     environment:
       - CS_PORT=2424
       - CS_PEER_PORT=2425
       - CS_ADDRSERVER_PORT=49802
-      - ADDRESS_SERVER_IP=172.20.0.2
+      - ADDRESS_SERVER_IP=255.255.0.2
     networks:
       - chat_network
 
   client:
     image: client:latest
     container_name: client
-    profiles: ["client"]
+    profiles: ["client", "main-single"]
     build:
-      context: .
       dockerfile: Dockerfile.client
     environment:
       - CLIENT_PORT=3000
       - HOST_ADDRESS=client
-      - ADDRESS_HOST=172.20.0.2
+      - ADDRESS_HOST=255.255.0.2
     networks:
       - chat_network
 
@@ -81,7 +78,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 255.255.255.0/16
+        - subnet: 255.255.0.0/16
 # This is different from the volume we define in a service. This is how we can ensure that any data...configs:
 # ... that is created during the build or execution of the container(s), IS NOT deleted when the container is removed.
 # This is very powerful because it allows us to update our repository (new version), and in turn build new containers...configs:
