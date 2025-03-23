@@ -1,7 +1,9 @@
 package io.github.cpsc559.team16.common.utilities;
 
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+
 import java.io.IOException;
-import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -59,23 +61,16 @@ public interface NetworkManager {
      * When an event occurs, it is dispatched to the appropriate handler.
      * </p>
      *
-     * @param connectionDispatcher The dispatcher responsible for routing accepted connections to the appropriate handlers.
      * @param readDispatcher The dispatcher responsible for routing accepted connections to the appropriate handlers.
      * @throws IOException If an I/O error occurs while selecting or processing events.
      */
-    void startEventLoop(ConnectionDispatcher connectionDispatcher, ReadDispatcher readDispatcher) throws IOException;
+    void startEventLoop(ReadDispatcher readDispatcher) throws IOException;
 
-    /**
-     * Defines how incoming connections are dispatched to their respective handlers.
-     */
-    interface ConnectionDispatcher {
-        void dispatch(SocketChannel channel, ServerSocketChannel listenerSC);
-    }
 
     /**
      * Defines how data streams on established {@code NIO SocketChannels} are dispatched to their respective handlers.
      */
     interface ReadDispatcher {
-        void dispatch(SelectionKey key);
+        void dispatch(SocketChannel channel, NIOMessageChannel nioChannel) throws ConnectionClosedException, IOException;
     }
 }

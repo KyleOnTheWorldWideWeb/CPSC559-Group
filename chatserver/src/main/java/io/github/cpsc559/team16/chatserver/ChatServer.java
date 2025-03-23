@@ -15,7 +15,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.client.Client;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
@@ -76,15 +76,15 @@ public class ChatServer {
     private static final BlockingQueue<BaseMessage> messageQueue = new LinkedBlockingQueue<>();
 
     /**
-     * A mapping of unique chat server IDs to their corresponding {@link ChatServerInfo} records.
+     * A mapping of unique chat server IDs to their corresponding {@link ChatServerRecord} records.
      * <p>
-     * A {@code ChatServerInfo} record is maintained and updated by the Primary Addressing Server
+     * A {@code ChatServerRecord} record is maintained and updated by the Primary Addressing Server
      * for each registered chat server in the network.
      * </p>
      * Chat Servers retrieve these records when initially registering with the Addressing Server.
      * Incremental updates occur from that point on.
      */
-    private Map<Long, ChatServerInfo> chatServerRecords;
+    private Map<Long, ChatServerRecord> chatServerRecords;
 
     /**
      * Contains the set of all open channels between this {@code ChatServer} and its peers.

@@ -500,15 +500,14 @@ val replica2Container = tasks.register<DockerCreateContainer>("buildReplica2Cont
     containerName.set("replica2_container")
 
     // Configure environment variables for the second replica
-    // See docker compose file
-    // withEnvVar("AS_ROLE", "BACKUP")
-    // withEnvVar("HOST_ADDRESS", "0.0.0.0")
-    // // Use different ports than Replica1 and the primary:
-    // withEnvVar("AS_CLIENT_PORT", "49820")
-    // withEnvVar("AS_REPLICA_PORT", "49821")
-    // withEnvVar("AS_CHATSERVER_PORT", "49822")
-    // withEnvVar("PRIMARY_HOST", "addrserver_container")
-    // withEnvVar("PRIMARY_PORT", "49801")
+    withEnvVar("AS_ROLE", "REPLICA")
+    withEnvVar("HOST_ADDRESS", "0.0.0.0")
+    // Use different ports than Replica1 and the primary:
+    withEnvVar("AS_CLIENT_PORT", "49820")
+    withEnvVar("AS_REPLICA_PORT", "49821")
+    withEnvVar("AS_CHATSERVER_PORT", "49822")
+    withEnvVar("PRIMARY_HOST", "addrserver_container")
+    withEnvVar("PRIMARY_PORT", "49801")
 
     // // Define port bindings for Replica2
     // val replica2Ports = listOf("49820:49820", "49821:49821", "49822:49822")

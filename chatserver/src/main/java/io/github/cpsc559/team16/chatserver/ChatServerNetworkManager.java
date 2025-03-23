@@ -4,7 +4,6 @@ import io.github.cpsc559.team16.common.utilities.NetworkManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.*;
-import java.util.Iterator;
 
 /**
  * Implementation of {@link NetworkManager} for the Chat Server.
@@ -37,27 +36,9 @@ public class ChatServerNetworkManager implements NetworkManager {
     }
 
     @Override
-    public void startEventLoop(ConnectionDispatcher dispatcher1, ReadDispatcher dispatcher2) throws IOException {
-        while (true) {
-            selector.select();
+    public void startEventLoop(ReadDispatcher dispatcher2) throws IOException {
 
-            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-            while (keys.hasNext()) {
-                SelectionKey key = keys.next();
-                keys.remove();
-                if (!key.isValid()) {
-                    continue;
-                }
-                if (key.isAcceptable()) {
-                    ServerSocketChannel listenerSC = (ServerSocketChannel) key.channel();
-                    SocketChannel channel = listenerSC.accept();
-                    channel.configureBlocking(false);
-                    dispatcher1.dispatch(channel, listenerSC);
-                }
-                if (key.isReadable()) {
-                    // Handle incoming messages from clients or other chat servers
-                }
-            }
-        }
+
+
     }
 }

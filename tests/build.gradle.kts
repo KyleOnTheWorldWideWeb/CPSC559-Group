@@ -16,13 +16,21 @@ plugins {
     Adjust or add any additional dependencies for your integration/system tests here.
 */
 dependencies {
+    // Project module dependencies
     implementation(project(":common"))
     implementation(project(":chatserver"))
     implementation(project(":addressingserver"))
     implementation(project(":client"))
+    // Jackson (for JSON serialization - how we send object over the network)
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")
+    // J-Unit API & Test Engine
+    testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
+    // Mockito for mocking objects in tests (testing classes declared as final - i.e. they cannot be extended and easily tested)
+    testImplementation("org.mockito:mockito-core:5.7.0")
+    // Mockito support for JUnit 5 (allows @ExtendWith(MockitoExtension.class))
+    testImplementation("org.mockito:mockito-inline:5.2.0")
 }
+
 
 application {
     mainClass.set("io.github.cpsc559.team16.tests.TestRunner")
@@ -33,6 +41,11 @@ application {
 // val envProperties = Properties().apply {
 //     file(".env").inputStream().use { load(it) }
 // }
+
+// Loading the port bindings from the .env file in the common module directory
+val envProperties = Properties().apply {
+    file(".env").inputStream().use { load(it) }
+}
 
 // Configure the default jar task to build the test module’s JAR file
 tasks.jar {
@@ -239,6 +252,15 @@ tasks.register<DockerStartContainer>("startNewTestContainer") {
     }
 }
 
+tasks.register("runTest") {
+    dependsOn("safeRemoveTestContainer", "safeRemoveTestImage")
+    dependsOn("startNewTestContainer") // Actually start the container with port bindings
+
+    doLast {
+        println("Launching a new Test container.")
+
+    }
+}
 
 // >-------------------- TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<
 tasks.register("runTestWindows") {
@@ -300,3 +322,12 @@ tasks.register("runTestLinux") {
 }
 
 // >-------------------- END OF TASKS FOR OPENING NEW TERMINAL WHEN RUNNING A NEW CONTAINER ------------------<
+
+
+tasks.register<Test>("runNIOMessageTester") {
+    group = "docker-tests"
+    description = "Runs the J-Unit test cases for the NIO Tester."
+    useJUnitPlatform()
+    include("io/github/cpsc559/team16/tests/NIOMessageChannelTester.class") // Adjust package path
+}
+
