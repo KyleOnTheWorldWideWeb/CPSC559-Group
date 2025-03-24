@@ -202,7 +202,7 @@ public class LeaderElectionManager {
     /**
      * Generate an election message, announcing self as running for leader.
      * 
-     * @return {@code ElectionMessage} with payload "Election".
+     * @return {@link ElectionMessage} with payload "Election".
      */
     public BaseAddrServerMessage generateElectionMessage() {
         return ElectionMessage.election(getSelfPID());
@@ -211,7 +211,7 @@ public class LeaderElectionManager {
     /**
      * Generate a bully message to respond to an election message from a lower PID.
      * 
-     * @return {@code ElectionMessage} with payload "Bully".
+     * @return {@link ElectionMessage} with payload "Bully".
      */
     public BaseAddrServerMessage generateBullyMessage() {
         return ElectionMessage.bully(getSelfPID());
@@ -220,7 +220,7 @@ public class LeaderElectionManager {
     /**
      * Generate a message that announces self as leader.
      * 
-     * @return {@code ElectionMessage} with payload "Leader".
+     * @return {@link ElectionMessage} with payload "Leader".
      */
     public BaseAddrServerMessage generateLeaderMessage() {
         return ElectionMessage.leader(getSelfPID());
@@ -238,7 +238,7 @@ public class LeaderElectionManager {
         } catch (IOException e) {
             String payload = (String) message.getPayload();
             Long peerPID = peerChannel.getServerPID();
-            System.out.println("Failed to send " + payload + " message to peer with PID " + peerPID);
+            System.err.println("Failed to send election message with payload '" + payload + "' to peer with PID " + peerPID + ".");
         }
     }
 }
