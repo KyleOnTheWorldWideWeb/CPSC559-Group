@@ -401,7 +401,8 @@ public class Client {
 
         // get command line args (help!)   
         String username = "Chloe";
-        String STATIC_SERVER_ADDRESS = "localhost";
+        String STATIC_SERVER_ADDRESS = System.getenv().getOrDefault("ADDRESS_HOST", "0.0.0.0");
+        
         int STATIC_PORT = 2424;
 
         // launch a client 

@@ -1,13 +1,13 @@
 package io.github.cpsc559.team16.addressingserver;
 
+import io.github.cpsc559.team16.common.dto.ServerRole;
+
 public class AddrServerConfig {
 
     /**
      * Each AddressingServer process has a distinct id amongst its peers.
      * {@code pid} is used as a 'tie-breaker' during leader elections.
      */
-    // CURRENTLY, PID IS TIED TO THE PEER SOCKET THAT THE PROCESS IS USING
-    // TODO - implement method to generate and assign PID to replicas
     private long pid;
 
     /**
@@ -43,11 +43,12 @@ public class AddrServerConfig {
      * AddressingServer processes are either:
      * <ul>
      *     <li>PRIMARY - the leader process in charge of coordinating connections in the network.</li>
-     *     <li>BACKUP - a `Passive Replica` receiving and retrieving updates.</li>
+     *     <li>REPLICA - a `Passive Replica` receiving and retrieving updates.</li>
      * </ul>
      *
      */
     private ServerRole role;
+
 
     /**
      * The configuration object for the Addressing Server.
@@ -67,12 +68,12 @@ public class AddrServerConfig {
     public AddrServerConfig() {
         System.out.println("----> Addressing server environment variables:");
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
-        String roleEnv = System.getenv().getOrDefault("AS_ROLE", "BACKUP").trim().toUpperCase();
+        String roleEnv = (System.getenv().getOrDefault("AS_ROLE", "BACKUP")).trim().toUpperCase();
         this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.REPLICA;
-        this.hostAddress = System.getenv("HOST_ADDRESS").trim();
-        this.clientPort = Integer.parseInt(System.getenv().get("AS_CLIENT_PORT").trim());
-        this.replicaPort = Integer.parseInt(System.getenv().get("AS_REPLICA_PORT").trim());
-        this.chatServerPort = Integer.parseInt(System.getenv().get("AS_CHATSERVER_PORT").trim());
+        this.hostAddress = System.getenv().getOrDefault("HOST_ADDRESS", "0.0.0.0");
+        this.clientPort = Integer.parseInt(System.getenv().get("AS_CLIENT_PORT"));
+        this.replicaPort = Integer.parseInt(System.getenv().get("AS_REPLICA_PORT"));
+        this.chatServerPort = Integer.parseInt(System.getenv().get("AS_CHATSERVER_PORT"));
     }
 
     public String getHostAddress() {
@@ -91,9 +92,7 @@ public class AddrServerConfig {
         return chatServerPort;
     }
 
-    public ServerRole getRole() {
-        return role;
-    }
+
 
     /**
      * Changes the role of an AddressingServer in the DS.
@@ -105,6 +104,18 @@ public class AddrServerConfig {
         this.role = role;
     }
 
+    /**
+     * AddressingServer processes are either:
+     * <ul>
+     *     <li>PRIMARY - the leader process in charge of coordinating connections in the network.</li>
+     *     <li>REPLICA - a `Passive Replica` receiving and retrieving updates.</li>
+     * </ul>
+     *
+     */
+    public ServerRole getRole() {
+        return role;
+    }
+
     public void setPID(Long pid) {
         this.pid = pid;
     }
@@ -112,8 +123,6 @@ public class AddrServerConfig {
         return this.pid;
     }
 
-    public enum ServerRole {
-        PRIMARY, REPLICA
-    }
+
 
 }

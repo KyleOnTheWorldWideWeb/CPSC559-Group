@@ -1,0 +1,23 @@
+# Build stage
+FROM gradle:8-jdk21 AS build
+
+# Set the working directory
+WORKDIR /app/
+
+# Copy the project files
+COPY . .
+
+# Build the project
+RUN gradle buildAddressingServer --no-daemon
+
+# Runtime stage
+FROM eclipse-temurin:21-jdk
+
+# Set the working directory
+WORKDIR /app/
+
+# Copy the built jar from the build stage
+COPY --from=build /app/addressingserver/build/libs/addressingserver.jar /app/addressingserver.jar
+
+# Define the default program
+CMD ["java", "-jar", "addressingserver.jar"]
