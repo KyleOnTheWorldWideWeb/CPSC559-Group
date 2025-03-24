@@ -25,10 +25,11 @@ services:  # Defines the services (Docker containers) that will be run.
         - AS_CHATSERVER_PORT=49802
         - AS_NETWORK=chat_network
         - AS_ROLE=PRIMARY
+        - HOST_ADDRESS=255.255.0.2
       ports: ["49800:49800", "49801:49801","49802:49802"]
       networks:
         chat_network:
-          ipv4_address: 172.20.0.2
+          ipv4_address: 255.255.0.2
 
   addressingserver_replicas:
     image: addressingserver:latest
@@ -39,11 +40,11 @@ services:  # Defines the services (Docker containers) that will be run.
       - AS_CHATSERVER_PORT=49802
       - AS_NETWORK=chat_network
       - AS_ROLE=BACKUP
-      - HOST_ADDRESS=172.20.0.2
+      - HOST_ADDRESS=255.255.0.3
     networks:
       - chat_network
     deploy:
-      replicas: 3
+      replicas: 1
 
   chatserver:
     image: chatserver:latest
