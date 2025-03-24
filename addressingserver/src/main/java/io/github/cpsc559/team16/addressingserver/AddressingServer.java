@@ -113,7 +113,7 @@ public class AddressingServer {
         this.config = new AddrServerConfig();
         this.addrServerRegistry = new AddrServerRegistry();
         this.peerManager = new PeerManager(addrServerRegistry);
-        this.leaderElectionManager = new LeaderElectionManager(config, addrServerRegistry, peerManager);
+        this.leaderElectionManager = new LeaderElectionManager(config, peerManager);
         this.chatServerRegistry = new ChatServerRegistry();
         chatServerManager = new ChatServerManager(chatServerRegistry);
         try {
