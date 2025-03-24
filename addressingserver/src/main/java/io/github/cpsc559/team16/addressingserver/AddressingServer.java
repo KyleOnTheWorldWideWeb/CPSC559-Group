@@ -63,6 +63,15 @@ public class AddressingServer {
     }
 
     /**
+     * The process responsible for handling ping messages and managing the ping timeout.
+     */
+    private final PingManager pingManager;
+
+    public PingManager getPingManager() {
+        return pingManager;
+    }
+
+    /**
      * The process responsible for managing interactions between the
      * {@code AddressingServer} and {@code ChatServer}'s
      */
@@ -114,6 +123,7 @@ public class AddressingServer {
         this.addrServerRegistry = new AddrServerRegistry();
         this.peerManager = new PeerManager(addrServerRegistry);
         this.leaderElectionManager = new LeaderElectionManager(config, peerManager);
+        this.pingManager = new PingManager(leaderElectionManager);
         this.chatServerRegistry = new ChatServerRegistry();
         chatServerManager = new ChatServerManager(chatServerRegistry);
         try {
