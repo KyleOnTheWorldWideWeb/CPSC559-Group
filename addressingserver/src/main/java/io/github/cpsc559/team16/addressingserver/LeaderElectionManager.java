@@ -1,10 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 
+import java.io.IOException;
 import java.nio.channels.SocketChannel;
-import java.util.Map;
-import java.util.Set;
+import java.util.Collection;
 
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.messaging.ElectionMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
@@ -13,7 +12,7 @@ public class LeaderElectionManager {
 
     // Configuration, registry, and peer manager
     private final AddrServerConfig config;
-    private final AddrServerRegistry registry;
+    private final PeerManager peerManager;
 
     // PID of leader
     private Long leaderPID;
@@ -38,18 +37,21 @@ public class LeaderElectionManager {
      * @param config AddrServerConfig instance.
      * @param registry AddrServerRegistry instance.
      */
-    public LeaderElectionManager(AddrServerConfig config, AddrServerRegistry registry, PeerManager peerManager) {
+    public LeaderElectionManager(AddrServerConfig config, PeerManager peerManager) {
 
-        // Set configuration, registry, and peer manager
+        // Set configuration and peer manager
         this.config = config;
-        this.registry = registry;
+        this.peerManager = peerManager;
 
         // Set running to false initially
         running = false;
 
         // Set leaderPID to highest PID among self and peers
         leaderPID = config.getPID();
-        for (Long peerPID : getPeers().keySet()) {
+        for (NIOMessageChannel peerChannel : getPeerChannels()) {
+
+            Long peerPID = peerChannel.getServerPID();
+
             if (peerPID > leaderPID) {
                 leaderPID = peerPID;
             }
@@ -70,31 +72,33 @@ public class LeaderElectionManager {
         String payload = (String) message.getPayload();
 
         switch (payload) {
-            case "Election" -> handleElection(senderPID, channel, nioChannel);
+            case "Election" -> handleElection(senderPID, nioChannel);
             case "Leader" -> handleLeader(senderPID);
             case "Bully" -> handleBully();
+            default -> System.err.println("Received unknown election message payload: " + payload);
         }
     }
 
     /**
-     * Notify this process of an election message from a peer.
+     * Behaviour for handling an election message from a peer.
      * 
      * @param senderPID PID of sender.
+     * @param peerChannel {@link NIOMessageChannel} of sender.
      */
-    public void handleElection(Long senderPID, SocketChannel channel, NIOMessageChannel nioChannel) {
+    private void handleElection(Long senderPID, NIOMessageChannel peerChannel) {
         
         if (senderPID < getSelfPID()) { // If sender PID is lower than own PID
 
-            bully(senderPID, channel, nioChannel); // Send BULLY message to sender
+            bully(peerChannel); // Send BULLY message to sender
 
             if (!running) initiateElection(); // If not already running, initiate election
         }
     }
 
     /**
-     * Notify this process of a bully message from a peer.
+     * Behaviour for handling a bully message from a peer.
      */
-    public void handleBully() {
+    private void handleBully() {
         bullyResponseReceived = true;
     }
 
@@ -103,7 +107,7 @@ public class LeaderElectionManager {
      * 
      * @param senderPID PID of sender.
      */
-    public void handleLeader(Long senderPID) {
+    private void handleLeader(Long senderPID) {
         leaderAnnouncementReceived = true;
 
         running = false;
@@ -111,23 +115,14 @@ public class LeaderElectionManager {
     }
 
     /**
-     * Get map of peers from registry.
+     * Get all peer {@link NIOMessageChannel} channels.
      * 
-     * @return Map of peers. Key = (Long) PID of peer; Value = AddrServerRecord of peer.
+     * @return Collection containing each peer's {@link NIOMessageChannel}.
      */
-    private Map<Long, AddrServerRecord> getPeers() {
-        return registry.getRecords();
+    private Collection<NIOMessageChannel> getPeerChannels() {
+        return peerManager.getPeerChannels().values();
     }
-
-    /**
-     * Get list of peer PIDs.
-     * 
-     * @return List of peer PIDs.
-     */
-    private Set<Long> getPeerPIDs() {
-        return getPeers().keySet();
-    }
-
+    
     /**
      * Get own PID.
      * 
@@ -140,8 +135,7 @@ public class LeaderElectionManager {
     /**
      * Initiate a leader election.
      */
-    private void initiateElection() {
-
+    public void initiateElection() {
         try {
             if (!running) {
                 running = true; // Set flag
@@ -151,10 +145,10 @@ public class LeaderElectionManager {
                 boolean higherExists = false; // Flag used to immediately declare leader if no higher PID is found
     
                 // Loop through all peers
-                for (Long peerPID : getPeerPIDs()) {
-                    if (peerPID > getSelfPID()) { // If peer PID is higher than own PID
+                for (NIOMessageChannel peerChannel : getPeerChannels()) {
+                    if (peerChannel.getServerPID() > getSelfPID()) { // If peer PID is higher than own PID
                         higherExists = true; // Set flag to true
-                        sendTo(generateElectionMessage(), peerPID); // Send ELECTION message to peer
+                        sendTo(generateElectionMessage(), peerChannel); // Send ELECTION message to peer
                     }
                 }
                 
@@ -189,9 +183,8 @@ public class LeaderElectionManager {
      * 
      * @param peerPID PID of peer to bully.
      */
-    public void bully(Long peerPID, SocketChannel channel, NIOMessageChannel nioChannel) {
-        BaseAddrServerMessage bullyMessage = generateBullyMessage();
-        sendTo(bullyMessage, peerPID);
+    public void bully(NIOMessageChannel peerChannel) {
+        sendTo(generateBullyMessage(), peerChannel);
     }
 
     /**
@@ -201,8 +194,8 @@ public class LeaderElectionManager {
 
         BaseAddrServerMessage leaderMessage = generateLeaderMessage();
 
-        for (Long peerPID : getPeerPIDs()) {
-            sendTo(leaderMessage, peerPID);
+        for (NIOMessageChannel peerChannel : getPeerChannels()) {
+            sendTo(leaderMessage, peerChannel);
         }
     }
 
@@ -237,14 +230,15 @@ public class LeaderElectionManager {
      * Send a message to a peer.
      * 
      * @param message Message to send.
-     * @param peerPID PID of peer to send message to.
-     * 
-     * TODO: Implement this method
+     * @param peerPID {@link NIOMessageChannel} of peer to send message to.
      */
-    public void sendTo(BaseAddrServerMessage message, Long peerPID) {
-
-        AddrServerRecord peer = getPeers().get(peerPID);
-
-        // Send message to peer
+    public void sendTo(BaseAddrServerMessage message, NIOMessageChannel peerChannel) {
+        try {
+            peerChannel.sendMessage(message.toJson());
+        } catch (IOException e) {
+            String payload = (String) message.getPayload();
+            Long peerPID = peerChannel.getServerPID();
+            System.out.println("Failed to send " + payload + " message to peer with PID " + peerPID);
+        }
     }
 }
