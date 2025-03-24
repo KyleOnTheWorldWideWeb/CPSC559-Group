@@ -8,50 +8,71 @@ import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.messaging.ElectionMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
+/**
+ * Manages the leader election process for an Addressing Server using the Bully Algorithm.
+ * <p>
+ * This class is responsible for handling leader election messages, determining the leader, 
+ * and ensuring fault tolerance by re-electing a leader if necessary. 
+ * </p>
+ * <p>
+ * The election process follows these steps:
+ * </p>
+ * <ol>
+ *     <li>Identify the highest available PID among peers and self.</li>
+ *     <li>If a process detects a failure in the leader, it initiates an election.</li>
+ *     <li>Election messages are sent to all peers with a higher PID.</li>
+ *     <li>If no higher PID responds, the process declares itself the leader.</li>
+ *     <li>If a higher PID responds, it waits for a leader announcement.</li>
+ * </ol>
+ */
 public class LeaderElectionManager {
 
-    // Configuration, registry, and peer manager
+    /** Configuration instance for accessing Addressing Server settings */
     private final AddrServerConfig config;
+
+    /** Manages peer connections for communication during elections */
     private final PeerManager peerManager;
 
-    // PID of leader
+    /** Stores the current leader's PID */
     private Long leaderPID;
-    public long getLeaderPID() {
-        return leaderPID;
-    }
 
-    // Leader election algorithm running flag
+    /** Flag indicating whether an election is currently running */
     private boolean running;
 
-    // Timeout values (milliseconds)
+    /** Timeout (in milliseconds) to wait for a "Bully" response before assuming leadership */
     private int bullyResponseTimeout;
+
+    /** Timeout (in milliseconds) to wait for a leader announcement before re-initiating an election */
     private int leaderAnnouncementTimeout;
 
-    // Flags to indicate whether certain messages have been received, used with the above timeouts
+    /** Flags used to track election responses */
     private boolean bullyResponseReceived = false;
     private boolean leaderAnnouncementReceived = false;
 
     /**
-     * Constructor for LeaderElectionManager.
-     * 
-     * @param config AddrServerConfig instance.
-     * @param registry AddrServerRegistry instance.
+     * Retrieves the PID of the current leader.
+     *
+     * @return The leader's PID.
+     */
+    public long getLeaderPID() {
+        return leaderPID;
+    }
+
+    /**
+     * Constructs a LeaderElectionManager and determines the initial leader.
+     *
+     * @param config The Addressing Server configuration.
+     * @param peerManager Manages peer server communication.
      */
     public LeaderElectionManager(AddrServerConfig config, PeerManager peerManager) {
-
-        // Set configuration and peer manager
         this.config = config;
         this.peerManager = peerManager;
+        this.running = false;
 
-        // Set running to false initially
-        running = false;
-
-        // Set leaderPID to highest PID among self and peers
+        // Initialize leaderPID to the highest PID among self and peers
         leaderPID = config.getPID();
         for (NIOMessageChannel peerChannel : getPeerChannels()) {
-
             Long peerPID = peerChannel.getServerPID();
-
             if (peerPID > leaderPID) {
                 leaderPID = peerPID;
             }
@@ -59,15 +80,19 @@ public class LeaderElectionManager {
     }
 
     /**
-     * Process an election message and handle depending on payload (which will be "Election", "Bully", or "Leader")
-     * 
-     * @param channel The {@link SocketChannel} that was used to receive the message.
-     * @param nioChannel The {@link NIOMessageChannel} that was used to decode and encode the message.
-     * @param message The {@link BaseAddrServerMessage} that was received.
-     * 
+     * Processes an incoming election-related message.
+     * Depending on the message payload, it delegates to the appropriate handler:
+     * <ul>
+     *     <li>"Election" → {@link #handleElection(Long, NIOMessageChannel)}</li>
+     *     <li>"Bully" → {@link #handleBully()}</li>
+     *     <li>"Leader" → {@link #handleLeader(Long)}</li>
+     * </ul>
+     *
+     * @param channel The {@link SocketChannel} that received the message.
+     * @param nioChannel The {@link NIOMessageChannel} used for message decoding and encoding.
+     * @param message The parsed {@link BaseAddrServerMessage} containing the election details.
      */
     public void processElectionMessage(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-
         long senderPID = message.getSenderPID();
         String payload = (String) message.getPayload();
 
@@ -80,165 +105,141 @@ public class LeaderElectionManager {
     }
 
     /**
-     * Behaviour for handling an election message from a peer.
-     * 
-     * @param senderPID PID of sender.
-     * @param peerChannel {@link NIOMessageChannel} of sender.
+     * Handles an "Election" message, responding only if the sender has a lower PID.
+     * <p>
+     * If this process has a higher PID, it sends a "Bully" message back and optionally 
+     * starts its own election if one is not already in progress.
+     * </p>
+     *
+     * @param senderPID The PID of the process that sent the election message.
+     * @param peerChannel The {@link NIOMessageChannel} of the sender.
      */
     private void handleElection(Long senderPID, NIOMessageChannel peerChannel) {
-        
-        if (senderPID < getSelfPID()) { // If sender PID is lower than own PID
-
-            bully(peerChannel); // Send BULLY message to sender
-
-            if (!running) initiateElection(); // If not already running, initiate election
+        if (senderPID < getSelfPID()) {  // Only respond if we have a higher PID
+            bully(peerChannel);  // Send a "Bully" message to the sender
+            if (!running) {
+                initiateElection();  // Start an election if not already in progress
+            }
         }
     }
 
     /**
-     * Behaviour for handling a bully message from a peer.
+     * Handles a "Bully" message, marking that a higher PID exists and preventing self-declaration as leader.
      */
     private void handleBully() {
         bullyResponseReceived = true;
     }
 
     /**
-     * Notify this process of a leader message from a peer.
-     * 
-     * @param senderPID PID of sender.
+     * Handles a "Leader" message, updating the known leader and stopping the election process.
+     *
+     * @param senderPID The PID of the announced leader.
      */
     private void handleLeader(Long senderPID) {
         leaderAnnouncementReceived = true;
-
         running = false;
         leaderPID = senderPID;
     }
 
     /**
-     * Get all peer {@link NIOMessageChannel} channels.
-     * 
-     * @return Collection containing each peer's {@link NIOMessageChannel}.
+     * Retrieves a collection of all connected peers' message channels.
+     *
+     * @return A collection of {@link NIOMessageChannel} objects representing connected peers.
      */
     private Collection<NIOMessageChannel> getPeerChannels() {
         return peerManager.getPeerChannels().values();
     }
-    
+
     /**
-     * Get own PID.
-     * 
-     * @return PID of self.
+     * Retrieves the PID of the current process.
+     *
+     * @return The PID of this Addressing Server.
      */
     private long getSelfPID() {
         return config.getPID();
     }
 
     /**
-     * Initiate a leader election.
+     * Initiates the leader election process.
+     * <p>
+     * If a higher PID exists, election messages are sent to them.
+     * If no higher PID responds, this process declares itself the leader.
+     * </p>
      */
     public void initiateElection() {
         try {
             if (!running) {
-                running = true; // Set flag
-                bullyResponseReceived = false; // Reset flag for this election (as no bully has been received so far for this election)
-                leaderAnnouncementReceived = false; // Reset flag for this election (as no leader has been received so far for this election)
-    
-                boolean higherExists = false; // Flag used to immediately declare leader if no higher PID is found
-    
-                // Loop through all peers
+                running = true;
+                bullyResponseReceived = false;
+                leaderAnnouncementReceived = false;
+
+                boolean higherExists = false;  // Track if a higher PID exists
+
+                // Send ELECTION messages to all peers with a higher PID
                 for (NIOMessageChannel peerChannel : getPeerChannels()) {
-                    if (peerChannel.getServerPID() > getSelfPID()) { // If peer PID is higher than own PID
-                        higherExists = true; // Set flag to true
-                        sendTo(generateElectionMessage(), peerChannel); // Send ELECTION message to peer
+                    if (peerChannel.getServerPID() > getSelfPID()) {
+                        higherExists = true;
+                        sendTo(generateElectionMessage(), peerChannel);
                     }
                 }
-                
-                // If self has the highest PID, immediately declare self as leader
-                if (!higherExists) declareSelfLeader();
-    
-                // Otherwise, wait to hear response
-                else {
-                    // If no BULLY message is received after timeout, declare self as leader
+
+                // If no higher PID exists, declare self as leader
+                if (!higherExists) {
+                    declareSelfLeader();
+                } else {
+                    // Wait for a "Bully" response; if none, declare self as leader
                     Thread.sleep(bullyResponseTimeout);
-                    if (!bullyResponseReceived) declareSelfLeader();
-    
-                    // If a BULLY message is received, wait to hear following LEADER message
-                    else {
-                        running = false;
-                        // If no LEADER message is received after timeout, initiate election again
+                    if (!bullyResponseReceived) {
+                        declareSelfLeader();
+                    } else {
+                        // Wait for a "Leader" announcement; if none, restart election
                         Thread.sleep(leaderAnnouncementTimeout);
-                        if (!leaderAnnouncementReceived) initiateElection();
+                        if (!leaderAnnouncementReceived) {
+                            initiateElection();
+                        }
                     }
                 }
             }
         } catch (InterruptedException e) {
             System.err.println("Interrupted while waiting for response during election.");
         }
-
-        bullyResponseReceived = false; // Reset flag for next election
-        leaderAnnouncementReceived = false; // Reset flag for next election
     }
 
     /**
-     * Bully a process.
-     * 
-     * @param peerPID PID of peer to bully.
+     * Sends a "Bully" message to a peer to challenge their election.
+     *
+     * @param peerChannel The {@link NIOMessageChannel} of the peer being challenged.
      */
     public void bully(NIOMessageChannel peerChannel) {
         sendTo(generateBullyMessage(), peerChannel);
     }
 
     /**
-     * Send a LEADER message to all peers, announcing self as leader.
+     * Declares this process as the new leader and notifies all peers.
      */
     public void declareSelfLeader() {
-
         BaseAddrServerMessage leaderMessage = generateLeaderMessage();
-
         for (NIOMessageChannel peerChannel : getPeerChannels()) {
             sendTo(leaderMessage, peerChannel);
         }
     }
 
-    /**
-     * Generate an election message, announcing self as running for leader.
-     * 
-     * @return {@link ElectionMessage} with payload "Election".
-     */
-    public BaseAddrServerMessage generateElectionMessage() {
-        return ElectionMessage.election(getSelfPID());
-    }
+    // Methods to generate election-related messages
+    public BaseAddrServerMessage generateElectionMessage() { return ElectionMessage.election(getSelfPID()); }
+    public BaseAddrServerMessage generateBullyMessage() { return ElectionMessage.bully(getSelfPID()); }
+    public BaseAddrServerMessage generateLeaderMessage() { return ElectionMessage.leader(getSelfPID()); }
 
     /**
-     * Generate a bully message to respond to an election message from a lower PID.
-     * 
-     * @return {@link ElectionMessage} with payload "Bully".
-     */
-    public BaseAddrServerMessage generateBullyMessage() {
-        return ElectionMessage.bully(getSelfPID());
-    }
-    
-    /**
-     * Generate a message that announces self as leader.
-     * 
-     * @return {@link ElectionMessage} with payload "Leader".
-     */
-    public BaseAddrServerMessage generateLeaderMessage() {
-        return ElectionMessage.leader(getSelfPID());
-    }
-
-    /**
-     * Send a message to a peer.
-     * 
-     * @param message Message to send.
-     * @param peerPID {@link NIOMessageChannel} of peer to send message to.
+     * Sends a message to a peer's channel.
+     *
+     * @param message The message to send.
+     * @param peerChannel The peer's {@link NIOMessageChannel}.
      */
     public void sendTo(BaseAddrServerMessage message, NIOMessageChannel peerChannel) {
         try {
             peerChannel.sendMessage(message.toJson());
         } catch (IOException e) {
-            String payload = (String) message.getPayload();
-            Long peerPID = peerChannel.getServerPID();
-            System.err.println("Failed to send election message with payload '" + payload + "' to peer with PID " + peerPID + ".");
+            System.out.println("Failed to send '" + message.getPayload() + "' message to peer with PID " + peerChannel.getServerPID());
         }
     }
 }
