@@ -11,9 +11,6 @@ import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 public class LeaderElectionManager {
 
-    // Flag to indicate whether the leader election manager should shutdown
-    private boolean shutdown = false;
-
     // Configuration, registry, and peer manager
     private final AddrServerConfig config;
     private final AddrServerRegistry registry;
@@ -111,13 +108,6 @@ public class LeaderElectionManager {
 
         running = false;
         leaderPID = senderPID;
-    }
-
-    /**
-     * Shutdown the leader election manager.
-     */
-    public void shutdown() {
-        shutdown = true;
     }
 
     /**
