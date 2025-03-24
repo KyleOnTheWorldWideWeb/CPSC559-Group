@@ -28,7 +28,7 @@ services:  # Defines the services (Docker containers) that will be run.
       ports: ["49800:49800", "49801:49801","49802:49802"]
       networks:
         chat_network:
-          ipv4_address: 172.20.0.2
+          ipv4_address: 172.16.0.2
 
   addressingserver_replicas:
     image: addressingserver:latest
@@ -39,7 +39,7 @@ services:  # Defines the services (Docker containers) that will be run.
       - AS_CHATSERVER_PORT=49802
       - AS_NETWORK=chat_network
       - AS_ROLE=BACKUP
-      - HOST_ADDRESS=172.20.0.2
+      - HOST_ADDRESS=172.16.0.2
     networks:
       - chat_network
     deploy:
@@ -56,7 +56,7 @@ services:  # Defines the services (Docker containers) that will be run.
       - CS_PORT=2424
       - CS_PEER_PORT=2425
       - CS_ADDRSERVER_PORT=49802
-      - ADDRESS_SERVER_IP=172.20.0.2
+      - ADDRESS_SERVER_IP=172.16.0.2
     networks:
       - chat_network
 
@@ -70,7 +70,7 @@ services:  # Defines the services (Docker containers) that will be run.
     environment:
       - CLIENT_PORT=3000
       - HOST_ADDRESS=client
-      - ADDRESS_HOST=172.20.0.2
+      - ADDRESS_HOST=172.16.0.2
     networks:
       - chat_network
     tty: true        # You need these two lines to make the client interactive
@@ -81,7 +81,8 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+      #  ip address is in the non-routable range. Can only be accessed locally
+        - subnet: 172.16.0.0/16
 # This is different from the volume we define in a service. This is how we can ensure that any data...configs:
 # ... that is created during the build or execution of the container(s), IS NOT deleted when the container is removed.
 # This is very powerful because it allows us to update our repository (new version), and in turn build new containers...configs:

@@ -1,7 +1,8 @@
 package io.github.cpsc559.team16.chatserver;
 
+import java.io.BufferedReader;
 import java.io.IOException;
-import java.net.InetSocketAddress;
+import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.channels.Selector;
@@ -103,28 +104,6 @@ public class ChatServer {
      * Contains the set of all open channels between the {@code ChatServer} and client processes.
      */
     private Map<SocketChannel, Client> clientChannels;
-
-    private void initializeChannels() throws IOException {
-        selector = Selector.open();
-
-        // Initialize the client listener channel
-        clientListenerChannel = ServerSocketChannel.open();
-        clientListenerChannel.configureBlocking(false);
-        clientListenerChannel.socket().bind(new InetSocketAddress(clientPort));
-        clientListenerChannel.register(selector, SelectionKey.OP_ACCEPT);
-
-        // Initialize the peer listener channel
-        peerListenerChannel = ServerSocketChannel.open();
-        peerListenerChannel.configureBlocking(false);
-        peerListenerChannel.socket().bind(new InetSocketAddress(peerPort));
-        peerListenerChannel.register(selector, SelectionKey.OP_ACCEPT);
-
-        // Initialize the addressing server listener channel
-        addrServerListenerChannel = ServerSocketChannel.open();
-        addrServerListenerChannel.configureBlocking(false);
-        addrServerListenerChannel.socket().bind(new InetSocketAddress(addrServerPort));
-        addrServerListenerChannel.register(selector, SelectionKey.OP_ACCEPT);
-    }
 
 
 
@@ -232,8 +211,12 @@ public class ChatServer {
         System.out.printf("Chat Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
 
         // Start the message broadcasting thread
+        // This is in charge of handling outgoing recieved messages.
+        // We spray all messages out to all our clients
         new Thread(ChatServer::broadcastMessages).start();
 
+        // I think we should consider creating a threadpool for this instead of this
+        // implementation.
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.print("ChatServer is attempting to connect to addressing server.......");
             try (Socket addrServerSocket = new Socket(ADDRESS_SERVER_IP, 49802)) {
