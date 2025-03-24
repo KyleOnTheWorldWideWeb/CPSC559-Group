@@ -1,8 +1,8 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
-import java.nio.channels.*;
-import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
+import java.nio.channels.SocketChannel;
+import java.util.Optional;  // Used for conditionals that don't rely on non-null checks
 import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
@@ -50,6 +50,16 @@ public class AddressingServer {
 
     public PeerManager getPeerManager() {
         return peerManager;
+    }
+
+    /**
+     * The process responsible for initiating elections and handling election messages from
+     * {@code AddressingServer} peers.
+     */
+    private final LeaderElectionManager leaderElectionManager;
+
+    public LeaderElectionManager getLeaderElectionManager() {
+        return leaderElectionManager;
     }
 
     /**
@@ -103,6 +113,7 @@ public class AddressingServer {
         this.config = new AddrServerConfig();
         this.addrServerRegistry = new AddrServerRegistry();
         this.peerManager = new PeerManager(addrServerRegistry);
+        this.leaderElectionManager = new LeaderElectionManager(config, addrServerRegistry, peerManager);
         this.chatServerRegistry = new ChatServerRegistry();
         chatServerManager = new ChatServerManager(chatServerRegistry);
         try {
