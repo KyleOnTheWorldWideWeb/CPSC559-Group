@@ -1,16 +1,15 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-import io.github.cpsc559.team16.common.utilities.NetworkManager;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+import io.github.cpsc559.team16.common.utilities.NetworkManager;
 
 /**
  * Handles read events from registered {@code SocketChannel}'s and routes them based on the server's role.
@@ -232,7 +231,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      * @param message The received election message.
      */
     private void handleElection(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        //server.processElectionMessage(channel, nioChannel, message.getPayload());
+        server.getLeaderElectionManager().processElectionMessage(channel, nioChannel, message);
     }
 
 }
