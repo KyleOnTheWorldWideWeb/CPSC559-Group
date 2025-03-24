@@ -13,6 +13,35 @@ services:  # Defines the services (Docker containers) that will be run.
     #ports:
       #- "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication)
 
+  addressingserver:
+      image: addressingserver:latest
+      container_name: addressingserver
+      profiles: ["addressingserver", "main-single"]
+      build:
+        dockerfile: Dockerfile.addressingserver
+      environment:
+        - AS_CLIENT_PORT=49800
+        - AS_REPLICA_PORT=49801
+        - AS_CHATSERVER_PORT=49802
+        - AS_NETWORK=chat_network
+        - AS_ROLE=PRIMARY
+        - HOST_ADDRESS=255.255.0.2
+      networks:
+        chat_network:
+          ipv4_address: 255.255.0.2
+      deploy:
+        replicas: 1
+
+  addressingserver_replicas:
+    image: addressingserver:latest
+    profiles: ["serverreplicas"]
+    environment:
+      - AS_CLIENT_PORT=49800
+      - AS_REPLICA_PORT=49801
+      - AS_CHATSERVER_PORT=49802
+      - AS_NETWORK=chat_network
+      - AS_ROLE=BACKUP
+      - HOST_ADDRESS=255.255.0.2
 
   chatserver:  # Name of the chat server service
     image: chatserver:latest  # The Docker image name and tag used to build this service
@@ -21,6 +50,14 @@ services:  # Defines the services (Docker containers) that will be run.
       dockerfile: Dockerfile  # The specific Dockerfile to use for building the image (in the directory referenced above)
     container_name: chatserver_container
     networks:
+      - chat_network
+    deploy:
+      replicas: 1
+
+  chatserver:
+    image: chatserver:latest
+    container_name: chatserver
+    profiles: ["chatserver", "main-single"]
       - chat_network  # Connects this service to the 'chat_network' for communication
     ports: # NOTE: Port mapping simply exposes the container port to the local host - the container will not have an "outward facing" network address.
       - "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication).

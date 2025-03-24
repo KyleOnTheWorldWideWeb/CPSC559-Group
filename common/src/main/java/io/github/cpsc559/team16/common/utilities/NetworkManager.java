@@ -2,6 +2,7 @@ package io.github.cpsc559.team16.common.utilities;
 
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 
 import java.io.IOException;
 import java.nio.channels.Selector;
@@ -72,5 +73,7 @@ public interface NetworkManager {
      */
     interface ReadDispatcher {
         void dispatch(SocketChannel channel, NIOMessageChannel nioChannel) throws ConnectionClosedException, IOException;
+        void handleRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> registration) throws IOException;
     }
+
 }

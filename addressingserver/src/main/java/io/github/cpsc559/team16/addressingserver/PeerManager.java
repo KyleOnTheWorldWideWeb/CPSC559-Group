@@ -53,7 +53,9 @@ public class PeerManager {
      */
     public void removeChannel(SocketChannel channel) {
         NIOMessageChannel ch = peerChannels.remove(channel);
-        if (ch != null) {
+        if (ch != null) { // We do not ever map keys to null values, so this check does ensure that a key:value pair was present.
+            // Remove this server from the registry so that if it registers again, it doesn't create a duplicate entry.
+            this.registry.getRecords().remove(ch.getServerPID());
             System.out.println("Removed peer with network PID: " + ch.getServerPID());
         } else {
             System.out.println("No matching peer found for the given channel.");
@@ -85,14 +87,21 @@ public class PeerManager {
 
         record.setHostAddress(replicaHostAddr);
         record.setServerID(peerPID);
+        // Send all current records. This helps avoid race conditions.
+        this.sendAllAddrServerRecords(primaryPID, nioChannel);
+
         registry.putAddrServerRecord(peerPID, record);
 
         System.out.println("Replica registered: " + replicaHostAddr + " (PID: " + peerPID + ")");
 
+        // Send the new record explicitly. Race conditions can occur where the hashmap doesn't update quick enough.
+        UpdateMessage<AddrServerRecord> selfUpdate =
+                UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
+        nioChannel.sendMessage(selfUpdate.toJson());
+
+        // Send an ACK to notify the server it has beenr registered.
         AckMessage ack = new AckMessage("Registered", primaryPID, "PRIMARY", "REPLICA", peerPID.toString());
         nioChannel.sendMessage(ack.toJson());
-
-        this.sendAllAddrServerRecords(primaryPID, nioChannel);
 
         return record;
     }
@@ -226,7 +235,7 @@ public class PeerManager {
                                                        int clientPort, int peerPort, int chatServerPort) {
         try {
             SocketChannel channel = SocketChannel.open();
-            channel.configureBlocking(false);
+            channel.configureBlocking(true);
             channel.connect(new InetSocketAddress(primaryHostAddress, primaryReplicaPort));
             while (!channel.finishConnect()) {
                 Thread.sleep(100);
@@ -239,8 +248,10 @@ public class PeerManager {
                     RegisterMessage.fromReplica(clientPort, peerPort, chatServerPort);
             nioChannel.sendMessage(register.toJson());
 
-            return Optional.of(channel);
+            channel.configureBlocking(false);
 
+            System.out.println("Registration from REPLICA sent to PRIMARY.");
+            return Optional.of(channel);
         } catch (IOException | InterruptedException e) {
             System.err.println("Failed to register replica with primary: " + e.getMessage());
             e.printStackTrace();
