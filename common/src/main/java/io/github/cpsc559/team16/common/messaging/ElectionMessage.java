@@ -1,17 +1,17 @@
 package io.github.cpsc559.team16.common.messaging;
 
 /**
- * A standardized election message used for initiating a leader election.
+ * A standardized election message used to create and respond to leader election events.
  *
  * <p>
- * The payload of an {@code ElectionMessage} is a string (e.g., "Election", "Bully", "Leader").
+ * The payload of an {@code ElectionMessage} is a string ("Election", "Bully", or "Leader").
  * </p>
  * 
  * <pre>
  * Example:
  * {
  *   "msgType": "ELECTION",
- *   "objectType": "",
+ *   "objectType": "String",
  *   "senderPID": 11,
  *   "senderRole": "",
  *   "targetRole": "",
