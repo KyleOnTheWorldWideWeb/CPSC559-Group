@@ -3,7 +3,9 @@ package io.github.cpsc559.team16.addressingserver;
 import java.util.Map;
 import java.util.Set;
 
-import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.ElectionMessage;
 
 public class LeaderElectionManager {
 
@@ -31,7 +33,6 @@ public class LeaderElectionManager {
     /*
      * Constructor for LeaderElectionManager.
      * 
-     * @param peerManager PeerManager instance.
      * @param config AddrServerConfig instance.
      * @param registry AddrServerRegistry instance.
      */
@@ -108,9 +109,9 @@ public class LeaderElectionManager {
     /*
      * Get map of peers from registry.
      * 
-     * @return Map of peers. Key = (Long) PID of peer; Value = AddrServerInfo of peer.
+     * @return Map of peers. Key = (Long) PID of peer; Value = AddrServerRecord of peer.
      */
-    private Map<Long, AddrServerInfo> getPeers() {
+    private Map<Long, AddrServerRecord> getPeers() {
         return registry.getRecords();
     }
 
@@ -194,18 +195,14 @@ public class LeaderElectionManager {
      * Bully a process.
      * 
      * @param peerPID PID of peer to bully.
-     * 
-     * TODO: nothing
      */
     public void bully(Long peerPID) {
-        ServerServerMessage bullyMessage = generateBullyMessage();
+        BaseAddrServerMessage bullyMessage = generateBullyMessage();
         sendTo(bullyMessage, peerPID);
     }
 
     /*
      * Send a LEADER message to all peers, announcing self as leader.
-     * 
-     * TODO: nothing
      */
     public void declareSelfLeader() {
         for (Long peerPID : getPeerPIDs()) {
@@ -218,7 +215,7 @@ public class LeaderElectionManager {
      * 
      * TODO: Implement this method
      */
-    public ServerServerMessage generatePingMessage() {
+    public BaseAddrServerMessage generatePingMessage() {
         return null;
     }
 
@@ -227,11 +224,11 @@ public class LeaderElectionManager {
      * 
      * TODO: Implement this method
      */
-    public ServerServerMessage generateElectionMessage() {
+    public BaseAddrServerMessage generateElectionMessage() {
 
         Long selfPID = getSelfPID();
 
-        return null;
+        return ElectionMessage.election(selfPID);
     }
 
     /*
@@ -239,9 +236,11 @@ public class LeaderElectionManager {
      * 
      * TODO: Implement this method
      */
-    public ServerServerMessage generateBullyMessage() {
+    public BaseAddrServerMessage generateBullyMessage() {
 
         Long selfPID = getSelfPID();
+
+        
 
         return null;
     }
@@ -251,7 +250,7 @@ public class LeaderElectionManager {
      * 
      * TODO: Implement this method
      */
-    public ServerServerMessage generateLeaderMessage() {
+    public BaseAddrServerMessage generateLeaderMessage() {
         return null;
     }
 
@@ -263,9 +262,9 @@ public class LeaderElectionManager {
      * 
      * TODO: Implement this method
      */
-    public void sendTo(ServerServerMessage message, Long peerPID) {
+    public void sendTo(BaseAddrServerMessage message, Long peerPID) {
 
-        AddrServerInfo peer = getPeers().get(peerPID);
+        AddrServerRecord peer = getPeers().get(peerPID);
 
         // Send message to peer
     }
