@@ -78,19 +78,6 @@ public class ChatServerRecord extends ServerRecord {
         this.maxClientCount = maxClientCount;
         this.status = ServerStatus.ACTIVE;
     }
-    // TODO: (Kyle) I added in a default value for max client count. This is an arbitrary value 
-    public ChatServerInfo(Long serverID, String hostAddress, int clientPort, int peerPort, int addrServerPort) {
-        /*
-         * 
-         * `serverID` is used as a key for the key:value pairs that make up the unified (consistent)
-         *  ChatServerInfo HashMap of records kept by Addressing Servers.
-         */
-        super(serverID, hostAddress, peerPort, clientPort);
-        this.addrServerPort = addrServerPort;
-        this.clientCount = 0;
-        this.maxClientCount = 32;
-        this.status = ServerStatus.ACTIVE;
-    }
 
 
     /**
