@@ -5,7 +5,7 @@ public class PingManager implements Runnable {
     /**
      * Flag used to mark whether the process should shutdown
      */
-    private boolean shutdown = false;
+    private boolean shutdown;
     public void shutdown() {
         shutdown = true;
     }
@@ -60,7 +60,11 @@ public class PingManager implements Runnable {
         }
     }
 
+    @Override
     public void run() {
+
+        shutdown = false;
+
         while (!shutdown) {
             awaitPing();
         }
