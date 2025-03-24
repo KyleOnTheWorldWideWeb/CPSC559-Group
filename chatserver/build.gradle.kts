@@ -5,8 +5,8 @@ plugins {
 
 dependencies {
     implementation(project(":common"))
-    implementation(project(":client"))
     implementation(project(":addressingserver"))
+    implementation(project(":client"))
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")
 }

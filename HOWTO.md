@@ -81,9 +81,13 @@ Profiles are key here. Let's say we want to run all containers associated with a
 ```bash
 docker compose --profile ${example-profile} up --build
 ```
+Make sure you always compose down when you are done with the container(s)
+```bash
+docker compose --profile {example-profile} down
+```
 If you don't want to rebuild a container and just run it you can leave out --build
 ## ** IF YOU KEEP GETTING ADDRESS ALREADY IN USE ERRORS. **
-ALWAYS run docker compose down after you kill containers. If that doesn't clear the issue then go through and delete your containers, images, and builds then try it again.
+ALWAYS run "docker compose down" after you kill containers. If that doesn't clear the issue then go through and delete your containers, images, and builds then try it again.
 Sometimes docker doesn't close containers when you ctrl + C them so they are just running idle in the background using that valuable port and address space.
 
 Each container should have a singular profile associated with it if you only want to spin one of that type of container up.
@@ -93,10 +97,16 @@ you can shut down specific containers by profile using
 ```bash
 docker compose --profile ${example-profile} down
 ```
-Shut down all profiles
+### Shut down all profiles
 ```bash
 docker compose down
 ```
+### Shut down and delete build cache & containers for current build 
+```bash
+docker compose down
+docker system prune
+```
+
 ## *** Warning the below commands will NUKE ALL your docker containers. Not just the ones you created in this Project ***
 stop and remove all containers
 ```bash

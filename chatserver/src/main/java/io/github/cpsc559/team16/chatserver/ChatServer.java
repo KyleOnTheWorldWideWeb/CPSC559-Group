@@ -3,20 +3,26 @@ package io.github.cpsc559.team16.chatserver;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.client.Client;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
@@ -105,6 +111,31 @@ public class ChatServer {
      */
     private Map<SocketChannel, Client> clientChannels;
 
+    private String serverIP; 
+
+    private String getContainerIpAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                // Filter out loopback and inactive interfaces
+                if (iface.isLoopback() || !iface.isUp())
+                    continue;
+
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr instanceof Inet4Address) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            System.err.println("Failed to get container IP: " + e.getMessage());
+        }
+        return "127.0.0.1";
+    }
+
 
 
     public ChatServer() {
@@ -191,19 +222,20 @@ public class ChatServer {
     public static void main(String[] args) {
         // This timeout is necessary for proper output in the new terminal window...
         // ... without it, the initial output to console occurs before the terminal is open
-//        try {
-//            TimeUnit.SECONDS.sleep(1);
-//        } catch (Exception e) {System.err.println(e.getMessage());}
-//        // >------------------- CODE AIDAN ADDED ------------------<
-//        ChatServer server = new ChatServer();
-//        try {
-//            server.mainEventLoop();
-//        } catch (Exception ioe) {
-//            System.err.println("Main event loop in Chat Server failure - process halted.\nError message: " + ioe.getMessage());
-//            ioe.printStackTrace();
-//        }
+       try {
+           TimeUnit.SECONDS.sleep(1);
+       } catch (Exception e) {System.err.println(e.getMessage());}
+       // >------------------- CODE AIDAN ADDED ------------------<
+       ChatServer server = new ChatServer();
+    //    try {
+    //        server.mainEventLoop();
+    //    } catch (Exception ioe) {
+    //        System.err.println("Main event loop in Chat Server failure - process halted.\nError message: " + ioe.getMessage());
+    //        ioe.printStackTrace();
+    //    }
 
-
+        server.serverIP = server.getContainerIpAddress();
+        System.out.println("This server can be reached at: " + server.serverIP);
 
         // Read the port from the environment variable, default to 2424 if not set
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "2424"));
