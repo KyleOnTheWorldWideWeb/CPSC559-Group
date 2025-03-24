@@ -2,11 +2,6 @@ plugins {
     id("java")
     id("application")
 }
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(23))
-    }
-}
 
 dependencies {
     implementation(project(":common"))
@@ -35,6 +30,7 @@ tasks.register<Jar>("chatserverFatJar") {
 
 tasks.register("buildChatServer") {
     group = "build"
-    description = "Builds the chatserver server with common library dependencies."
-    dependsOn(":common:commonJar", "chatserverFatJar")
+    description = "Builds the chatserver with all dependencies (common, client, addressingserver)."
+    dependsOn(":common:commonJar", ":client:clientFatJar", "chatserverFatJar")
 }
+// Reminder. All ports, environment variables can be assigned in a docker file or docker compose file.

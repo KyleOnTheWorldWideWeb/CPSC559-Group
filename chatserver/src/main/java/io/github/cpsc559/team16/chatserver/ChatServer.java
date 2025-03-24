@@ -4,24 +4,17 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.client.Client;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
@@ -82,15 +75,15 @@ public class ChatServer {
     private static final BlockingQueue<BaseMessage> messageQueue = new LinkedBlockingQueue<>();
 
     /**
-     * A mapping of unique chat server IDs to their corresponding {@link ChatServerInfo} records.
+     * A mapping of unique chat server IDs to their corresponding {@link ChatServerRecord} records.
      * <p>
-     * A {@code ChatServerInfo} record is maintained and updated by the Primary Addressing Server
+     * A {@code ChatServerRecord} record is maintained and updated by the Primary Addressing Server
      * for each registered chat server in the network.
      * </p>
      * Chat Servers retrieve these records when initially registering with the Addressing Server.
      * Incremental updates occur from that point on.
      */
-    private Map<Long, ChatServerInfo> chatServerRecords;
+    private Map<Long, ChatServerRecord> chatServerRecords;
 
     /**
      * Contains the set of all open channels between this {@code ChatServer} and its peers.
@@ -140,178 +133,118 @@ public class ChatServer {
         System.out.println("ChatServer environment variables: ");
         System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
         // Read the network address from the environment variable
-        clientPort = Integer.parseInt(System.getenv().getOrDefault("CS_CLIENT_PORT", "2424"));
-        peerPort = Integer.parseInt(System.getenv().getOrDefault("CS_PEER_PORT", "2425"));
-        addrServerPort = Integer.parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "2426"));
+        clientPort = Integer.parseInt(System.getenv().getOrDefault("CS_CLIENT_PORT", "2424").trim());
+        peerPort = Integer.parseInt(System.getenv().getOrDefault("CS_PEER_PORT", "2425").trim());
+        addrServerPort = Integer.parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "2426").trim());
+
         chatServerRecords = new ConcurrentHashMap<>();
     }
 
 
-    public void mainEventLoop() throws IOException {
-        while (true) {
-            // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
-            selector.select();
-            /*
-             * When you register a channel with a selector, you get back a SelectionKey.
-             * Here, we iterate through all keys (channels) that are "ready" for an I/O operation.
-             * We know that at least one such key exists because of the preceding `selector.select()` method invocation.
-             */
-            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-
-            while (keys.hasNext()) {      // Loop until there are no more keys (channels with I/O events).
-                SelectionKey key = keys.next();    // Retrieve a new key
-                keys.remove();                     // Remove the key used in the last iteration of this loop.
-
-                if (!key.isValid()) {               // skip current loop iteration
-                    continue;
-                }
-
-                /* Establishing a new connection. `isAcceptable` returns true if a ServerSocketChannel registered
-                 *  with `selector` is ready to accept (detected) a new connection. SocketChannel's registered with
-                 *   the `selector should not appear here.
-                 */
-                if (key.isAcceptable()) {
-                    /*
-                     * `listeningSC` is not a "new" channel - it is one of the ServerSocketChannels we registered
-                     *  with the selector in the `initializeChannels` method.
-                     */
-                    ServerSocketChannel listeningSC = (ServerSocketChannel) key.channel();
-                    // We use a `SocketChanel` for established connections. `newChannel.isAcceptable()` will ALWAYS return False
-                    SocketChannel newChannel = listeningSC.accept();
-                    newChannel.configureBlocking(false); // Set channel to "non-blocking" I/O
-                    /*
-                     * Register the `newChannel` with the `selector` which will add a `SelectionKey` for that
-                     * channel and monitor it until it is explicitly closed.
-                     */
-                    newChannel.register(selector, SelectionKey.OP_READ); // SocketChannel set to persistent non-blocking I/O
-                    if (listeningSC == clientListenerChannel) {
-                        // TODO: Implement Client connection handling
-                        // Add the persistent channel for this client to clientChannels.put()
-                    } else if (listeningSC == peerListenerChannel) {
-                        // TODO: Implement peer-to-peer connection handling
-                    } else if (listeningSC == addrServerListenerChannel) {
-                        // Don't need addressing server connection handling at this stage of the project
-                    }
-                    /*
-                     * Only keys tied to channels that were registered with OP_READ
-                     * (as we are doing above with `newChannel`) will return True when invoking `isReadable()`.
-                     * Typically, only a SocketChannel would ever be registered with OP_READ.
-                     */
-                    if (key.isReadable()) {
-                    /*
-                     This is where persistent channel I/O occurs.
-                     Not sure how you want to handle differentiating between chat server and client Channels.
-                     I was thinking....
-                     clientID = clientChannels.get(newChannel)
-                     if (int clientID != null) then it must be a client
-                     else it must be a chat server
-                     */
-
-                    }
-
-
-                }
-            }
-        }
-    }
+//    public void mainEventLoop() throws IOException {
+//        while (true) {
+//            // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
+//            selector.select();
+//            /*
+//             * When you register a channel with a selector, you get back a SelectionKey.
+//             * Here, we iterate through all keys (channels) that are "ready" for an I/O operation.
+//             * We know that at least one such key exists because of the preceding `selector.select()` method invocation.
+//             */
+//            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+//
+//            while (keys.hasNext()) {      // Loop until there are no more keys (channels with I/O events).
+//                SelectionKey key = keys.next();    // Retrieve a new key
+//                keys.remove();                     // Remove the key used in the last iteration of this loop.
+//
+//                if (!key.isValid()) {               // skip current loop iteration
+//                    continue;
+//                }
+//
+//                /* Establishing a new connection. `isAcceptable` returns true if a ServerSocketChannel registered
+//                 *  with `selector` is ready to accept (detected) a new connection. SocketChannel's registered with
+//                 *   the `selector should not appear here.
+//                 */
+//                if (key.isAcceptable()) {
+//                    /*
+//                     * `listeningSC` is not a "new" channel - it is one of the ServerSocketChannels we registered
+//                     *  with the selector in the `initializeChannels` method.
+//                     */
+//                    ServerSocketChannel listeningSC = (ServerSocketChannel) key.channel();
+//                    // We use a `SocketChanel` for established connections. `newChannel.isAcceptable()` will ALWAYS return False
+//                    SocketChannel newChannel = listeningSC.accept();
+//                    newChannel.configureBlocking(false); // Set channel to "non-blocking" I/O
+//                    /*
+//                     * Register the `newChannel` with the `selector` which will add a `SelectionKey` for that
+//                     * channel and monitor it until it is explicitly closed.
+//                     */
+//                    newChannel.register(selector, SelectionKey.OP_READ); // SocketChannel set to persistent non-blocking I/O
+//                    if (listeningSC == clientListenerChannel) {
+//                        // TODO: Implement Client connection handling
+//                        // Add the persistent channel for this client to clientChannels.put()
+//                    } else if (listeningSC == peerListenerChannel) {
+//                        // TODO: Implement peer-to-peer connection handling
+//                    } else if (listeningSC == addrServerListenerChannel) {
+//                        // Don't need addressing server connection handling at this stage of the project
+//                    }
+//                    /*
+//                     * Only keys tied to channels that were registered with OP_READ
+//                     * (as we are doing above with `newChannel`) will return True when invoking `isReadable()`.
+//                     * Typically, only a SocketChannel would ever be registered with OP_READ.
+//                     */
+//                    if (key.isReadable()) {
+//                    /*
+//                     This is where persistent channel I/O occurs.
+//                     Not sure how you want to handle differentiating between chat server and client Channels.
+//                     I was thinking....
+//                     clientID = clientChannels.get(newChannel)
+//                     if (int clientID != null) then it must be a client
+//                     else it must be a chat server
+//                     */
+//
+//                    }
+//
+//
+//                }
+//            }
+//        }
+//    }
 
     public static void main(String[] args) {
         // This timeout is necessary for proper output in the new terminal window...
         // ... without it, the initial output to console occurs before the terminal is open
-        try {
-            TimeUnit.SECONDS.sleep(10);
-        } catch (Exception e) {
-            System.err.println(e.getMessage());
-        }
+//        try {
+//            TimeUnit.SECONDS.sleep(1);
+//        } catch (Exception e) {System.err.println(e.getMessage());}
+//        // >------------------- CODE AIDAN ADDED ------------------<
+//        ChatServer server = new ChatServer();
+//        try {
+//            server.mainEventLoop();
+//        } catch (Exception ioe) {
+//            System.err.println("Main event loop in Chat Server failure - process halted.\nError message: " + ioe.getMessage());
+//            ioe.printStackTrace();
+//        }
+
+
 
         // Read the port from the environment variable, default to 2424 if not set
-        ChatServer server = new ChatServer();
-        try {
-            server.initializeChannels();
-        } catch (IOException e) {
-            System.err.println("Failed to initialize channels: " + e.getMessage());
-            e.printStackTrace();
-            return;
-        }
-
-
-        int port = Integer.parseInt(System.getenv().getOrDefault("CHATSERVER_PORT", "2424"));
-        System.out.printf("Chat Server PORT: %d%n", port);
+        int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "2424"));
+        String ADDRESS_SERVER_IP = System.getenv().getOrDefault("ADDRESS_SERVER_IP", "0.0.0.0");
         System.out.printf("Chat Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
-        System.out.println("Host address section \n");
-        // Get the HOST_ADDRESS from the environment variable
-        String hostAddress = System.getenv().getOrDefault("HOST_ADDRESS", "0.0.0.0");
-        System.out.printf("Host address: %s%n", hostAddress);
-        // Attempt to connect to the addressing server
-        boolean handshakeSuccessful = false;
-        int attempts = 1;
-        while (!handshakeSuccessful && attempts < 11) {
-            System.out.print("ChatServer is attempting to connect to addressing server.......");
-            try (
-                SocketChannel addrServerChannel = SocketChannel.open()) {
-                addrServerChannel.configureBlocking(false);
-                addrServerChannel.connect(new InetSocketAddress(hostAddress, Integer.parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "49802"))));
-                // Ensure the connection is established before writing
-                while (!addrServerChannel.finishConnect()) {
-                    // Wait or perform other tasks
-                }
-                // Create a JSON object with the necessary information
-                Map<String, Object> handshakeData = new HashMap<>();
-                handshakeData.put("addrServerPort", Integer.parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "49802")));
-                handshakeData.put("chatClientPort", port);
-                handshakeData.put("chatPeerPort", Integer.parseInt(System.getenv().getOrDefault("CS_PEER_PORT", "2425")));
-                handshakeData.put("maxClientCount", 30);
-
-                // Serialize the handshake data to JSON
-                ObjectMapper objectMapper = new ObjectMapper();
-                String jsonMessage = objectMapper.writeValueAsString(handshakeData);
-                ByteBuffer buffer = ByteBuffer.wrap(jsonMessage.getBytes(StandardCharsets.UTF_8));
-                while (buffer.hasRemaining()) {
-                    addrServerChannel.write(buffer);
-                }
-
-                // Read the acknowledgment from the server
-                buffer.clear();
-                addrServerChannel.read(buffer);
-                buffer.flip();
-                String ack = StandardCharsets.UTF_8.decode(buffer).toString();
-                System.out.println(ack);
-
-                handshakeSuccessful = true;
-            } catch (IOException e) {
-                System.err.println("An error occurred while attempting to register with the addressing server: " + e.getMessage());
-                e.printStackTrace();
-            }
-
-            if (!handshakeSuccessful) {
-                System.err.println("Handshake with addressing server failed. Trying to connect again");
-                // Implementing a timeout
-                try {
-                    TimeUnit.SECONDS.sleep(attempts);
-                } catch (Exception e) {
-                    System.err.println(e.getMessage());
-                }
-            }
-            attempts++;
-        }
-
-        if (!handshakeSuccessful) {
-            System.err.println("Failed to complete handshake with addressing server after 10 attempts. Exiting.");
-            return;
-        }
-
-        
-        try {
-            server.mainEventLoop();
-        } catch (Exception ioe) {
-            System.err.println("Main event loop in Chat Server failure - process halted.\nError message: " + ioe.getMessage());
-            ioe.printStackTrace();
-        }
 
         // Start the message broadcasting thread
         new Thread(ChatServer::broadcastMessages).start();
 
         try (ServerSocket serverSocket = new ServerSocket(port)) {
+            System.out.print("ChatServer is attempting to connect to addressing server.......");
+            try (Socket addrServerSocket = new Socket(ADDRESS_SERVER_IP, 49802)) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(addrServerSocket.getInputStream(), StandardCharsets.UTF_8));
+                String ack = reader.readLine();
+                System.out.println(ack);
+            } catch (IOException e) {
+                System.err.println("An error occured while attempting to register with the addressing server: " + e.getMessage());
+                e.printStackTrace();
+            }
+
             System.out.println("ChatServer is listening on port " + port);
 
             while (true) {

@@ -1,4 +1,4 @@
-package io.github.cpsc559.team16.tests.addressingservertests;
+package io.github.cpsc559.team16.tests.addressingserver_tests;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -7,8 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.github.cpsc559.team16.addressingserver.ChatServerInfo;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.addressingserver.AddressingServer;
+import io.github.cpsc559.team16.addressingserver.ChatServerRegistry;
 
 
 public class TestAddressingServer {
@@ -20,15 +21,15 @@ public class TestAddressingServer {
         // Test AddressingServer functionalities
         System.out.println("\nStarting tests for AddressingServer...");
         AddressingServer addressingServer = new AddressingServer();
+        ChatServerRegistry registry = new ChatServerRegistry();
+        // Create a dummy address log with one ChatServerRecord instance
+        Map<Long, ChatServerRecord> dummyLog = new HashMap<>();
+        dummyLog.put(234L, new ChatServerRecord(234L, "192.168.1.666", 2424, 2425,2426, 30));
+        registry.setChatServerRecords(dummyLog);
 
-        // Create a dummy address log with one ChatServerInfo instance
-        Map<Long, ChatServerInfo> dummyLog = new HashMap<>();
-        dummyLog.put(1L, new ChatServerInfo(234L, "192.168.1.666", 3000, 1234, 5));
-        addressingServer.setChatServerRecords(dummyLog);
-
-        // Use debugPrint to print the ChatServerInfo details
-        System.out.println("Debug printing ChatServerInfo from AddressingServer's address log:");
-        addressingServer.debugPrintServer(dummyLog.get(1L));
+        // Use debugPrint to print the ChatServerRecord details
+        System.out.println("Debug printing ChatServerRecord from AddressingServer's address log:");
+        registry.debugPrintServer(dummyLog.get(1L));
 
         // Attempt to connect to the Addressing Server as a chat-server
         try (Socket socket = new Socket("host.docker.internal", 49802)) {
@@ -41,7 +42,7 @@ public class TestAddressingServer {
         }
 
         System.out.println("Debug printing all info from AddressingServer's address log:");
-        addressingServer.debugPrintServer(dummyLog.get(1L));
+        registry.debugPrintServer(dummyLog.get(1L));
 
         // Attempt to connect to the AddressingServer as a client
         try (Socket socket = new Socket("host.docker.internal", 49800)) {

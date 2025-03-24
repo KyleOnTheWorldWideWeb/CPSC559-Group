@@ -1,0 +1,16 @@
+FROM gradle:8-jdk21-alpine
+WORKDIR /app/
+COPY . .
+WORKDIR /app/
+# Debug commands
+RUN ls
+RUN uname -a
+RUN java --version
+RUN which gradle
+RUN gradle --version
+RUN chmod +x ./gradlew
+RUN ls -la
+RUN ./gradlew tasks --all
+
+# Don't try to build yet
+CMD ["bash"]
