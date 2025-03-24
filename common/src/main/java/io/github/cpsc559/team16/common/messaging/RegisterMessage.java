@@ -28,7 +28,7 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      *   {
      *   "msgType": "REGISTER",
      *   "objectType": "",
-     *   "senderPID": 72,
+     *   "senderPID":
      *   "senderRole": "CHATSERVER",
      *   "targetRole": "PRIMARY",
      *   "payload": { null }

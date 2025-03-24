@@ -36,7 +36,7 @@ public class AddrServerRegistry {
      */
     public void putAddrServerRecord(Long id, AddrServerRecord record) {
         addrServerRecords.put(id, record);
-        debugPrintAllServers();
+        //debugPrintAllServers();
     }
 
     /**
@@ -55,7 +55,7 @@ public class AddrServerRegistry {
             System.out.println("Inserting new AddrServerRecord for ID: " + id);
         }
         addrServerRecords.put(id, record);
-        debugPrintAllServers();
+        //debugPrintAllServers();
     }
 
     public boolean deregisterServer(Long id) {
@@ -75,7 +75,7 @@ public class AddrServerRegistry {
      *
      * @return serverPID The unique process ID generated for the newly registered {@code AddrServer}.
      */
-    public long registerAddrServer(Long serverPID, String hostAddress, int clientPort, int peerPort, int chatServerPort, ServerRole role) {
+    public void registerAddrServer(Long serverPID, String hostAddress, int clientPort, int peerPort, int chatServerPort, ServerRole role) {
         try {
             AddrServerRecord newServer = new AddrServerRecord(serverPID, hostAddress, clientPort, peerPort, chatServerPort, role);
             AddrServerRecord previous = this.addrServerRecords.put(serverPID, newServer);
@@ -84,9 +84,9 @@ public class AddrServerRegistry {
                 System.err.println("WARNING: A server with ID " + serverPID + " already existed. Overwriting existing entry.");
             } else {
                 System.out.println("\n**AddressingServer** successfully registered with ID: " + serverPID + "\n");
-                debugPrintAllServers();
+                //debugPrintAllServers();
             }
-            return serverPID;
+            //return serverPID;
         } catch (Exception e) {
             System.err.println("Error registering addressing server: " + e.getMessage());
             throw e;
@@ -98,6 +98,7 @@ public class AddrServerRegistry {
      */
     public void debugPrintServer(AddrServerRecord s) {
         System.out.println("---------- AddrServerRecord Record -----------");
+        System.out.printf("Network PID : %s%n", s.getPID());
         System.out.printf("Host Address : %s%n", s.getHostAddress());
         System.out.printf("Client Port  : %d%n", s.getClientPort());
         System.out.printf("Peer Port    : %d%n", s.getPeerPort());
