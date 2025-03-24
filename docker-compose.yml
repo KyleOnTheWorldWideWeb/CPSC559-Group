@@ -25,12 +25,10 @@ services:  # Defines the services (Docker containers) that will be run.
         - AS_CHATSERVER_PORT=49802
         - AS_NETWORK=chat_network
         - AS_ROLE=PRIMARY
-        - HOST_ADDRESS=255.255.0.2
+      ports: ["49800:49800", "49801:49801","49802:49802"]
       networks:
         chat_network:
-          ipv4_address: 255.255.0.2
-      deploy:
-        replicas: 1
+          ipv4_address: 172.20.0.2
 
   addressingserver_replicas:
     image: addressingserver:latest
@@ -41,55 +39,52 @@ services:  # Defines the services (Docker containers) that will be run.
       - AS_CHATSERVER_PORT=49802
       - AS_NETWORK=chat_network
       - AS_ROLE=BACKUP
-      - HOST_ADDRESS=255.255.0.2
-
-  chatserver:  # Name of the chat server service
-    image: chatserver:latest  # The Docker image name and tag used to build this service
-    build:
-      context: ./chatserver  # The directory containing the Dockerfile for building this service
-      dockerfile: Dockerfile  # The specific Dockerfile to use for building the image (in the directory referenced above)
-    container_name: chatserver_container
+      - HOST_ADDRESS=172.20.0.2
     networks:
       - chat_network
     deploy:
-      replicas: 1
+      replicas: 3
 
   chatserver:
     image: chatserver:latest
     container_name: chatserver
     profiles: ["chatserver", "main-single"]
-      - chat_network  # Connects this service to the 'chat_network' for communication
-    ports: # NOTE: Port mapping simply exposes the container port to the local host - the container will not have an "outward facing" network address.
-      - "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication).
-
-
-    # we can use volumes to create persistent data storage:
-    # e.g. if we want to use a DB which stores usernames and PW's, we can use a volume
-    # in combination with an SQL database to store information during execution that will remain
-    # even after the container is stopped or deleted.
-  client:  # Name of the client service
-    image: client:latest  # The Docker image name and tag for the client service
     build:
-      context: ./client  # The directory where the Dockerfile is located for this service
-      dockerfile: Dockerfile  # Specifies the Dockerfile to use for building the client image
-    networks: # NOT ACCEPTABLE LONG TERM COMMUNICATION METHOD
-      - chat_network  # Connects the client to the 'chat_network' for communication
-
-  addressingserver:  # Name of the addressing server service
-    image: addressingserver:latest  # The Docker image name and tag for this service
-    build:
-      context: ./addressingserver  # The directory where the Dockerfile is located for this service
-      dockerfile: Dockerfile  # Specifies the Dockerfile to use for building the image
+      dockerfile: Dockerfile.chatserver
+    ports: ["2424:2424", "2425:2425"]
+    environment:
+      - CS_PORT=2424
+      - CS_PEER_PORT=2425
+      - CS_ADDRSERVER_PORT=49802
+      - ADDRESS_SERVER_IP=172.20.0.2
     networks:
-      - chat_network  # Connects this service to the 'chat_network' for inter-service communication
+      - chat_network
+
+  client:
+    image: client:latest
+    container_name: client
+    profiles: ["client", "main-single"]
+    build:
+      dockerfile: Dockerfile.client
+    ports: ["3000:3000",]
+    environment:
+      - CLIENT_PORT=3000
+      - HOST_ADDRESS=client
+      - ADDRESS_HOST=172.20.0.2
+    networks:
+      - chat_network
+    tty: true        # You need these two lines to make the client interactive
+    stdin_open: true # Non-optional for interactive shell input
 
 networks:
-  chat_network:  # Defines a custom network for communication between services
-    driver: bridge  # Uses a bridge network, allowing containers to communicate with each other
-
+  chat_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 # This is different from the volume we define in a service. This is how we can ensure that any data...configs:
 # ... that is created during the build or execution of the container(s), IS NOT deleted when the container is removed.
 # This is very powerful because it allows us to update our repository (new version), and in turn build new containers...configs:
 # ... without losing the data (chat logs) from previous versions.
-volumes:
-  db-data:  # Defines a named volume (currently unused in this config but can be used for persistent storage)
+# volumes:
+#   db-data:  # Defines a named volume (currently unused in this config but can be used for persistent storage)

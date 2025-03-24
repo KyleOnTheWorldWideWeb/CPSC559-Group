@@ -207,6 +207,7 @@ public class ChatServer {
 
         // Read the port from the environment variable, default to 2424 if not set
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "2424"));
+        String ADDRESS_SERVER_IP = System.getenv().getOrDefault("ADDRESS_SERVER_IP", "0.0.0.0");
         System.out.printf("Chat Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
 
         // Start the message broadcasting thread
@@ -218,7 +219,7 @@ public class ChatServer {
         // implementation.
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.print("ChatServer is attempting to connect to addressing server.......");
-            try (Socket addrServerSocket = new Socket("host.docker.internal", 49802)) {
+            try (Socket addrServerSocket = new Socket(ADDRESS_SERVER_IP, 49802)) {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(addrServerSocket.getInputStream(), StandardCharsets.UTF_8));
                 String ack = reader.readLine();
                 System.out.println(ack);
