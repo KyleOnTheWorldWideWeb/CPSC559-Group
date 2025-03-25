@@ -26,7 +26,7 @@ public class PingMessage extends BaseAddrServerMessage<String> {
      *
      * @param senderPID The ID of the process sending the ping.
      */
-    private PingMessage(long senderPID) {
+    public PingMessage(long senderPID) {
         super(MessageTypes.ELECTION, ObjectTypes.NONE, senderPID, "", "", "");
     }
 }
