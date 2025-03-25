@@ -86,7 +86,7 @@ public class PeerManager {
         peerChannels.put(socketChannel, nioChannel);
 
         record.setHostAddress(replicaHostAddr);
-        record.setServerID(peerPID);
+        record.setPID(peerPID);
         // Send all current records. This helps avoid race conditions.
         this.sendAllAddrServerRecords(primaryPID, nioChannel);
 
@@ -152,7 +152,7 @@ public class PeerManager {
      * Broadcasts a single {@link ChatServerRecord} to all connected peer replicas.
      * <p>
      * This method is used by the PRIMARY {@code AddressingServer} to notify all registered
-     * REPLICA servers about a new or updated {@code AddrServerRecord} - a necessary part of
+     * REPLICA servers about a new or updated {@code ChatServerRecord} - a necessary part of
      * maintaining network consistency.
      * </p>
      *
@@ -211,7 +211,7 @@ public class PeerManager {
             try {
                 channel.sendMessage(json);
             } catch (IOException e) {
-                System.err.println("Failed to send to peer PID " + channel.getServerPID() + ": " + e.getMessage());
+                System.err.println("Failed to send to process with PID " + channel.getServerPID() + ": " + e.getMessage());
             }
         }
     }
@@ -270,6 +270,10 @@ public class PeerManager {
      */
     public void updateRecords(AddrServerRecord record) {
         registry.updateOrInsertRecord(record);
+    }
+
+    public void broadcastClientCountUpdate(int newClientCount, Long csPID, Long primaryPID) {
+
     }
 
     /**

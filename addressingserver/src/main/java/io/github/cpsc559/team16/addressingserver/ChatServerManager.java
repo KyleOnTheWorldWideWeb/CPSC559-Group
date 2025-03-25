@@ -186,27 +186,5 @@ public class ChatServerManager {
         return record;
     }
 
-    /**
-     * Handles a client connection by sending the address of an active chat server.
-     * <p>
-     * This method calls {@code chatServerRegistry.getActiveHost()} to determine the active chat server address.
-     * If an active host is found, its address (formatted as "hostAddress:clientPort") is sent to the client.
-     * Otherwise, a message indicating no active host is available is sent.
-     * </p>
-     * <p>
-     * Since the connection does not need to persist in either case, the message is sent, and the channel is closed.
-     *</p>
-     * @param channel the {@link SocketChannel} representing the client connection.
-     * @param nioChannel the {@link NIOMessageChannel}
-     * @throws IOException if an I/O error occurs while writing to or closing the channel.
-     *
-     * @see io.github.cpsc559.team16.addressingserver.ChatServerRegistry#getActiveHost()
-     * For details about ChatServer host address retrieval
-     */
-    private void connectClientToHost(SocketChannel channel, NIOMessageChannel nioChannel) throws IOException {
-        Optional<String> activeHost = registry.getActiveHost();
-        // If there are no active hosts with room, send an ACK to notify the Client there is no network access at this time.
-        String message = activeHost.orElse("No Host");
 
-    }
 }

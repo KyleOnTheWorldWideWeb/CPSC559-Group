@@ -78,4 +78,6 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
                 DEFAULT_PID, null, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
         return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
     }
+
+
 }
