@@ -77,7 +77,6 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
             //case "REGISTER" -> handleRegistration(channel, nioChannel, message);
             case "UPDATE" -> handleUpdate(channel, nioChannel, message);
             case "REQUEST" -> handleRequest(channel, nioChannel, message);
-            case "PING" -> handlePing(channel, nioChannel, message);
             case "NOTIFICATION" -> handleNotification(channel, nioChannel, message);
             case "ELECTION" -> handleElection(channel, nioChannel, message);
             default -> System.err.println("Unrecognized message type: " + message.getMsgType());
@@ -203,17 +202,6 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
             }
             default -> System.err.println("Unrecognized sender role for REQUEST: " + message.getSenderRole());
         }
-    }
-
-
-    /**
-     * Handles a ping request, typically used for failure detection.
-     *
-     * @param channel The channel from which the ping request originated.
-     * @param message The received ping message.
-     */
-    private void handlePing(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        server.getPingManager().processPing(message.getSenderPID());
     }
 
     /**
