@@ -309,7 +309,6 @@ public class AddrServerNetworkManager implements NetworkManager {
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();
 
-
             // Iterate through all keys (channels) that are "ready" for an I/O operation.
             Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
 
@@ -328,9 +327,9 @@ public class AddrServerNetworkManager implements NetworkManager {
                     ServerSocketChannel listenerSC = (ServerSocketChannel) key.channel();
                     SocketChannel channel = listenerSC.accept();
 
-                    if (channel != null) { // Register the channel with the selector and set it to read.
-                        openPersistentChannel(channel);
-                    }
+                    // Connection must have closed before we got to the request -> skip to next event.
+                    if (channel == null) { continue; }
+                    channel.configureBlocking(true); // Allow blocking read for initial handshake only. We need to ensure the entire message has arrived.
 
                     if (listenerSC.equals(healthCheckListenerChannel)) {
                         try {
@@ -339,59 +338,97 @@ public class AddrServerNetworkManager implements NetworkManager {
                             while (buffer.hasRemaining()) {
                                 channel.write(buffer);
                             }
-                            channel.close(); // one-shot response
+                            channel.close(); // one-time response -> close channel
                         } catch (IOException e) {
                             System.err.println("Failed to respond to health check ping: " + e.getMessage());
                         }
+                        continue;
                     }
-                    // Check to see if the connection came through the ChatServer or PeerServer port. If they did,
-                    // store these connections as persistent channels for network I/O in our respective managers.
-                    else if (listenerSC.equals(chatServerListenerChannel)) {
-                        chatServerManager.getChannels().put(channel, new NIOMessageChannel(channel));
+                    NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
+                    String firstMsg = nioChannel.receiveMessage();
+
+                    if (firstMsg == null) {
+                        System.err.println("Connection dropped: no initial message received.");
+                        channel.close();
+                        continue;
+                    }
+                    // We only accept connections that begin with REGISTER messages.
+                    BaseAddrServerMessage<?> message = deserializeMessage(firstMsg);
+                    if (message == null || !message.getMsgType().equals("REGISTER")) {
+                        System.err.println("Connection rejected: initial message must be REGISTER.");
+                        channel.close();
+                        continue;
+                    }
+
+                    if (listenerSC.equals(chatServerListenerChannel)) {
+                        openPersistentChannel(channel);
+                        chatServerManager.getChannels().put(channel, nioChannel);
                     } else if (listenerSC.equals(peerListenerChannel)) {
-                        peerManager.getPeerChannels().put(channel, new NIOMessageChannel(channel));
+                        openPersistentChannel(channel);
+                        peerManager.getPeerChannels().put(channel, nioChannel);
                     }
-                    // We don't store persistent channels for clients.
+                        /*
+                         The only port we haven't checked by this point is the one designated for the client.
+                         We don't store persistent channels for clients.
+                         */
+                    executorService.submit(() -> {
+                        try {
+                            readDispatcher.handleRegistration(channel, nioChannel, message);
+                            if (!isPersistentConnection(channel)) {
+                                // Client process -> close the channel immediately after registration.
+                                channel.close();
+                                key.cancel();
+                            }
+                        } catch (ConnectionClosedException cce) {
+                            if (isPersistentConnection(channel)) {
+                                cleanupPersistentConnection(channel, key, true);
+                            } else {
+                                try {
+                                    channel.close();
+                                } catch (IOException ignored) {
+                                }
+                                key.cancel();
+                            }
+                        } catch (Exception e) {
+                            if (isPersistentConnection(channel)) {
+                                cleanupPersistentConnection(channel, key, false);
+                            } else {
+                                try {
+                                    channel.close();
+                                } catch (IOException ignored) {
+                                }
+                                key.cancel();
+                            }
+                        }
+                    });
                 }
                 /*
                  * Handling read events for registered channels.
                  * Only keys tied to channels registered with OP_READ will trigger `isReadable()`.
                  */
-                if (key.isReadable()) {
+                else if (key.isReadable()) {
                     SocketChannel channel = (SocketChannel) key.channel();
 
-                    // Retrieve existing NIOMessageChannel for persistent connections, or create a new one for clients
-                    //NIOMessageChannel persistentNioChannel = null;
+                    // Retrieve existing NIOMessageChannel for persistent connections.
                     final NIOMessageChannel persistentNioChannel = getKnownPersistentChannel(channel);
-
+                    // If it doesn't exist, close the channel and cancel the event key to prevent errors.
                     if (persistentNioChannel == null) {
-                        final NIOMessageChannel tempNioChannel = new NIOMessageChannel(channel);
-
-                        executorService.submit(() -> {
-                            try {
-                                // Dispatch the message
-                                readDispatcher.dispatch(channel, tempNioChannel);
-                                // Ensure the SocketChannel isn't a persistent connection that needs to be removed from the HashMaps
-                                if (!isPersistentConnection(channel)) {
-                                    channel.close();
-                                    key.cancel();
-                                }
-                            } catch (IOException e) {
-                                System.err.println("Error processing client request: " + e.getMessage());
-                                try {
-                                    channel.close();
-                                } catch (IOException ignored) {} // if the channel is already closed, we don't need to do anything.
-                                key.cancel();
-                            }
-                        });
+                        key.cancel();
+                        channel.close();
                     }
-                    // Handle persistent connection reads (Chat Servers & Replicas)
+                    // Handle persistent connection input/read events (Chat Servers & Replicas)
                     else {
+                        // Temporarily disable OP_READ to avoid re-triggering on every incoming byte.
+                        key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
                         // Dispatch message for processing. This will throw errors if the connection is closed or I/O operations fail.
                         // Handle persistent connections asynchronously
                         executorService.submit(() -> {
                             try {
                                 readDispatcher.dispatch(channel, persistentNioChannel);
+                                // Now that the data on the input channel has been processed, re-enable read events.
+                                if (key.isValid()) {
+                                    key.interestOps(key.interestOps() | SelectionKey.OP_READ);
+                                }
                             } catch (ConnectionClosedException cce) {
                                 cleanupPersistentConnection(channel, key, true);
                             } catch (IOException ioe) {
@@ -399,25 +436,6 @@ public class AddrServerNetworkManager implements NetworkManager {
                             }
                         });
                     }
-
-//                        }
-//                    } catch (ConnectionClosedException cce) {
-//                        NIOMessageChannel ch = getKnownPersistentChannel(channel);
-//                        if (ch != null) {
-//                            Long pid = ch.getServerPID();
-//                            peerManager.removeChannel(channel);
-//                            chatServerManager.removeChannel(channel);
-//                            System.out.println("Removing closed peer (Server ID: " + pid + "): " + cce.getMessage());
-//                        }
-//                        key.cancel();
-//                        channel.close();
-//                    } catch (IOException e) {
-//                        System.err.println("Error reading from channel: " + e.getMessage());
-//                        key.cancel();
-//                        try {
-//                            channel.close();
-//                        } catch (IOException ignored) {}
-//                    }
                 }
             }
         }

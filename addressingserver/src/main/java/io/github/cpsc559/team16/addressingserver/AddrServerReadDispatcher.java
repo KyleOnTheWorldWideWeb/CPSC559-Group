@@ -73,7 +73,8 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     private void dispatchMsgType(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getMsgType()) {
             case "ACK" -> handleAck(channel, nioChannel, message);
-            case "REGISTER" -> handleRegistration(channel, nioChannel, message);
+            // I have removed this case so that ONLY a new connection request can register with the Primary. This is handled in the main event loop.
+            //case "REGISTER" -> handleRegistration(channel, nioChannel, message);
             case "UPDATE" -> handleUpdate(channel, nioChannel, message);
             case "REQUEST" -> handleRequest(channel, nioChannel, message);
             case "PING" -> handlePing(channel, nioChannel, message);
@@ -95,7 +96,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
                 Long assignedPID = Long.parseLong((String) message.getPayload());
                 server.getConfig().setPID(assignedPID);
                 nioChannel.setServerPID(assignedPID);
-                System.out.println("This Replica has registered itself with PID: " + server.getConfig().getPID());
+                System.out.println("Registration ACK received. This process has been assigned PID #" + server.getConfig().getPID());
             }
             default -> System.err.println("Unrecognized ACK response: " + message.getObjectType());
         }
@@ -107,35 +108,37 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      * @param channel The channel from which the message originated.
      * @param message The received update message.
      */
-    private void handleRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
+    @Override
+    public void handleRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message)
+            throws IOException {
         switch (message.getSenderRole()) {
+            case "CLIENT" -> {
+                // WE CAN TUNE THE RESPONSE HERE. FOR NOW I WILL SIMPLY DO AN ACK WITH THE IP ADDRESS AND PORT NUMBER.
+                //this.server.getChatServerRegistry().getActiveHost()
+            }
             case "CHATSERVER" -> {
-                try {
-                    /* Add the REPLICA to the {@code AddressingServerRegistry}, store the persistent channel
-                    in {@code ChatServerManager}, and broadcast the record to ALL chat servers in the network.
-                    */
-                    ChatServerRecord record = this.server.getChatServerManager().registerServer(channel, nioChannel,
-                            this.server.generatePID(), pid, message.safeCastPayload(ChatServerRecord.class));
-                    // Broadcast the new record to all REPLICA {@code AddressingServer}'s in the network.
-                    this.server.getPeerManager().broadcastChatServerRecord(this.server.getConfig().getPID(), record);
-                } catch (IOException ioe) {
-                    System.err.println("Network error occurred during REPLICA registration: " + ioe.getMessage());
-                }
+                ChatServerRecord record = this.server.getChatServerManager().registerServer(
+                        channel, nioChannel,
+                        this.server.generatePID(), pid,
+                        message.safeCastPayload(ChatServerRecord.class)
+                );
+                this.server.getChatServerRegistry().debugPrintAllServers();
+                this.server.getPeerManager().broadcastChatServerRecord(this.server.getConfig().getPID(), record);
             }
             case "REPLICA" -> {
-                try {
-                    // Add the REPLICA to the {@code AddressingServerRegistry}, store the persistent channel in {@code PeerManager}, and broadcast the record to ALL replicas.
-                    AddrServerRecord record = this.server.getPeerManager().registerPeer(channel, nioChannel,
-                            this.server.generatePID(), pid, message.safeCastPayload(AddrServerRecord.class));
-                    // Broadcast the new record to all {@code ChatServer}'s in the network.
-                    this.server.getChatServerManager().broadcastAddrServerRecord(this.server.getConfig().getPID(), record);
-                } catch (IOException ioe) {
-                    System.err.println("Network error occurred during REPLICA registration: " + ioe.getMessage());
-                }
+                AddrServerRecord record = this.server.getPeerManager().registerPeer(
+                        channel, nioChannel,
+                        this.server.generatePID(), pid,
+                        message.safeCastPayload(AddrServerRecord.class)
+                );
+                this.server.getAddrServerRegistry().debugPrintAllServers();
+                this.server.getChatServerManager().broadcastAddrServerRecord(this.server.getConfig().getPID(), record);
             }
-            default -> System.err.println("Unrecognized sender role for REGISTER: " + message.getSenderRole());
+            default -> throw new IllegalArgumentException("Unrecognized sender role for REGISTER: " + message.getSenderRole());
         }
     }
+
+
     private void handleUpdate(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getSenderRole()) {
             case "CHATSERVER" -> {
@@ -153,9 +156,11 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
                     case "AddrServerRecord" -> {
                         System.out.println("REPLICA is in switch statement for updating AddrServerRecord from PRIMARY");
                         server.getPeerManager().updateRecords(message.safeCastPayload(AddrServerRecord.class));
+                        this.server.getAddrServerRegistry().debugPrintAllServers();
                     }
                     case "ChatServerRecord" -> {
                         server.getChatServerManager().updateRecords(message.safeCastPayload(ChatServerRecord.class));
+                        this.server.getChatServerRegistry().debugPrintAllServers();
                     }
                     // server.updateAddrServerInfo(channel, nioChannel, message.getPayload());
                 }
@@ -165,6 +170,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
                     case "AddrServerRecord" -> {
                         System.out.println("REPLICA is in switch statement for updating AddrServerRecord from REPLICA");
                         server.getPeerManager().updateRecords(message.safeCastPayload(AddrServerRecord.class));
+                        this.server.getAddrServerRegistry().debugPrintAllServers();
                     }
                     case "ChatServerRecord" -> {
 

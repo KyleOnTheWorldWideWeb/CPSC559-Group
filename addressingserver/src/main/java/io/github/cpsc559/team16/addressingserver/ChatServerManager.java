@@ -16,30 +16,34 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatServerManager {
 
 
-    private final Map<SocketChannel, NIOMessageChannel> chatServerChannels;
-    public Map<SocketChannel, NIOMessageChannel> getChannels() {
-        return chatServerChannels;
-    }
-
-    public void removeChannel(SocketChannel channel) {
-        NIOMessageChannel ch = chatServerChannels.remove(channel);
-        if (ch != null) {
-            System.out.println("Removed peer with network PID: " + ch.getServerPID());
-        } else {
-            System.out.println("No matching chat server found for the given channel.");
-        }
-    }
-
     /**
      * This Hashmap is used by each AddressingServer to keep {@code ChatServerRecord}'s
      * of all chat servers in the network. It is maintained by the ChatServerRegistry class.
      */
     private ChatServerRegistry registry;
 
+    private final Map<SocketChannel, NIOMessageChannel> chatServerChannels;
+
     public ChatServerManager(ChatServerRegistry registry) {
         this.chatServerChannels = new ConcurrentHashMap<>();
         this.registry = registry;
     }
+
+    public Map<SocketChannel, NIOMessageChannel> getChannels() {
+        return chatServerChannels;
+    }
+
+    public void removeChannel(SocketChannel channel) {
+        NIOMessageChannel ch = chatServerChannels.remove(channel);
+        if (ch != null) { // We do not ever map keys to null values, so this check does ensure that a key:value pair was present.
+            // Remove this server from the registry so that if it registers again, it doesn't create a duplicate entry.
+            this.registry.getRecords().remove(ch.getServerPID());
+            System.out.println("Removed peer with network PID: " + ch.getServerPID());
+        } else {
+            System.out.println("No matching chat server found for the given channel.");
+        }
+    }
+
 
     /**
      * Updates or inserts a record into the shared ChatServerRegistry registry.
@@ -163,14 +167,21 @@ public class ChatServerManager {
 
         record.setHostAddress(chatServerHostAddr);
         record.setPID(peerPID);
+        // Send all current records. This helps avoid race conditions.
+        this.sendAllChatServerRecords(primaryPID, nioChannel);
+        // Add the new record - this might not be inserted quickly enough to call the sendAll method directly after.
         registry.putChatServerRecord(peerPID, record);
 
         System.out.println("ChatServer registered: " + chatServerHostAddr + " (PID: " + peerPID + ")");
 
+        // Send the new record explicitly. Race conditions can occur where the hashmap doesn't update quick enough.
+        UpdateMessage<ChatServerRecord> selfUpdate =
+                UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
+        nioChannel.sendMessage(selfUpdate.toJson());
+
+        // Send ACK to notify the server it has been registered.
         AckMessage ack = new AckMessage("Registered", primaryPID, "PRIMARY", "CHATSERVER", peerPID.toString());
         nioChannel.sendMessage(ack.toJson());
-
-        this.sendAllChatServerRecords(primaryPID, nioChannel);
 
         return record;
     }
