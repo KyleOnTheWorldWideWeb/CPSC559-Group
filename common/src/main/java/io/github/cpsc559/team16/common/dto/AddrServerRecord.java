@@ -65,8 +65,8 @@ public class AddrServerRecord extends ServerRecord {
 
     // --- Setters for fields that need to be updated after construction ---
 
-    public void setServerID(Long serverID) {
-        super.setServerID(serverID);
+    public void setPID(Long serverID) {
+        super.setPID(serverID);
     }
 
     public void setHostAddress(String hostAddress) {

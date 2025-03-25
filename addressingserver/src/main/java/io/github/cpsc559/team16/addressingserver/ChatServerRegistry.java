@@ -1,15 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ChatServerRegistry {
@@ -69,38 +63,25 @@ public class ChatServerRegistry {
         debugPrintAllServers();
     }
 
-    public boolean deregisterServer(Long id) {
+    public boolean removeRecordByKey(Long id) {
         return chatServerRecords.remove(id) != null;
     }
 
+
     /**
-     * Retrieves the address of an active chat server.
+     * Updates the client count for the {@link io.github.cpsc559.team16.common.dto.ChatServerRecord}
+     * associated with the specified chat server PID.
+     * <p>
+     * This method retrieves the {@code ChatServerRecord} from the internal registry map using the provided
+     * {@code chatServerPid} and sets its client count to the new value given by {@code newClientCount}.
+     * </p>
      *
-     * @return an {@link Optional} containing the active host address in the format "hostAddress:clientPort",
-     *         or {@code Optional.empty()} if no active host exists.
+     * @param newClientCount the new client count value to update in the ChatServerRecord.
+     * @param chatServerPid  the process ID (PID) of the ChatServer whose record is to be updated.
+     * @throws NullPointerException if no ChatServerRecord exists for the given {@code chatServerPid}.
      */
-    public Optional<ChatServerRecord> getActiveServer() {
-        return chatServerRecords.values().stream()
-                .filter(server -> server.getStatus() == ChatServerRecord.ServerStatus.ACTIVE)
-                .findFirst();
-    }
-
-    public Optional<String> getActiveHost() {
-        Optional<ChatServerRecord> activeServer = getActiveServer();
-
-        if (activeServer.isPresent()) {
-            ChatServerRecord host = activeServer.get();
-            try {
-                host.addClient();
-            } catch (ChatServerFullException csfe) {
-                System.err.printf("Chat Server ID #%d Full - attempting to find another.%n", host.getPID());
-                return Optional.empty();
-            }
-            debugPrintServer(host);
-            return Optional.of(host.getHostAddress() + ":" + host.getClientPort());
-        }
-
-        return Optional.empty();
+    public void updateClientCount(int newClientCount, Long chatServerPid) {
+        this.chatServerRecords.get(chatServerPid).setClientCount(newClientCount);
     }
 
     /**

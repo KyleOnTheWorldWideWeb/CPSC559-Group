@@ -18,4 +18,5 @@ public class MessageTypes {
     public static final String NOTIFICATION = "NOTIFICATION";
     public static final String ELECTION = "ELECTION";
     public static final String ACK = "ACK";
+    public static final String CLIENTCOUNT = "RECORDUPDATE";
 }

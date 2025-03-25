@@ -31,7 +31,7 @@ public class AckMessage extends BaseAddrServerMessage<String> {
      * @param message A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
     public AckMessage(String objectType, long senderPID, String senderRole, String targetRole, String message) {
-        super("ACK", objectType, senderPID, senderRole, targetRole, message);
+        super(MessageTypes.ACK, objectType, senderPID, senderRole, targetRole, message);
     }
 
     /**
@@ -45,5 +45,23 @@ public class AckMessage extends BaseAddrServerMessage<String> {
      */
     public static AckMessage ok(String objectType, long senderPID, String senderRole, String targetRole) {
         return new AckMessage(objectType, senderPID, senderRole, targetRole, "OK");
+    }
+
+    /**
+     * Creates an ACK message from the PRIMARY server directed to a CLIENT.
+     * <p>
+     * This factory method generates an {@code AckMessage} where the sender is identified as PRIMARY and the recipient as CLIENT.
+     * The provided {@code ackType} is used as the message's object type (e.g., indicating the nature of the acknowledgment),
+     * and the {@code chatServerHostAddress} serves as the payload, typically representing the host address (and optionally port)
+     * of the chat server.
+     * </p>
+     *
+     * @param ackType              the acknowledgment type used as the object type of the message (e.g., "HostAddress" or "NoHost")
+     * @param senderPID            the process ID of the PRIMARY server sending this message
+     * @param chatServerHostAddress the host address (and optionally port) of the chat server to be communicated to the client
+     * @return an {@code AckMessage} constructed with the specified parameters, ready to be sent from the PRIMARY to the CLIENT
+     */
+    public static AckMessage primaryToClient(String ackType, long senderPID, String chatServerHostAddress) {
+        return new AckMessage(ackType, senderPID, Roles.PRIMARY, Roles.CLIENT, chatServerHostAddress);
     }
 }
