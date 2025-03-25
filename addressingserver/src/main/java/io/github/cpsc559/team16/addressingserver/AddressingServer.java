@@ -219,7 +219,12 @@ public class AddressingServer {
     public void start() throws IOException {
         networkManager.openListenerChannels(config.getClientPort(),
                 config.getReplicaPort(), config.getChatServerPort());
+
+        pingManager.run();
+
         networkManager.startEventLoop(new AddrServerReadDispatcher(this));
+
+        pingManager.shutdown();
     }
 
 
