@@ -49,9 +49,6 @@ public class PingManager implements Runnable {
     /** Executor for scheduled tasks */
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-    /** Flag used to mark whether the process should shut down */
-    private volatile boolean shutdown;
-
     /** Configuration settings */
     private final AddrServerConfig config;
 
@@ -66,6 +63,12 @@ public class PingManager implements Runnable {
 
     /** Ping timeout duration (milliseconds) */
     private int pingTimeout = 3000;
+
+    /** Threshold for missed pings before initiating an election */
+    private int missedPingThreshold = 3;
+
+    /** Number of missed pings */
+    private int missedPingCounter = 0;
 
     /**
      * Constructs a new {@link PingManager} instance.
@@ -142,10 +145,17 @@ public class PingManager implements Runnable {
      */
     private void checkPing() {
         if (receivedPing.getAndSet(false)) {
+            missedPingCounter = 0;
             logger.fine("Ping received. Resetting flag.");
         } else {
+            missedPingCounter++;
             logger.warning("Ping timeout! Initiating leader election.");
-            leaderElectionManager.initiateElection();
+
+            // Initiate election if missed pings exceed threshold
+            if (missedPingCounter >= missedPingThreshold) {
+                missedPingCounter = 0;
+                leaderElectionManager.initiateElection();
+            }
         }
     }
 
@@ -154,8 +164,6 @@ public class PingManager implements Runnable {
      */
     @Override
     public void run() {
-        shutdown = false;
-
         if (isPrimary()) {
             // Schedule primary to send pings at fixed intervals
             scheduler.scheduleAtFixedRate(this::pingReplicas, 0, pingTimeout, TimeUnit.MILLISECONDS);
@@ -172,7 +180,6 @@ public class PingManager implements Runnable {
      */
     public void shutdown() {
         logger.info("Shutting down PingManager...");
-        shutdown = true;
         scheduler.shutdown();
         try {
             if (!scheduler.awaitTermination(2, TimeUnit.SECONDS)) {
