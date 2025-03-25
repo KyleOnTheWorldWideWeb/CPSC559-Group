@@ -11,26 +11,36 @@ import io.github.cpsc559.team16.common.messaging.PingMessage;
 
 /**
  * <h1>PingManager</h1>
- * Manages periodic pings between the primary and replica servers to detect failures.
+ * Responsible for managing heartbeat messages between the primary and replica servers
+ * to detect failures and maintain leader availability in a distributed system.
  * <p>
- * If a replica stops receiving pings, it initiates a leader election. The primary
- * periodically pings all replicas to signal its availability.
+ * The primary server sends periodic pings to all replicas to signal its presence.
+ * Replicas monitor these pings and maintain a suspicion counter. If multiple consecutive 
+ * pings are missed, the replica assumes the primary has failed and initiates a leader election 
+ * via {@link LeaderElectionManager}.
  * </p>
  *
  * <h2>Functionality:</h2>
  * <ul>
- *   <li>The primary server sends pings to all replicas at a fixed interval.</li>
- *   <li>Replicas wait for a ping within a timeout period.</li>
- *   <li>If no ping is received, an election process starts via {@link LeaderElectionManager}.</li>
+ *   <li><b>Primary Role:</b> Periodically broadcasts ping messages to all replicas.</li>
+ *   <li><b>Replica Role:</b> Monitors incoming pings and increases a suspicion counter for missed pings.</li>
+ *   <li><b>Failure Detection:</b> If the suspicion counter reaches a threshold, an election is initiated.</li>
+ *   <li><b>Graceful Shutdown:</b> Ensures clean termination of scheduled tasks.</li>
  * </ul>
  *
- * <h3>Threading Model:</h3>
+ * <h2>Threading Model:</h2>
  * <p>
- * Uses a {@link ScheduledExecutorService} for periodic pinging and timeout handling.
- * This avoids blocking the thread with {@code Thread.sleep()}.
+ * This class utilizes a {@link ScheduledExecutorService} for efficient scheduling of heartbeat
+ * messages and timeout checks. This design prevents blocking operations and ensures a responsive
+ * failure detection mechanism.
  * </p>
  *
- * @author YourName
+ * <h2>Leader Election:</h2>
+ * <p>
+ * When a replica detects a primary failure, it initiates a leader election by invoking
+ * {@link LeaderElectionManager#initiateElection()}. The election process follows the Bully Algorithm
+ * </p>
+ *
  */
 public class PingManager implements Runnable {
 
