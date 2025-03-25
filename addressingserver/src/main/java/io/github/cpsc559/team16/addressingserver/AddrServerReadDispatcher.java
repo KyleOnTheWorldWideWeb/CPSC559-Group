@@ -1,16 +1,15 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-import io.github.cpsc559.team16.common.utilities.NetworkManager;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+import io.github.cpsc559.team16.common.utilities.NetworkManager;
 
 /**
  * Handles read events from registered {@code SocketChannel}'s and routes them based on the server's role.
@@ -77,7 +76,6 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
             //case "REGISTER" -> handleRegistration(channel, nioChannel, message);
             case "UPDATE" -> handleUpdate(channel, nioChannel, message);
             case "REQUEST" -> handleRequest(channel, nioChannel, message);
-            case "PING" -> handlePing(channel, nioChannel, message);
             case "NOTIFICATION" -> handleNotification(channel, nioChannel, message);
             case "ELECTION" -> handleElection(channel, nioChannel, message);
             default -> System.err.println("Unrecognized message type: " + message.getMsgType());
@@ -211,19 +209,6 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
         }
     }
 
-
-    /**
-     * Handles a ping request, typically used for failure detection.
-     *
-     * @param channel The channel from which the ping request originated.
-     * @param message The received ping message.
-     */
-    private void handlePing(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        if ("PRIMARY".equals(message.getTargetRole())) {
-            //server.respondToPing(channel);
-        }
-    }
-
     /**
      * Handles notification messages such as server failures or new registrations.
      *
@@ -243,7 +228,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      * @param message The received election message.
      */
     private void handleElection(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        //server.processElectionMessage(channel, nioChannel, message.getPayload());
+        server.getLeaderElectionManager().processElectionMessage(channel, nioChannel, message);
     }
 
 }

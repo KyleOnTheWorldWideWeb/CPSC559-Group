@@ -1,9 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
-import java.net.InetAddress;
-import java.nio.channels.*;
-import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
+import java.net.InetAddress;
+import java.nio.channels.SocketChannel; // Used for conditionals that don't rely on non-null checks
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
@@ -48,6 +48,25 @@ public class AddressingServer {
 
     public PeerManager getPeerManager() {
         return peerManager;
+    }
+
+    /**
+     * The process responsible for initiating elections and handling election messages from
+     * {@code AddressingServer} peers.
+     */
+    private final LeaderElectionManager leaderElectionManager;
+
+    public LeaderElectionManager getLeaderElectionManager() {
+        return leaderElectionManager;
+    }
+
+    /**
+     * The process responsible for handling ping messages and managing the ping timeout.
+     */
+    private final PingManager pingManager;
+
+    public PingManager getPingManager() {
+        return pingManager;
     }
 
     /**
@@ -108,6 +127,8 @@ public class AddressingServer {
         this.config = new AddrServerConfig();
         this.addrServerRegistry = new AddrServerRegistry();
         this.peerManager = new PeerManager(addrServerRegistry);
+        this.leaderElectionManager = new LeaderElectionManager(this);
+        this.pingManager = new PingManager(this);
         this.chatServerRegistry = new ChatServerRegistry();
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
         clientManager = new ClientManager(chatServerRegistry);
@@ -207,7 +228,10 @@ public class AddressingServer {
     public void start() throws IOException {
         networkManager.openListenerChannels(config.getClientPort(),
                 config.getReplicaPort(), config.getChatServerPort());
+
         networkManager.startEventLoop(new AddrServerReadDispatcher(this));
+
+        pingManager.shutdown();
     }
 
 
@@ -236,6 +260,7 @@ public class AddressingServer {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
                 server.registerReplicaAddrServer();
+                server.getPingManager().run();
             }
         }
         try {
