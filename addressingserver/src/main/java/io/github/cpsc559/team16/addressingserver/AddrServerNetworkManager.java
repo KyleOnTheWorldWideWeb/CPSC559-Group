@@ -25,7 +25,7 @@ import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.dese
  * and manage persistent connections for chat servers and replicas.
  * </p>
  */
-public class AddrServerNetworkManager implements NetworkManager {
+public class AddrServerNetworkManager {
 
     /**
      * The ServerSocketChannel that listens for incoming connection requests from chat servers.
@@ -85,6 +85,11 @@ public class AddrServerNetworkManager implements NetworkManager {
     private final ChatServerManager chatServerManager;
 
     /**
+     * The network configuration for this {@code AddressingServer} process.
+     */
+    private final AddrServerConfig config;
+
+    /**
      * A fixed-size thread pool used to offload network I/O processing from the main selector loop.
      * <p>
      * This {@code ExecutorService} executes read and dispatch tasks asynchronously to prevent
@@ -103,10 +108,11 @@ public class AddrServerNetworkManager implements NetworkManager {
      *
      * @throws IOException If the selector fails to initialize.
      */
-    public AddrServerNetworkManager(PeerManager peerManager, ChatServerManager csManager) throws IOException {
+    public AddrServerNetworkManager(PeerManager peerManager, ChatServerManager csManager, AddrServerConfig config) throws IOException {
         this.peerManager = peerManager;
         this.chatServerManager = csManager;
         this.selector = Selector.open();
+        this.config = config;
         /*
          Creates a pool with a fixed number of threads - usually one per CPU core. This will allow us to benefit from
          some level of asynchronous message handling - preventing the main event-loop from blocking during events that
@@ -130,7 +136,7 @@ public class AddrServerNetworkManager implements NetworkManager {
      * @return The opened ServerSocketChannel.
      * @throws IOException If an error occurs while opening or binding the channel.
      */
-    @Override
+    
     public ServerSocketChannel openListenerChannel(int port) throws IOException {
         try {
             ServerSocketChannel channel = ServerSocketChannel.open();
@@ -186,7 +192,6 @@ public class AddrServerNetworkManager implements NetworkManager {
      * @param channel The {@code SocketChannel} to register for persistent read monitoring.
      * @throws IOException If an error occurs during configuration or registration.
      */
-    @Override
     public void openPersistentChannel(SocketChannel channel) throws IOException {
         try {
             channel.configureBlocking(false);
@@ -281,7 +286,7 @@ public class AddrServerNetworkManager implements NetworkManager {
      *
      * @return the internal {@code Selector} used by this {@code AddrServerNetworkManager}.
      */
-    @Override
+    
     public Selector getSelector() {
         return selector;
     }
@@ -303,8 +308,7 @@ public class AddrServerNetworkManager implements NetworkManager {
      *
      * @throws IOException If an I/O error occurs while selecting or processing events.
      */
-    @Override
-    public void startEventLoop(ReadDispatcher readDispatcher) throws IOException {
+    public void startEventLoop(AddrServerReadDispatcher readDispatcher) throws IOException {
         while (true) {
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();
@@ -333,7 +337,7 @@ public class AddrServerNetworkManager implements NetworkManager {
 
                     if (listenerSC.equals(healthCheckListenerChannel)) {
                         try {
-                            String response = "alive\n";
+                            String response = this.config.getPID() + "\n";
                             ByteBuffer buffer = ByteBuffer.wrap(response.getBytes());
                             while (buffer.hasRemaining()) {
                                 channel.write(buffer);
@@ -407,9 +411,6 @@ public class AddrServerNetworkManager implements NetworkManager {
                  * Only keys tied to channels registered with OP_READ will trigger `isReadable()`.
                  */
                 else if (key.isReadable()) {
-//                    while (true) {
-//
-//                    }
                     SocketChannel channel = (SocketChannel) key.channel();
 
                     // Retrieve existing NIOMessageChannel for persistent connections.

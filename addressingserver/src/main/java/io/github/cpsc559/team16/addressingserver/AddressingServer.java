@@ -112,7 +112,7 @@ public class AddressingServer {
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
         clientManager = new ClientManager(chatServerRegistry);
         try {
-            this.networkManager = new AddrServerNetworkManager(peerManager, chatServerManager);
+            this.networkManager = new AddrServerNetworkManager(peerManager, chatServerManager, this.config);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
