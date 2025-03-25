@@ -64,10 +64,10 @@ public class PingManager implements Runnable {
      * @param leaderElectionManager The {@link LeaderElectionManager} instance for leader elections.
      * @param peerManager The {@link PeerManager} instance for managing peer connections.
      */
-    public PingManager(AddrServerConfig config, LeaderElectionManager leaderElectionManager, PeerManager peerManager) {
-        this.config = config;
-        this.leaderElectionManager = leaderElectionManager;
-        this.peerManager = peerManager;
+    public PingManager(AddressingServer server) {
+        this.config = server.getConfig();
+        this.leaderElectionManager = server.getLeaderElectionManager();
+        this.peerManager = server.getPeerManager();
     }
 
     /**
@@ -91,9 +91,8 @@ public class PingManager implements Runnable {
      *
      * @param ping The {@link PingMessage} to process.
      */
-    public void processPing(PingMessage ping) {
+    public void processPing(Long senderPID) {
 
-        long senderPID = ping.getSenderPID();
         long leaderPID = leaderElectionManager.getLeaderPID();
 
         if (senderPID == leaderPID) {

@@ -64,9 +64,9 @@ public class LeaderElectionManager {
      * @param config The Addressing Server configuration.
      * @param peerManager Manages peer server communication.
      */
-    public LeaderElectionManager(AddrServerConfig config, PeerManager peerManager) {
-        this.config = config;
-        this.peerManager = peerManager;
+    public LeaderElectionManager(AddressingServer server) {
+        this.config = server.getConfig();
+        this.peerManager = server.getPeerManager();
         this.running = false;
 
         // Initialize leaderPID to the highest PID among self and peers

@@ -122,8 +122,8 @@ public class AddressingServer {
         this.config = new AddrServerConfig();
         this.addrServerRegistry = new AddrServerRegistry();
         this.peerManager = new PeerManager(addrServerRegistry);
-        this.leaderElectionManager = new LeaderElectionManager(config, peerManager);
-        this.pingManager = new PingManager(leaderElectionManager);
+        this.leaderElectionManager = new LeaderElectionManager(this);
+        this.pingManager = new PingManager(this);
         this.chatServerRegistry = new ChatServerRegistry();
         chatServerManager = new ChatServerManager(chatServerRegistry);
         try {
