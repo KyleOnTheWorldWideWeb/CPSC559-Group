@@ -1,8 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
+import java.net.InetAddress;
+import java.nio.channels.*;
+import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
-import java.util.Optional;  // Used for conditionals that don't rely on non-null checks
 import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
@@ -10,10 +11,7 @@ import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
 public class AddressingServer {
-
-
-
-    /**
+     /**
      * The network configuration for this {@code AddressingServer} process.
      */
     private final AddrServerConfig config;
@@ -131,7 +129,7 @@ public class AddressingServer {
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
-        this.pidCounter = 1L;
+        this.pidCounter = 0L;
     }
 
     /**
@@ -148,7 +146,10 @@ public class AddressingServer {
     public void registerPrimaryAddrServer() {
         Long pid = generatePID();
         config.setPID(pid); // Assign a process id to the primary
-        System.out.println(config.getHostAddress());
+        System.out.println("PRIMARY AddressingServer .env host address: " + config.getHostAddress());
+        try {
+            System.out.println("PRIMARY AddressingServer runtime host address: " + InetAddress.getLocalHost().getHostAddress());
+        } catch (Exception e) { System.err.println("Error reading host address: " + e.getMessage()); }
         addrServerRegistry.registerAddrServer(pid, config.getHostAddress(),
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort(), config.getRole());
     }
@@ -178,7 +179,7 @@ public class AddressingServer {
      */
     public void registerReplicaAddrServer() {
         Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
-                "host.docker.internal", 49801,
+                System.getenv("HOST_ADDRESS"), 49801,
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
 
         if (maybeChannel.isEmpty()) {
@@ -191,7 +192,7 @@ public class AddressingServer {
             }
 
             maybeChannel = peerManager.registerWithPrimary(
-                    "host.docker.internal", 49801,
+                    System.getenv("HOST_ADDRESS"), 49801,
                     config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
         }
 

@@ -29,7 +29,6 @@ import java.util.List;
  * messaging protocol of ending each message with a newline delimiter (`\n`). Messages that do not
  * follow this protocol may not be correctly framed or processed.</p>
  *
- *
  */
 public class NIOMessageChannel {
     /**
@@ -143,7 +142,6 @@ public class NIOMessageChannel {
         streamBuffer.flip();
         String receivedData = StandardCharsets.UTF_8.decode(streamBuffer).toString();
         streamBuffer.clear();  // Clear the ByteBuffer (not the accumulated message buffer)
-
         // Append new data to our message buffer
         messageBuffer.append(receivedData);
         return true;

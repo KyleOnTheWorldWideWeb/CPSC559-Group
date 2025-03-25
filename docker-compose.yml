@@ -1,34 +1,35 @@
 services:  # Defines the services (Docker containers) that will be run.
-          # These not be limited to
+  # These not be limited to
 
   #<name_of_service>: # This is how we declare the "service" aka process we want to create an image of
-    #image: chatserver:latest  # The Docker image name and tag used to run this service
-    #build:
-      #context: ./chatserver  # The directory containing the Dockerfile for building this service
-      #dockerfile: Dockerfile  # The specific Dockerfile to use for building the image
-    #volumes:
-      #- db_data:/var/lib/mysql
-    #networks:
-      #- chat_network  # Connects this service to the 'chat_network' for communication
-    #ports:
-      #- "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication)
+  #image: chatserver:latest  # The Docker image name and tag used to run this service
+  #build:
+  #context: ./chatserver  # The directory containing the Dockerfile for building this service
+  #dockerfile: Dockerfile  # The specific Dockerfile to use for building the image
+  #volumes:
+  #- db_data:/var/lib/mysql
+  #networks:
+  #- chat_network  # Connects this service to the 'chat_network' for communication
+  #ports:
+  #- "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication)
 
   addressingserver:
-      image: addressingserver:latest
-      container_name: addressingserver
-      profiles: ["addressingserver", "main-single"]
-      build:
-        dockerfile: Dockerfile.addressingserver
-      environment:
-        - AS_CLIENT_PORT=49800
-        - AS_REPLICA_PORT=49801
-        - AS_CHATSERVER_PORT=49802
-        - AS_NETWORK=chat_network
-        - AS_ROLE=PRIMARY
-      ports: ["49800:49800", "49801:49801","49802:49802"]
-      networks:
-        chat_network:
-          ipv4_address: 172.20.0.2
+    image: addressingserver:latest
+    container_name: addressingserver
+    profiles: ["addressingserver", "main-single"]
+    build:
+      dockerfile: Dockerfile.addressingserver
+    environment:
+      - AS_CLIENT_PORT=49800
+      - AS_REPLICA_PORT=49801
+      - AS_CHATSERVER_PORT=49802
+      - AS_NETWORK=chat_network
+      - AS_ROLE=PRIMARY
+      - HOST_ADDRESS=172.20.0.2
+    ports: ["49800:49800", "49801:49801","49802:49802"]
+    networks:
+      chat_network:
+        ipv4_address: 172.20.0.2
 
   addressingserver_replicas:
     image: addressingserver:latest
@@ -43,7 +44,7 @@ services:  # Defines the services (Docker containers) that will be run.
     networks:
       - chat_network
     deploy:
-      replicas: 3
+      replicas: 1
 
   chatserver:
     image: chatserver:latest
