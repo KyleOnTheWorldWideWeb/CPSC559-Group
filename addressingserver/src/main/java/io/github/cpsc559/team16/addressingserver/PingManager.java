@@ -1,13 +1,18 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import java.util.concurrent.Executors;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.SocketChannel;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Logger;
 
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
-import io.github.cpsc559.team16.common.messaging.PingMessage;
 
 /**
  * <h1>PingManager</h1>
@@ -44,10 +49,8 @@ import io.github.cpsc559.team16.common.messaging.PingMessage;
  */
 public class PingManager implements Runnable {
 
-    private static final Logger logger = Logger.getLogger(PingManager.class.getName());
-
-    /** Executor for scheduled tasks */
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    /** Reference to the AddressingServer instance */
+    private final AddressingServer server;
 
     /** Configuration settings */
     private final AddrServerConfig config;
@@ -55,20 +58,11 @@ public class PingManager implements Runnable {
     /** Leader election handler */
     private final LeaderElectionManager leaderElectionManager;
 
-    /** Peer manager for handling connections */
-    private final PeerManager peerManager;
-
-    /** Tracks whether a ping was received since the last reset */
-    private final AtomicBoolean receivedPing = new AtomicBoolean(false);
-
     /** Ping timeout duration (milliseconds) */
     private int pingTimeout = 3000;
 
-    /** Threshold for missed pings before initiating an election */
-    private int missedPingThreshold = 3;
-
-    /** Number of missed pings */
-    private int missedPingCounter = 0;
+    /** Flag to terminate the ping manager */
+    private boolean terminate;
 
     /**
      * Constructs a new {@link PingManager} instance.
@@ -78,9 +72,16 @@ public class PingManager implements Runnable {
      * @param peerManager The {@link PeerManager} instance for managing peer connections.
      */
     public PingManager(AddressingServer server) {
+        this.server = server;
         this.config = server.getConfig();
         this.leaderElectionManager = server.getLeaderElectionManager();
-        this.peerManager = server.getPeerManager();
+    }
+
+    /**
+     * Shuts down the ping manager gracefully.
+     */
+    public void shutdown() {
+        terminate = true;
     }
 
     /**
@@ -93,27 +94,6 @@ public class PingManager implements Runnable {
     }
 
     /**
-     * Marks the server as having received a ping.
-     */
-    public void markPingReceived() {
-        receivedPing.set(true);
-    }
-
-    /**
-     * Processes an incoming ping message.
-     *
-     * @param ping The {@link PingMessage} to process.
-     */
-    public void processPing(Long senderPID) {
-
-        long leaderPID = leaderElectionManager.getLeaderPID();
-
-        if (senderPID == leaderPID) {
-            markPingReceived();
-        }
-    }
-
-    /**
      * Determines if this server is the primary.
      *
      * @return {@code true} if the server is primary, {@code false} otherwise.
@@ -123,71 +103,87 @@ public class PingManager implements Runnable {
     }
 
     /**
-     * Retrieves the PID of this server.
-     *
-     * @return The server's process ID.
-     */
-    private Long getSelfPID() {
-        return config.getPID();
-    }
-
-    /**
-     * Sends a ping to all replicas.
-     */
-    private void pingReplicas() {
-        logger.info("Primary sending ping to replicas...");
-        peerManager.broadcast(new PingMessage(getSelfPID()));
-    }
-
-    /**
-     * Checks if a ping was received within the timeout period.
-     * If no ping was received, an election is initiated.
-     */
-    private void checkPing() {
-        if (receivedPing.getAndSet(false)) {
-            missedPingCounter = 0;
-            logger.fine("Ping received. Resetting flag.");
-        } else {
-            missedPingCounter++;
-            logger.warning("Ping timeout! Initiating leader election.");
-
-            // Initiate election if missed pings exceed threshold
-            if (missedPingCounter >= missedPingThreshold) {
-                missedPingCounter = 0;
-                leaderElectionManager.initiateElection();
-            }
-        }
-    }
-
-    /**
-     * Starts the pinging mechanism using a scheduled executor.
+     * Starts the pinging process.
      */
     @Override
     public void run() {
-        if (isPrimary()) {
-            // Schedule primary to send pings at fixed intervals
-            scheduler.scheduleAtFixedRate(this::pingReplicas, 0, pingTimeout, TimeUnit.MILLISECONDS);
-        } else {
-            // Schedule replicas to check for pings at fixed intervals
-            scheduler.scheduleAtFixedRate(this::checkPing, pingTimeout, pingTimeout, TimeUnit.MILLISECONDS);
-        }
 
-        logger.info("PingManager started.");
-    }
+        /** Map for storing channels for pinging peers */
+        HashMap<SocketChannel, Long> channelPIDs;
 
-    /**
-     * Shuts down the ping manager gracefully.
-     */
-    public void shutdown() {
-        logger.info("Shutting down PingManager...");
-        scheduler.shutdown();
-        try {
-            if (!scheduler.awaitTermination(2, TimeUnit.SECONDS)) {
-                scheduler.shutdownNow();
+        /** Map for storing channels for pinging peers */
+        HashMap<Long, Date> lastPingFromPID = new HashMap<>();
+
+        terminate = false;
+
+        while (!terminate) {
+
+            if (!isPrimary() && !terminate) {
+                try (Selector selector = Selector.open()) {
+
+                    /** Map for storing channels for pinging peers */
+                    channelPIDs = new HashMap<>();
+
+                    // Open and configure each SocketChannel
+                    for (AddrServerRecord peer : server.getAddrServerRegistry().getRecords().values()) {
+                        SocketChannel channel = SocketChannel.open();
+                        channel.configureBlocking(false);
+                        channel.connect(new InetSocketAddress(peer.getHostAddress(), 5050));
+                        // Register for connection completion and read events
+                        channel.register(selector, SelectionKey.OP_READ);
+                        // Store the last ping time for this PID
+                        lastPingFromPID.putIfAbsent(peer.getPID(), new Date());
+                        // Store the channel for this PID
+                        channelPIDs.put(channel, peer.getPID());
+                    }
+                        
+                    // Wait for events with a timeout (in milliseconds)
+                    int readyChannels = selector.select(5000);
+
+                    if (readyChannels == 0) {
+                        // Optionally, you can perform periodic actions here
+                        continue;
+                    }
+
+                    // Check for ping responses from channels and update last ping time
+                    Iterator<SelectionKey> keyIterator = selector.selectedKeys().iterator();
+                    while (keyIterator.hasNext()) {
+                        SelectionKey key = keyIterator.next();
+                        keyIterator.remove();
+
+                        if (key.isReadable()) {
+                            SocketChannel channel = (SocketChannel) key.channel();
+                            ByteBuffer buffer = ByteBuffer.allocate(1024);
+                            int bytesRead = channel.read(buffer);
+                            if (bytesRead > 0) {
+                                lastPingFromPID.put(channelPIDs.get(channel), new Date());
+                                String response = new String(buffer.array(), 0, bytesRead);
+                                System.out.println("Received response: " + response);
+                            }
+                        }
+                    }
+
+                    // Check for each PID if a ping was received within the timeout
+                    server.getAddrServerRegistry().getRecords().values().forEach(peer -> {
+                        Date lastPing = lastPingFromPID.get(peer.getPID());
+                        Date now = new Date();
+                        long diff = now.getTime() - lastPing.getTime();
+                        if (diff > pingTimeout) {
+                            
+                            // If the primary server has failed, initiate an election
+                            if (peer.getRole() == ServerRole.PRIMARY) {
+                                System.out.println("Primary server has failed. Initiating leader election...");
+                                leaderElectionManager.initiateElection();
+                            }
+
+                            // Handle other cases here...
+                        }
+                    });
+
+                } catch (IOException e) {
+                    System.err.println("Error while pinging peers: " + e.getMessage());
+                }
             }
-        } catch (InterruptedException e) {
-            logger.severe("PingManager shutdown interrupted!");
-            Thread.currentThread().interrupt();
         }
     }
 }
