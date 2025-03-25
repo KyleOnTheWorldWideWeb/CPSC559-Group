@@ -68,7 +68,7 @@ public class ClientManager {
         if (chatServerOpt.isPresent()) {
             ChatServerRecord updatedRecord = chatServerOpt.get();
             // Construct ACK payload as "pid-hostAddress:clientPort"
-            String payload = updatedRecord.getPID() + "-" + updatedRecord.getHostAddress() + ":" + updatedRecord.getClientPort();
+            String payload = updatedRecord.getPID() + ":" + updatedRecord.getHostAddress() + ":" + updatedRecord.getClientPort();
             nioChannel.sendMessage(new AckMessage(AckTypes.HOSTADDRESS, senderPID, Roles.PRIMARY, Roles.CLIENT, payload).toJson());
             return updatedRecord;
         } else {

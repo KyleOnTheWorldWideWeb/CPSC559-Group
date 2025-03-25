@@ -51,6 +51,12 @@ services:  # Defines the services (Docker containers) that will be run.
       - chat_network
     deploy:
       replicas: 1
+    healthcheck:
+      test: [ "CMD", "sh", "/healthcheck.sh" ]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    restart: on-failure
 
   chatserver:
     image: chatserver:latest
@@ -66,6 +72,12 @@ services:  # Defines the services (Docker containers) that will be run.
       - ADDRESS_SERVER_IP=172.20.0.2
     networks:
       - chat_network
+    healthcheck:
+      test: [ "CMD", "sh", "/healthcheck.sh" ]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    restart: on-failure
 
   client:
     image: client:latest
