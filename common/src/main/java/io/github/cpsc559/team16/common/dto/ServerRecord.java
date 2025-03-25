@@ -64,7 +64,7 @@ public abstract class ServerRecord {
 
     // --- Setters ---
 
-    public void setServerID(Long pid) {
+    public void setPID(Long pid) {
         this.pid = pid;
     }
 

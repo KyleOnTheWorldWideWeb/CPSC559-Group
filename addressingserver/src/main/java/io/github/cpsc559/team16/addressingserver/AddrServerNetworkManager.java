@@ -407,6 +407,9 @@ public class AddrServerNetworkManager implements NetworkManager {
                  * Only keys tied to channels registered with OP_READ will trigger `isReadable()`.
                  */
                 else if (key.isReadable()) {
+//                    while (true) {
+//
+//                    }
                     SocketChannel channel = (SocketChannel) key.channel();
 
                     // Retrieve existing NIOMessageChannel for persistent connections.
