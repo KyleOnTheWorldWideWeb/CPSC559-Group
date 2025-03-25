@@ -49,6 +49,9 @@ public class LeaderElectionManager {
     private boolean bullyResponseReceived = false;
     private boolean leaderAnnouncementReceived = false;
 
+    /** Flag indicating whether an election is in progress */
+    private boolean midElection = false;
+
     /**
      * Retrieves the PID of the current leader.
      *
@@ -56,6 +59,15 @@ public class LeaderElectionManager {
      */
     public long getLeaderPID() {
         return leaderPID;
+    }
+
+    /**
+     * Retrieves the current election status.
+     * 
+     * @return True if an election is in progress, false otherwise.
+     */
+    public boolean isMidElection() {
+        return midElection;
     }
 
     /**
@@ -115,6 +127,8 @@ public class LeaderElectionManager {
      * @param peerChannel The {@link NIOMessageChannel} of the sender.
      */
     private void handleElection(Long senderPID, NIOMessageChannel peerChannel) {
+        midElection = true;
+
         if (senderPID < getSelfPID()) {  // Only respond if we have a higher PID
             bully(peerChannel);  // Send a "Bully" message to the sender
             if (!running) {
@@ -139,6 +153,7 @@ public class LeaderElectionManager {
         leaderAnnouncementReceived = true;
         running = false;
         leaderPID = senderPID;
+        midElection = false;
     }
 
     /**
@@ -168,6 +183,8 @@ public class LeaderElectionManager {
      */
     public void initiateElection() {
         try {
+
+            midElection = true;
             if (!running) {
                 running = true;
                 bullyResponseReceived = false;
@@ -222,6 +239,7 @@ public class LeaderElectionManager {
         for (NIOMessageChannel peerChannel : getPeerChannels()) {
             sendTo(leaderMessage, peerChannel);
         }
+        midElection = false;
     }
 
     // Methods to generate election-related messages
