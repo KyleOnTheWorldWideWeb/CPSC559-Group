@@ -1,9 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
-import java.net.InetAddress;
-import java.nio.channels.*;
-import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
+import java.net.InetAddress;
+import java.nio.channels.SocketChannel; // Used for conditionals that don't rely on non-null checks
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
@@ -221,8 +221,6 @@ public class AddressingServer {
         networkManager.openListenerChannels(config.getClientPort(),
                 config.getReplicaPort(), config.getChatServerPort());
 
-        pingManager.run();
-
         networkManager.startEventLoop(new AddrServerReadDispatcher(this));
 
         pingManager.shutdown();
@@ -254,6 +252,7 @@ public class AddressingServer {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
                 server.registerReplicaAddrServer();
+                server.getPingManager().run();
             }
         }
         try {
