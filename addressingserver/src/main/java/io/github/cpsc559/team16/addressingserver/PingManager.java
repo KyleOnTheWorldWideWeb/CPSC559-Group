@@ -87,6 +87,21 @@ public class PingManager implements Runnable {
     }
 
     /**
+     * Processes an incoming ping message.
+     *
+     * @param ping The {@link PingMessage} to process.
+     */
+    public void processPing(PingMessage ping) {
+
+        long senderPID = ping.getSenderPID();
+        long leaderPID = leaderElectionManager.getLeaderPID();
+
+        if (senderPID == leaderPID) {
+            markPingReceived();
+        }
+    }
+
+    /**
      * Determines if this server is the primary.
      *
      * @return {@code true} if the server is primary, {@code false} otherwise.

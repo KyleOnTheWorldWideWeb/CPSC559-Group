@@ -207,9 +207,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      * @param message The received ping message.
      */
     private void handlePing(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        if ("PRIMARY".equals(message.getTargetRole())) {
-            //server.respondToPing(channel);
-        }
+        server.getPingManager().processPing(message);
     }
 
     /**
