@@ -47,18 +47,21 @@ public class AddrServerRegistry {
      */
     public void updateOrInsertRecord(AddrServerRecord record) {
         Long id = record.getPID();
+        if (id == null) {
+            System.err.println("AddrServerRecord has a null PID. Cannot update or insert record.");
+            return;
+        }
         AddrServerRecord existing = addrServerRecords.get(id);
-
         if (existing != null) {
             System.out.println("Updating existing AddrServerRecord for ID: " + id);
         } else {
             System.out.println("Inserting new AddrServerRecord for ID: " + id);
         }
         addrServerRecords.put(id, record);
-        //debugPrintAllServers();
     }
 
-    public boolean deregisterServer(Long id) {
+
+    public boolean removeRecord(Long id) {
         return addrServerRecords.remove(id) != null;
     }
 

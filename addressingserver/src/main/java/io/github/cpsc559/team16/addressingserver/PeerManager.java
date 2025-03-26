@@ -47,19 +47,54 @@ public class PeerManager {
     }
 
     /**
-     * Removes a peer connection and logs the removal using its known network PID.
+     * Removes a persistent connection and its associated record, logging the removal using the connection’s network PID.
+     * <p>
+     * This method performs the following actions:
+     * <ul>
+     *   <li>Removes the mapping between the {@code SocketChannel} and its corresponding {@code NIOMessageChannel}
+     *       from the internal collection of persistent connections (e.g., in the PeerManager or ChatServerManager).</li>
+     *   <li>Removes the associated record (such as an {@code AddrServerRecord} or {@code ChatServerRecord})
+     *       that identifies the remote process connected via the {@code SocketChannel}.</li>
+     * </ul>
+     * </p>
      *
-     * @param channel the {@code SocketChannel} representing the peer connection to remove.
+     * @param channel the {@code SocketChannel} representing the connection to remove.
+     * <strong>NOTE:</strong> This method does not close the {@code SocketChannel}; closing the channel is the responsibility
+     * of the caller.
      */
-    public void removeChannel(SocketChannel channel) {
+    public void removeRemoteProcess(SocketChannel channel) {
         NIOMessageChannel ch = peerChannels.remove(channel);
         if (ch != null) { // We do not ever map keys to null values, so this check does ensure that a key:value pair was present.
             // Remove this server from the registry so that if it registers again, it doesn't create a duplicate entry.
-            this.registry.getRecords().remove(ch.getServerPID());
+            try {
+                this.registry.getRecords().remove(ch.getServerPID());
+            } catch (NullPointerException e){
+                System.err.println("Removed a SocketChannel connection that was not linked to a record.");
+            }
             System.out.println("Removed peer with network PID: " + ch.getServerPID());
         } else {
             System.out.println("No matching peer found for the given channel.");
         }
+    }
+
+    /**
+     * Removes the remote process associated with the given channel and then closes the channel.
+     * <p>
+     * This method performs two main actions:
+     * <ol>
+     *   <li>Deregisters the remote process by calling {@code removeRemoteProcess(channelToRemove)},
+     *       removing any references to the remote process from internal data structures.</li>
+     *   <li>Attempts to close the provided {@code SocketChannel}. If an {@code IOException} occurs during
+     *       the close operation, it is caught and ignored.</li>
+     * </ol>
+     * </p>
+     *
+     * @param channelToRemove the {@code SocketChannel} representing the connection to be removed and closed.
+     */
+    public void removeProcessCloseConnection(SocketChannel channelToRemove) {
+        this.removeRemoteProcess(channelToRemove);
+        try { channelToRemove.close(); }
+        catch(IOException ignored) {};
     }
 
     /**
@@ -127,9 +162,65 @@ public class PeerManager {
                 return;
             } catch (IOException ioe) {
                 System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
+                removeProcessCloseConnection(nioChannel.getSocketChannel());
             }
         }
         System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
+    }
+
+    /**
+     * Sends all currently known {@code ChatServerRecord} entries in the network.
+     * <p>
+     * This is typicall used to ensure that a new replica is fully synchronized with all of the
+     * active ChatServer's known to the primary.
+     * </p>
+     *
+     *
+     * @param primaryPID  the PID of the primary server sending the updates.
+     * @param nioChannel  the channel over which to send the records.
+     * @param chatRecords a {@code HashMap} containing all {@code ChatServerRecord} entries.
+     */
+    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel, Map<Long, ChatServerRecord> chatRecords) {
+        for (ChatServerRecord record : chatRecords.values()) {
+            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
+            try {
+                nioChannel.sendMessage(message.toJson());
+            } catch (JsonProcessingException e) {
+                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
+                return;
+            } catch (IOException ioe) {
+                System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
+                removeProcessCloseConnection(nioChannel.getSocketChannel());
+            }
+        }
+        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
+    }
+
+
+    /**
+     * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
+     * <p>
+     * This method handles JSON serialization and transmission errors consistently,
+     * logging any failures without interrupting the loop.
+     * </p>
+     *
+     * @param message the update message to be broadcast.
+     * @param <T>     the type of record being broadcast (e.g., {@code AddrServerRecord}, {@code ChatServerRecord}).
+     */
+    private <T> void broadcastLeadershipStatus(UpdateMessage<T> message) {
+        try {
+            String jsonMessage = message.toJson();
+            for (NIOMessageChannel nioChannel : peerChannels.values()) {
+                try {
+                    nioChannel.sendMessage(jsonMessage);
+                } catch (IOException ioe) {
+                    System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+                    removeProcessCloseConnection(nioChannel.getSocketChannel());
+                }
+            }
+        } catch (JsonProcessingException e) {
+            System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
+        }
     }
 
     /**
@@ -176,21 +267,25 @@ public class PeerManager {
      * @param <T>     the type of record being broadcast (e.g., {@code AddrServerRecord}, {@code ChatServerRecord}).
      */
     private <T> void broadcastServerRecord(UpdateMessage<T> message) {
-        for (NIOMessageChannel nioChannel : peerChannels.values()) {
-            try {
-                nioChannel.sendMessage(message.toJson());
-            } catch (JsonProcessingException e) {
-                System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
-                return;
-            } catch (IOException ioe) {
-                System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+        try {
+            String jsonMessage = message.toJson();
+            for (NIOMessageChannel nioChannel : peerChannels.values()) {
+                try {
+                    nioChannel.sendMessage(jsonMessage);
+                } catch (IOException ioe) {
+                    System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+                    removeProcessCloseConnection(nioChannel.getSocketChannel());
+                }
             }
+        } catch (JsonProcessingException e) {
+            System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
+            return;
         }
     }
 
 
     /**
-     * Broadcasts a message to all registered peer replicas.
+     * Broadcasts a message to all peer replicas in the {@code peerChannels}.
      * <p>
      * This method is used to send one-off messages (e.g., state changes or heartbeats)
      * to all replicas, using their open persistent connections.
@@ -199,6 +294,10 @@ public class PeerManager {
      * @param message the {@code BaseAddrServerMessage} to be serialized and sent.
      */
     public void broadcast(BaseAddrServerMessage<?> message) {
+        if (peerChannels.size() != (registry.getRecords().size()-1)) {
+            System.err.println("NETWORK ERROR - More address server records exist than persistent connections.\n" +
+                    "Refactoring necessary.");
+        }
         String json;
         try {
             json = message.toJson();
@@ -206,12 +305,12 @@ public class PeerManager {
             System.err.println("Failed to serialize message: " + e.getMessage());
             return;
         }
-
-        for (NIOMessageChannel channel : peerChannels.values()) {
+        for (NIOMessageChannel nioChannel : peerChannels.values()) {
             try {
-                channel.sendMessage(json);
+                nioChannel.sendMessage(json);
             } catch (IOException e) {
-                System.err.println("Failed to send to process with PID " + channel.getServerPID() + ": " + e.getMessage());
+                System.err.println("Failed to send to process with PID " + nioChannel.getServerPID() + ": " + e.getMessage());
+                removeProcessCloseConnection(nioChannel.getSocketChannel());
             }
         }
     }
@@ -272,16 +371,15 @@ public class PeerManager {
         registry.updateOrInsertRecord(record);
     }
 
-    public void broadcastClientCountUpdate(int newClientCount, Long csPID, Long primaryPID) {
-
-    }
 
     /**
-     * Returns a map of all currently connected peer replicas.
+     * Returns a HashMap of SocketChannel and NIOChannel for all the
+     * current addressing server connections.
      *
      * @return a map of {@code SocketChannel} to {@code NIOMessageChannel} for peer tracking.
      */
     public Map<SocketChannel, NIOMessageChannel> getPeerChannels() {
         return this.peerChannels;
     }
+
 }

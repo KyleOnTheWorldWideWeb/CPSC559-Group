@@ -50,7 +50,7 @@ services:  # Defines the services (Docker containers) that will be run.
     networks:
       - chat_network
     deploy:
-      replicas: 1
+      replicas: 3
 
   chatserver:
     image: chatserver:latest

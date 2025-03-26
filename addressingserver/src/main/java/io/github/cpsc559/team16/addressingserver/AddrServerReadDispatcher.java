@@ -30,12 +30,20 @@ import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.dese
 public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     private final AddressingServer server;
 
-    private final Long pid;
 
     public AddrServerReadDispatcher(AddressingServer server) {
         this.server = server;
-        this.pid = server.getConfig().getPID();
+
     }
+
+    /**
+     * Retrieves the process ID for this AddrssingServer
+     * @return A Long representing the process ID for this process in the network.
+     */
+    private Long getPID() {
+        return this.server.getConfig().getPID();
+    }
+
 
 
     /**
@@ -117,28 +125,33 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
                 ChatServerRecord updatedRecord = this.server.getClientManager().sendHostAck(server.getConfig().getPID(), nioChannel);
                 if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
                     System.out.println("Client directed to an active host.");
-                    long pid = this.server.getConfig().getPID();
-                    this.server.getPeerManager().broadcastChatServerRecord(pid, updatedRecord);
+                    Long pid = this.getPID();
                     this.server.getChatServerManager().broadcastChatServerRecord(pid, updatedRecord);
+                    
                 } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
             }
             case "CHATSERVER" -> {
+                Long pid = this.getPID();
+                // {@code registerServer} sends all the ChatServer records to the replica we are registering.
                 ChatServerRecord record = this.server.getChatServerManager().registerServer(
                         channel, nioChannel,
                         this.server.generatePID(), pid,
                         message.safeCastPayload(ChatServerRecord.class)
                 );
                 this.server.getChatServerRegistry().debugPrintAllServers();
-                this.server.getPeerManager().broadcastChatServerRecord(this.server.getConfig().getPID(), record);
+                this.server.getPeerManager().broadcastChatServerRecord(pid, record);
+                this.server.getChatServerManager().sendAllAddrServerRecords(pid, nioChannel, this.server.getAddrServerRegistry().getRecords());
             }
             case "REPLICA" -> {
+                Long pid = this.getPID();
+                // {@code registerPeer} sends all the AddrServer records to the replica we are registering.
                 AddrServerRecord record = this.server.getPeerManager().registerPeer(
                         channel, nioChannel,
                         this.server.generatePID(), pid,
                         message.safeCastPayload(AddrServerRecord.class)
                 );
                 this.server.getAddrServerRegistry().debugPrintAllServers();
-                this.server.getChatServerManager().broadcastAddrServerRecord(this.server.getConfig().getPID(), record);
+                this.server.getChatServerManager().broadcastAddrServerRecord(pid, record);
             }
             default -> throw new IllegalArgumentException("Unrecognized sender role for REGISTER: " + message.getSenderRole());
         }

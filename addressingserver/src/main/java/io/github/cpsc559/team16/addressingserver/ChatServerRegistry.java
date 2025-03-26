@@ -47,12 +47,15 @@ public class ChatServerRegistry {
      * a process ID (PID) of a process that has already been registered -
      * otherwise a new record is inserted.
      *
-     * @param record The AddrServerRecord to insert or update.
+     * @param record The ChatServerRecord to insert or update.
      */
     public void updateOrInsertRecord(ChatServerRecord record) {
         Long id = record.getPID();
+        if (id == null) {
+            System.err.println("AddrServerRecord has a null PID. Cannot update or insert record.");
+            return;
+        }
         ChatServerRecord existing = chatServerRecords.get(id);
-
         if (existing != null) {
             System.out.println("Updating existing AddrServerRecord for ID: " + id);
         } else {

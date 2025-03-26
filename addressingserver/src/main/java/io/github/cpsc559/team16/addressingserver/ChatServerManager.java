@@ -10,7 +10,6 @@ import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ChatServerManager {
@@ -24,24 +23,65 @@ public class ChatServerManager {
 
     private final Map<SocketChannel, NIOMessageChannel> chatServerChannels;
 
+
     public ChatServerManager(ChatServerRegistry registry) {
         this.chatServerChannels = new ConcurrentHashMap<>();
         this.registry = registry;
     }
 
+    /**
+     * Returns a HashMap of SocketChannel and NIOChannel for all the
+     * current {@code ChatServer} connections.
+     *
+     * @return a map of {@code SocketChannel} to {@code NIOMessageChannel} for chat server tracking.
+     */
     public Map<SocketChannel, NIOMessageChannel> getChannels() {
-        return chatServerChannels;
+        return this.chatServerChannels;
     }
 
-    public void removeChannel(SocketChannel channel) {
+    /**
+     * Removes a ChatServer connection and logs the removal using its known network PID.
+     * This is achieved by removing the SocketChannel:NioChannel key-value pair from
+     * the HashMap of persistent connections {@code chatServerChannels}, as well as the
+     * ChatServerRecord associated with the remote process that was connected to the SocketChannel.
+     *
+     * @param channel the {@code SocketChannel} representing the peer connection to remove.
+     * <strong>NOTE:</strong> This method does not close the SocketChannel connection. It is up to the calling
+     * code to enact this behaviour.
+     */
+    public void removeRemoteProcess(SocketChannel channel) {
         NIOMessageChannel ch = chatServerChannels.remove(channel);
         if (ch != null) { // We do not ever map keys to null values, so this check does ensure that a key:value pair was present.
             // Remove this server from the registry so that if it registers again, it doesn't create a duplicate entry.
-            this.registry.getRecords().remove(ch.getServerPID());
+            try {
+                this.registry.getRecords().remove(ch.getServerPID());
+            } catch (NullPointerException e){
+                System.err.println("Removed a SocketChannel connection that was not linked to a record.");
+            }
             System.out.println("Removed peer with network PID: " + ch.getServerPID());
         } else {
-            System.out.println("No matching chat server found for the given channel.");
+            System.out.println("No matching peer found for the given channel.");
         }
+    }
+
+    /**
+     * Removes the remote process associated with the given channel and then closes the channel.
+     * <p>
+     * This method performs two main actions:
+     * <ol>
+     *   <li>Deregisters the remote process by calling {@code removeRemoteProcess(channelToRemove)},
+     *       removing any references to the remote process from internal data structures.</li>
+     *   <li>Attempts to close the provided {@code SocketChannel}. If an {@code IOException} occurs during
+     *       the close operation, it is caught and ignored.</li>
+     * </ol>
+     * </p>
+     *
+     * @param channelToRemove the {@code SocketChannel} representing the connection to be removed and closed.
+     */
+    public void removeProcessCloseConnection(SocketChannel channelToRemove) {
+        this.removeRemoteProcess(channelToRemove);
+        try { channelToRemove.close(); }
+        catch(IOException ignored) {};
     }
 
 
@@ -61,9 +101,9 @@ public class ChatServerManager {
 
     /**
      * Sends all currently known {@code ChatServerRecord} entries from the primary
-     * to a newly connected replica.
+     * to a ChatServer process.
      * <p>
-     * This ensures that the new replica is fully synchronized with the current
+     * This is typically used to ensure a ChatServer is fully synchronized with the current
      * chat server topology known to the primary.
      * </p>
      *
@@ -76,12 +116,39 @@ public class ChatServerManager {
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
-                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
-                return;
+                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord> for process " + record.getPID() +".\n" + e.getMessage());
             } catch (IOException ioe) {
                 System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
+                removeProcessCloseConnection(nioChannel.getSocketChannel());
             }
         }
+    }
+
+    /**
+     * Sends all currently known {@code AddrServerRecord} entries from the primary
+     * to a ChatServer process.
+     * <p>
+     * This is typically used to ensure a ChatServer is fully synchronized with the current
+     * chat server topology known to the primary.
+     * </p>
+     *
+     * @param primaryPID the PID of the primary server sending the updates.
+     * @param nioChannel the channel over which to send the records.
+     */
+    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
+                                         Map<Long, AddrServerRecord> addrServerRecords) {
+        for (AddrServerRecord record : addrServerRecords.values()) {
+            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
+            try {
+                nioChannel.sendMessage(message.toJson());
+            } catch (JsonProcessingException e) {
+                System.err.println("Failed to serialize UpdateMessage<AddrServerRecord> for process " + record.getPID() +".\n" + e.getMessage());
+            } catch (IOException ioe) {
+                System.err.println("Failed to send UpdateMessage<AddrServerRecord> for process " + record.getPID() +".\n" + ioe.getMessage());
+                removeProcessCloseConnection(nioChannel.getSocketChannel());
+            }
+        }
+        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
     }
 
     /**
@@ -137,6 +204,7 @@ public class ChatServerManager {
                 return;
             } catch (IOException ioe) {
                 System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+                removeProcessCloseConnection(nioChannel.getSocketChannel());
             }
         }
     }

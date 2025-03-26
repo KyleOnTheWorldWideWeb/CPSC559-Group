@@ -9,7 +9,7 @@ import java.util.concurrent.Executors;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 import io.github.cpsc559.team16.common.messaging.*;
-import io.github.cpsc559.team16.common.utilities.NetworkManager;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.*;
@@ -264,8 +264,8 @@ public class AddrServerNetworkManager {
             NIOMessageChannel ch = getKnownPersistentChannel(channel);
             if (ch != null) {
                 Long pid = ch.getServerPID();
-                peerManager.removeChannel(channel);
-                chatServerManager.removeChannel(channel);
+                peerManager.removeRemoteProcess(channel);
+                chatServerManager.removeRemoteProcess(channel);
                 System.out.println("Removing closed peer (Server ID: " + pid + ")");
             }
         }
