@@ -358,7 +358,7 @@ public class AddrServerNetworkManager {
                     }
                     // We only accept connections that begin with REGISTER messages.
                     BaseAddrServerMessage<?> message = deserializeMessage(firstMsg);
-                    if (message == null || !message.getMsgType().equals("REGISTER")) {
+                    if (message == null || !message.getMsgType().equals(MessageTypes.REGISTER)) {
                         System.err.println("Connection rejected: initial message must be REGISTER.");
                         channel.close();
                         continue;

@@ -10,16 +10,10 @@ import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 import io.github.cpsc559.team16.common.utilities.NetworkManager;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.messaging.MessageTypes;
 import io.github.cpsc559.team16.common.messaging.ObjectTypes;
 import io.github.cpsc559.team16.common.messaging.Roles;
-import io.github.cpsc559.team16.common.messaging.AckTypes;
-
-import java.io.IOException;
-import java.nio.channels.SocketChannel;
-
-import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
+import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
 
 /**
  * Handles read events from registered {@code SocketChannel}'s and routes them based on the server's role.
@@ -108,12 +102,12 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      */
     private void handleAck(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getObjectType()) {
-            case AckTypes.REGISTERED -> {
+            case AckObjectTypes.REGISTERED -> {
                 // This should ONLY ever be received by a REPLICA from the PRIMARY AddressingServer
                 // A Registration ACK is always sent with the pid as a string for the process as the payload.
-                Long assignedPID = Long.parseLong((String) message.getPayload());
+                Long assignedPID = message.safeCastPayload(Long.class);
                 server.getConfig().setPID(assignedPID);
-                nioChannel.setServerPID(assignedPID);
+                nioChannel.setServerPID(message.getSenderPID());
                 System.out.println("Registration ACK received. This process has been assigned PID #" + server.getConfig().getPID());
             }
             default -> System.err.println("Unrecognized ACK response: " + message.getObjectType());
@@ -147,8 +141,8 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
                         this.server.generatePID(), pid,
                         message.safeCastPayload(ChatServerRecord.class)
                 );
-                this.server.getChatServerRegistry().debugPrintAllServers();
-                this.peerManager.broadcastChatServerRecord(pid, record);
+                this.chatServerManager.broadcastChatServerRecord(pid, record); // Broadcast the record to all chat servers
+                this.peerManager.broadcastChatServerRecord(pid, record);       // Broadcast the record to all Replicas
                 this.chatServerManager.sendAllAddrServerRecords(pid, nioChannel, this.server.getAddrServerRegistry().getRecords());
             }
             case Roles.REPLICA -> {
@@ -183,7 +177,6 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
                         }
                     }
                     case ObjectTypes.CHAT_SERVER_RECORD -> {
-                        // server.updateChatServerInfo(channel, nioChannel, message.getPayload());
                     }
                 }
             }

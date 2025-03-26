@@ -242,13 +242,15 @@ public class ChatServerManager {
 
         System.out.println("ChatServer registered: " + chatServerHostAddr + " (PID: " + peerPID + ")");
 
-        // Send the new record explicitly. Race conditions can occur where the hashmap doesn't update quick enough.
-        UpdateMessage<ChatServerRecord> selfUpdate =
-                UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
-        nioChannel.sendMessage(selfUpdate.toJson());
+        // WE SEND THE RECORD TO ALL SERVERS (THIS ONE INCLUDED) AFTER THIS METHOD RETURNS. NO NEED TO SEND IT NOW.
 
-        // Send ACK to notify the server it has been registered.
-        AckMessage ack = new AckMessage("Registered", primaryPID, "PRIMARY", "CHATSERVER", peerPID.toString());
+        // Send the new record explicitly. Race conditions can occur where the hashmap doesn't update quick enough.
+//        UpdateMessage<ChatServerRecord> selfUpdate =
+//                UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
+//        nioChannel.sendMessage(selfUpdate.toJson());
+
+        // Send an ACK to notify the server it has been registered.
+        AckMessage ack = new AckMessage(AckObjectTypes.REGISTERED, primaryPID, Roles.PRIMARY, Roles.CHATSERVER, peerPID.toString());
         nioChannel.sendMessage(ack.toJson());
 
         return record;

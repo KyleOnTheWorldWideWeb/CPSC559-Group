@@ -13,6 +13,7 @@ package io.github.cpsc559.team16.common.messaging;
  *
  */
 public class ObjectTypes {
+
     /**
      * The object type for an AddressingServer record.
      */
@@ -27,6 +28,22 @@ public class ObjectTypes {
      * The object type for representing client count values.
      */
     public static final String CLIENT_COUNT = "ClientCount";
+
+
+    /**
+     * The object type for representing a Long value in message payloads.
+     */
+    public static final String LONG = "Long";
+
+    /**
+     * The object type for representing a String value in message payloads.
+     */
+    public static final String STRING = "String";
+
+    /**
+     * The object type used when no specific object type is applicable.
+     */
+    public static final String NONE = "NONE";
 
     /**
      * This is used for inter-process communication for failure related messaging. It is used in combination
@@ -46,17 +63,9 @@ public class ObjectTypes {
     public static final String ELECTION_VOTE = "ElectionVote";
 
     /**
-     * The object type for representing a Long value in message payloads.
+     * The object type for representing that the receiver has been succesfully registered.
+     * Used in combination with an ACK to notify a process that it has been registered by the
+     * Primary AddressingServer.
      */
-    public static final String LONG = "Long";
-
-    /**
-     * The object type for representing a String value in message payloads.
-     */
-    public static final String STRING = "String";
-
-    /**
-     * The object type used when no specific object type is applicable.
-     */
-    public static final String NONE = "NONE";
+    public static final String REGISTERED = "Registered";
 }

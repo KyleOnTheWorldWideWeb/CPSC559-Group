@@ -129,15 +129,16 @@ public class PeerManager {
 
         System.out.println("Replica registered: " + replicaHostAddr + " (PID: " + peerPID + ")");
 
+        // WE SEND THE RECORD TO ALL SERVERS (THIS ONE INCLUDED) AFTER THIS METHOD RETURNS. NO NEED TO SEND IT NOW.
+
         // Send the new record explicitly. Race conditions can occur where the hashmap doesn't update quick enough.
-        UpdateMessage<AddrServerRecord> selfUpdate =
-                UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
-        nioChannel.sendMessage(selfUpdate.toJson());
+//        UpdateMessage<AddrServerRecord> selfUpdate =
+//                UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
+//        nioChannel.sendMessage(selfUpdate.toJson());
 
-        // Send an ACK to notify the server it has beenr registered.
-        AckMessage ack = new AckMessage("Registered", primaryPID, "PRIMARY", "REPLICA", peerPID.toString());
+        // Send an ACK to notify the server it has been registered.
+        AckMessage ack = new AckMessage(AckObjectTypes.REGISTERED, primaryPID, Roles.PRIMARY, Roles.REPLICA, peerPID.toString());
         nioChannel.sendMessage(ack.toJson());
-
         return record;
     }
 

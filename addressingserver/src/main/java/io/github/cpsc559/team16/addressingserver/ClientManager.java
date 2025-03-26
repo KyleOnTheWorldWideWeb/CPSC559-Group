@@ -3,12 +3,11 @@ package io.github.cpsc559.team16.addressingserver;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.AckTypes;
+import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.util.Optional;
 
 public class ClientManager {
@@ -69,10 +68,10 @@ public class ClientManager {
             ChatServerRecord updatedRecord = chatServerOpt.get();
             // Construct ACK payload as "pid-hostAddress:clientPort"
             String payload = updatedRecord.getPID() + "-" + updatedRecord.getHostAddress() + ":" + updatedRecord.getClientPort();
-            nioChannel.sendMessage(new AckMessage(AckTypes.HOSTADDRESS, senderPID, Roles.PRIMARY, Roles.CLIENT, payload).toJson());
+            nioChannel.sendMessage(new AckMessage(AckObjectTypes.HOSTADDRESS, senderPID, Roles.PRIMARY, Roles.CLIENT, payload).toJson());
             return updatedRecord;
         } else {
-            nioChannel.sendMessage(new AckMessage(AckTypes.NOHOST, senderPID, Roles.PRIMARY, Roles.CLIENT, "No available host.").toJson());
+            nioChannel.sendMessage(new AckMessage(AckObjectTypes.NOHOST, senderPID, Roles.PRIMARY, Roles.CLIENT, "No available host.").toJson());
             return null;
         }
     }

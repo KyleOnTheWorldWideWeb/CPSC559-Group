@@ -36,7 +36,7 @@ public class AddrServerRegistry {
      */
     public void putAddrServerRecord(Long id, AddrServerRecord record) {
         addrServerRecords.put(id, record);
-        //debugPrintAllServers();
+        debugPrintAllServers();
     }
 
     /**
