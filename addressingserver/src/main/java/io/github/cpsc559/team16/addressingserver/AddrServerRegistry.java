@@ -62,8 +62,22 @@ public class AddrServerRegistry {
     }
 
 
-    public boolean removeRecord(Long id) {
-        return addrServerRecords.remove(id) != null;
+    /**
+     * Removes an {@link AddrServerRecord} from the registry using the provided process ID (PID).
+     * <p>
+     * This method attempts to remove the record associated with the given {@code pid} from the internal
+     * {@code addrServerRecords} map. If a record is found and removed, a success message is printed.
+     * Otherwise, a warning is issued to indicate that no record existed for the specified PID.
+     * </p>
+     *
+     * @param pid the unique process ID of the AddressingServer to remove from the registry.
+     */
+    public void removeRecordByKey(Long pid) {
+        if (addrServerRecords.remove(pid) != null) {
+            System.out.println("Successfully removed AddrServerRecord for Network Process with PID: " + pid);
+        } else {
+            System.out.println("No AddrServerRecord found for PID: " + pid + " — nothing to remove.");
+        }
     }
 
 
@@ -88,9 +102,7 @@ public class AddrServerRegistry {
                 System.err.println("WARNING: A server with ID " + serverPID + " already existed. Overwriting existing entry.");
             } else {
                 System.out.println("\n**AddressingServer** successfully registered with ID: " + serverPID + "\n");
-                //debugPrintAllServers();
             }
-            //return serverPID;
         } catch (Exception e) {
             System.err.println("Error registering addressing server: " + e.getMessage());
             throw e;

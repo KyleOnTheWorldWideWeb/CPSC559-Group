@@ -50,17 +50,14 @@ public class ChatServerManager {
      * code to enact this behaviour.
      */
     public void removeRemoteProcess(SocketChannel channel) {
+        // We already ensured that the key:value pair exists in the calling code AddrServerNetworkManager.cleanupPersistentConnection()
         NIOMessageChannel ch = chatServerChannels.remove(channel);
-        if (ch != null) { // We do not ever map keys to null values, so this check does ensure that a key:value pair was present.
-            // Remove this server from the registry so that if it registers again, it doesn't create a duplicate entry.
-            try {
-                this.registry.getRecords().remove(ch.getServerPID());
-            } catch (NullPointerException e){
-                System.err.println("Removed a SocketChannel connection that was not linked to a record.");
-            }
-            System.out.println("Removed peer with network PID: " + ch.getServerPID());
-        } else {
-            System.out.println("No matching peer found for the given channel.");
+        Long pid = ch.getServerPID();
+        try {
+            this.registry.removeRecordByKey(pid);
+            System.out.println("Removed the network communication channels for the ChatServer with PID: " + pid);
+        } catch (NullPointerException e){
+            System.err.println("Removed a NIOMessageChannel and SocketChannel connection for a ChatServer that had no ChatServerRecord. It's network PID was - " + pid);
         }
     }
 
@@ -112,7 +109,7 @@ public class ChatServerManager {
      */
     public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel) {
         for (ChatServerRecord record : this.registry.getRecords().values()) {
-            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
+            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
@@ -138,7 +135,7 @@ public class ChatServerManager {
     public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
                                          Map<Long, AddrServerRecord> addrServerRecords) {
         for (AddrServerRecord record : addrServerRecords.values()) {
-            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
+            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToCS(primaryPID, record);
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
@@ -165,7 +162,7 @@ public class ChatServerManager {
      * @param record     the {@link AddrServerRecord} to broadcast.
      */
     public void broadcastAddrServerRecord(Long primaryPID, AddrServerRecord record) {
-        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
+        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToCS(primaryPID, record);
         broadcastServerRecord(message);
     }
 
@@ -181,7 +178,7 @@ public class ChatServerManager {
      * @param record     the {@link ChatServerRecord} to broadcast.
      */
     public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
-        UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
+        UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
         broadcastServerRecord(message);
     }
 
@@ -220,38 +217,37 @@ public class ChatServerManager {
      *
      * @param socketChannel the socket channel for the chat server connection.
      * @param nioChannel    the messaging channel used to communicate with the chat server.
-     * @param peerPID       the process ID assigned to the chat server.
+     * @param csPID         the process ID assigned to the chat server.
      * @param primaryPID    the process ID of the primary AddressingServer.
      * @param record        a partially populated record to complete and store.
      * @throws IOException if an error occurs during message transmission.
      */
-    public ChatServerRecord registerServer(SocketChannel socketChannel, NIOMessageChannel nioChannel, Long peerPID,
+    public ChatServerRecord registerServer(SocketChannel socketChannel, NIOMessageChannel nioChannel, Long csPID,
                                            Long primaryPID, ChatServerRecord record) throws IOException {
         InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
         String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
 
-        nioChannel.setServerPID(peerPID);
+        nioChannel.setServerPID(csPID);
         chatServerChannels.put(socketChannel, nioChannel);
 
         record.setHostAddress(chatServerHostAddr);
-        record.setPID(peerPID);
+        record.setPID(csPID);
         // Send all current records. This helps avoid race conditions.
         this.sendAllChatServerRecords(primaryPID, nioChannel);
         // Add the new record - this might not be inserted quickly enough to call the sendAll method directly after.
-        registry.putChatServerRecord(peerPID, record);
+        registry.putChatServerRecord(csPID, record);
 
-        System.out.println("ChatServer registered: " + chatServerHostAddr + " (PID: " + peerPID + ")");
+        System.out.println("ChatServer registered: " + chatServerHostAddr + " (PID: " + csPID + ")");
 
         // WE SEND THE RECORD TO ALL SERVERS (THIS ONE INCLUDED) AFTER THIS METHOD RETURNS. NO NEED TO SEND IT NOW.
 
         // Send the new record explicitly. Race conditions can occur where the hashmap doesn't update quick enough.
-//        UpdateMessage<ChatServerRecord> selfUpdate =
-//                UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
-//        nioChannel.sendMessage(selfUpdate.toJson());
+        UpdateMessage<ChatServerRecord> selfUpdate =
+                UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
+        nioChannel.sendMessage(selfUpdate.toJson());
 
         // Send an ACK to notify the server it has been registered.
-        AckMessage ack = new AckMessage(AckObjectTypes.REGISTERED, primaryPID, Roles.PRIMARY, Roles.CHATSERVER, peerPID.toString());
-        nioChannel.sendMessage(ack.toJson());
+        nioChannel.sendMessage(AckMessage.chatServerRegistered(primaryPID, csPID).toJson());
 
         return record;
     }

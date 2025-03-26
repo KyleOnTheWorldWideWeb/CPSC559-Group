@@ -31,7 +31,7 @@ public class MessageDeserializer {
             String objectType = rootNode.has("objectType") ? rootNode.get("objectType").asText() : "NONE";
 
             // Step 2: Determine the correct payload class
-            Class<?> payloadClass = getPayloadClass(objectType);
+            Class<?> payloadClass = ObjectTypes.getPayloadClass(objectType);
 
             // Step 3: Deserialize the full message with the correct payload type
             return BaseAddrServerMessage.fromJson(json, payloadClass);
@@ -41,26 +41,5 @@ public class MessageDeserializer {
         }
     }
 
-    /**
-     * Maps known object types to their respective Java classes.
-     *
-     * @param objectType The object type field from the message.
-     * @return The corresponding class type or {@code Object.class} if no specific type is needed.
-     */
-    public static Class<?> getPayloadClass(String objectType) {
-        switch (objectType) {
-            case "ChatServerRecord":
-                return ChatServerRecord.class;
-            case "AddrServerRecord":
-                return AddrServerRecord.class;
-            case "ClientCount":
-                return Integer.class; // Client count updates
-            case "ServerFailure":
-                return String.class; // Failure notifications
-            case "ElectionMessage":
-                return ElectionMessage.class;
-            default:
-                return Object.class; // No specific payload type
-        }
-    }
+
 }

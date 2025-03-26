@@ -1,5 +1,9 @@
 package io.github.cpsc559.team16.common.messaging;
 
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ElectionVote;
+
 /**
  * Constants representing standardized object types used in message payloads.
  * These should match the values used in {@code BaseAddrServerMessage.objectType}
@@ -68,4 +72,38 @@ public class ObjectTypes {
      * Primary AddressingServer.
      */
     public static final String REGISTERED = "Registered";
+
+    /**
+     * Maps known object types to their respective Java classes.
+     *
+     * @param objectType The object type field from the message.
+     * @return The corresponding class type or {@code Object.class} if no specific type is needed.
+     */
+    public static Class<?> getPayloadClass(String objectType) {
+        return switch (objectType) {
+            case ObjectTypes.ADDR_SERVER_RECORD -> AddrServerRecord.class;
+            case ObjectTypes.CHAT_SERVER_RECORD -> ChatServerRecord.class;
+            case ObjectTypes.CLIENT_COUNT -> Integer.class;
+            case ObjectTypes.SERVER_FAILURE -> String.class;
+            case ObjectTypes.ELECTION_VOTE -> ElectionVote.class;
+
+            // Primitive and base types
+            case ObjectTypes.LONG -> Long.class;
+            case ObjectTypes.STRING -> String.class;
+            case ObjectTypes.NONE -> Object.class;
+
+            // ACK types — these are strings unless noted otherwise
+            case AckObjectTypes.HOSTADDRESS,
+                    AckObjectTypes.NOHOST,
+                    AckObjectTypes.DEMOTED,
+                    AckObjectTypes.OK -> String.class;
+
+            // If REGISTERED is used for PID assignments
+            case AckObjectTypes.REGISTERED -> Long.class;
+
+            default -> Object.class; // fallback
+        };
+    }
+
+
 }

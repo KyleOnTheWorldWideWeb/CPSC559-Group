@@ -57,21 +57,21 @@ public class ClientManager {
      * It then returns the updated ChatServerRecord.
      * If no eligible host is found, it sends an ACK indicating that no host is available and returns null.
      *
-     * @param senderPID  the process ID of the sender (typically the AddressingServer).
+     * @param primaryPID  the process ID of the sender (typically the PRIMARY AddressingServer).
      * @param nioChannel the channel used for sending the message.
      * @return the updated ChatServerRecord if a host is available, or null if no eligible host was found.
      * @throws IOException if sending the message fails.
      */
-    public ChatServerRecord sendHostAck(long senderPID, NIOMessageChannel nioChannel) throws IOException {
+    public ChatServerRecord sendHostAck(long primaryPID, NIOMessageChannel nioChannel) throws IOException {
         Optional<ChatServerRecord> chatServerOpt = getActiveChatServerRecord();
         if (chatServerOpt.isPresent()) {
             ChatServerRecord updatedRecord = chatServerOpt.get();
             // Construct ACK payload as "pid-hostAddress:clientPort"
-            String payload = updatedRecord.getPID() + "-" + updatedRecord.getHostAddress() + ":" + updatedRecord.getClientPort();
-            nioChannel.sendMessage(new AckMessage(AckObjectTypes.HOSTADDRESS, senderPID, Roles.PRIMARY, Roles.CLIENT, payload).toJson());
-            return updatedRecord;
+            String hostAddress = updatedRecord.getPID() + "-" + updatedRecord.getHostAddress() + ":" + updatedRecord.getClientPort();
+            nioChannel.sendMessage(AckMessage.chatHostAddress(primaryPID, hostAddress).toJson());
+            return updatedRecord; // This ChatServerRecord has a new client count -> we must broadcast it.
         } else {
-            nioChannel.sendMessage(new AckMessage(AckObjectTypes.NOHOST, senderPID, Roles.PRIMARY, Roles.CLIENT, "No available host.").toJson());
+            nioChannel.sendMessage(AckMessage.noChatHost(primaryPID).toJson());
             return null;
         }
     }

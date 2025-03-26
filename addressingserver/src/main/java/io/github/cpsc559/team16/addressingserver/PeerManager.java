@@ -63,17 +63,14 @@ public class PeerManager {
      * of the caller.
      */
     public void removeRemoteProcess(SocketChannel channel) {
+        // We already ensured that the key:value pair exists in the calling code AddrServerNetworkManager.cleanupPersistentConnection()
         NIOMessageChannel ch = peerChannels.remove(channel);
-        if (ch != null) { // We do not ever map keys to null values, so this check does ensure that a key:value pair was present.
-            // Remove this server from the registry so that if it registers again, it doesn't create a duplicate entry.
-            try {
-                this.registry.getRecords().remove(ch.getServerPID());
-            } catch (NullPointerException e){
-                System.err.println("Removed a SocketChannel connection that was not linked to a record.");
-            }
-            System.out.println("Removed peer with network PID: " + ch.getServerPID());
-        } else {
-            System.out.println("No matching peer found for the given channel.");
+        Long pid = ch.getServerPID();
+        try {
+            this.registry.removeRecordByKey(pid);
+            System.out.println("Removed the network communication channels for the AddressingServer process with PID: " + pid);
+        } catch (NullPointerException e){
+            System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer that had no AddrServerRecord. It's network PID was - " + pid);
         }
     }
 
@@ -114,15 +111,20 @@ public class PeerManager {
      */
     public AddrServerRecord registerPeer(SocketChannel socketChannel, NIOMessageChannel nioChannel, Long peerPID,
                              Long primaryPID, AddrServerRecord record) throws IOException {
-        InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
-        String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
-
+        // Set the NIOChannel process ID to match that of the remote process before storing it for use.
         nioChannel.setServerPID(peerPID);
         peerChannels.put(socketChannel, nioChannel);
-
+        // Retrieve the remote process Host Address.
+        InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
+        String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
+        // Update the incoming AddrServerRecord provided by the remote process.
         record.setHostAddress(replicaHostAddr);
         record.setPID(peerPID);
-        // Send all current records. This helps avoid race conditions.
+//        System.out.println("PRIMARY REGISTERED PROCESS WITH PID ---------> " + peerPID);
+//        System.out.println("NIOChannel PID = " + nioChannel.getServerPID());
+//        System.out.println("Socket Channel ID = " + socketChannel.toString());
+        // Send all current AddrServerRecord's to the remote process before adding the record.
+        // This is done because the AddrServerReadDispatcher will broadcast the new record once this method returns.
         this.sendAllAddrServerRecords(primaryPID, nioChannel);
 
         registry.putAddrServerRecord(peerPID, record);
@@ -132,13 +134,12 @@ public class PeerManager {
         // WE SEND THE RECORD TO ALL SERVERS (THIS ONE INCLUDED) AFTER THIS METHOD RETURNS. NO NEED TO SEND IT NOW.
 
         // Send the new record explicitly. Race conditions can occur where the hashmap doesn't update quick enough.
-//        UpdateMessage<AddrServerRecord> selfUpdate =
-//                UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
-//        nioChannel.sendMessage(selfUpdate.toJson());
+        UpdateMessage<AddrServerRecord> selfUpdate =
+                UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
+        nioChannel.sendMessage(selfUpdate.toJson());
 
         // Send an ACK to notify the server it has been registered.
-        AckMessage ack = new AckMessage(AckObjectTypes.REGISTERED, primaryPID, Roles.PRIMARY, Roles.REPLICA, peerPID.toString());
-        nioChannel.sendMessage(ack.toJson());
+        nioChannel.sendMessage(AckMessage.replicaRegistered(primaryPID, peerPID).toJson());
         return record;
     }
 
@@ -155,7 +156,7 @@ public class PeerManager {
      */
     public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel) {
         for (AddrServerRecord record : this.registry.getRecords().values()) {
-            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
+            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
@@ -183,7 +184,7 @@ public class PeerManager {
      */
     public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel, Map<Long, ChatServerRecord> chatRecords) {
         for (ChatServerRecord record : chatRecords.values()) {
-            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
+            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
@@ -236,7 +237,7 @@ public class PeerManager {
      * @param record     the {@link AddrServerRecord} to broadcast.
      */
     public void broadcastAddrServerRecord(Long primaryPID, AddrServerRecord record) {
-        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToNetwork(primaryPID, record);
+        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
         broadcastServerRecord(message);
     }
 
@@ -253,7 +254,7 @@ public class PeerManager {
      *
      */
     public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
-        UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
+        UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
         broadcastServerRecord(message);
     }
 
@@ -379,7 +380,7 @@ public class PeerManager {
      *
      * @return a map of {@code SocketChannel} to {@code NIOMessageChannel} for peer tracking.
      */
-    public Map<SocketChannel, NIOMessageChannel> getPeerChannels() {
+    public Map<SocketChannel, NIOMessageChannel> getChannels() {
         return this.peerChannels;
     }
 

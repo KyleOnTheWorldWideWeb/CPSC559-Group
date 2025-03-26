@@ -65,9 +65,26 @@ public class ChatServerRegistry {
         debugPrintAllServers();
     }
 
-    public boolean removeRecordByKey(Long id) {
-        return chatServerRecords.remove(id) != null;
+
+    /**
+     * Removes a {@link ChatServerRecord} from the internal registry using the provided process ID (PID) as the key.
+     * <p>
+     * This method attempts to remove the record associated with the given {@code pid} from the internal
+     * {@code chatServerRecords} map. If the record exists and is successfully removed, a confirmation message
+     * is printed to the console. If no record is found for the given {@code pid}, a warning message is printed
+     * instead.
+     * </p>
+     *
+     * @param pid the unique process ID of the chat server to remove from the registry.
+     */
+    public void removeRecordByKey(Long pid) {
+        if (chatServerRecords.remove(pid) != null) {
+            System.out.println("Successfully removed ChatServerRecord for Network Process with PID: " + pid);
+        } else {
+            System.out.println("No ChatServerRecord found for PID: " + pid + " — nothing to remove.");
+        }
     }
+
 
 
     /**

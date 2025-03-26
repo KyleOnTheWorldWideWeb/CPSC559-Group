@@ -136,7 +136,7 @@ public class AddrServerNetworkManager {
      * @return The opened ServerSocketChannel.
      * @throws IOException If an error occurs while opening or binding the channel.
      */
-    
+
     public ServerSocketChannel openListenerChannel(int port) throws IOException {
         try {
             ServerSocketChannel channel = ServerSocketChannel.open();
@@ -215,7 +215,7 @@ public class AddrServerNetworkManager {
      * @return {@code true} if the channel is known to be persistent (i.e., belongs to a peer or chat server), {@code false} otherwise.
      */
     private boolean isPersistentConnection(SocketChannel channel) {
-        return peerManager.getPeerChannels().containsKey(channel)
+        return peerManager.getChannels().containsKey(channel)
                 || chatServerManager.getChannels().containsKey(channel);
     }
 
@@ -233,7 +233,7 @@ public class AddrServerNetworkManager {
      * @return the associated {@code NIOMessageChannel}, or {@code null} if not found.
      */
     private NIOMessageChannel getKnownPersistentChannel(SocketChannel channel) {
-        NIOMessageChannel ch = peerManager.getPeerChannels().get(channel);
+        NIOMessageChannel ch = peerManager.getChannels().get(channel);
         if (ch != null) return ch;
         return chatServerManager.getChannels().get(channel); // Will return null if it doesn't exist (which is what we want)
     }
@@ -260,13 +260,16 @@ public class AddrServerNetworkManager {
                 channel,
                 cce ? "remote process disconnection." : "I/O failure."
         );
-        if (cce) {
-            NIOMessageChannel ch = getKnownPersistentChannel(channel);
-            if (ch != null) {
-                Long pid = ch.getServerPID();
-                peerManager.removeRemoteProcess(channel);
+        NIOMessageChannel ch = getKnownPersistentChannel(channel);
+        if (ch != null) {
+            Long pid = ch.getServerPID();
+            if (chatServerManager.getChannels().containsKey(channel)) {
                 chatServerManager.removeRemoteProcess(channel);
-                System.out.println("Removing closed peer (Server ID: " + pid + ")");
+            } else if (peerManager.getChannels().containsKey(channel)) {
+                peerManager.removeRemoteProcess(channel);
+            }
+            else {
+                System.err.println("Unknown channel type — not found in either ChatServer or PeerManager.");
             }
         }
         key.cancel();
@@ -286,7 +289,7 @@ public class AddrServerNetworkManager {
      *
      * @return the internal {@code Selector} used by this {@code AddrServerNetworkManager}.
      */
-    
+
     public Selector getSelector() {
         return selector;
     }
@@ -356,12 +359,21 @@ public class AddrServerNetworkManager {
                         channel.close();
                         continue;
                     }
-                    // We only accept connections that begin with REGISTER messages.
+                    /*
+                     * NOTE: The only connections (initial connections, not persistent connections)
+                     * AddressingServers accept are those with MessageType.REGISTER or MessageType.ELECTION
+                     */
                     BaseAddrServerMessage<?> message = deserializeMessage(firstMsg);
-                    if (message == null || !message.getMsgType().equals(MessageTypes.REGISTER)) {
-                        System.err.println("Connection rejected: initial message must be REGISTER.");
-                        channel.close();
+                    if (message == null ) {
+                        System.err.println("Connection rejected: NULL message on connection request.");
                         continue;
+                    } else {
+                        String messageType = message.getMsgType();
+                        if (!messageType.equals(MessageTypes.REGISTER) && !messageType.equals(MessageTypes.ELECTION)) {
+                            System.err.println("Connection rejected: initial message must be REGISTER or ELECTION.");
+                            channel.close();
+                            continue;
+                        }
                     }
 
                     if (listenerSC.equals(chatServerListenerChannel)) {
@@ -369,7 +381,7 @@ public class AddrServerNetworkManager {
                         chatServerManager.getChannels().put(channel, nioChannel);
                     } else if (listenerSC.equals(peerListenerChannel)) {
                         openPersistentChannel(channel);
-                        peerManager.getPeerChannels().put(channel, nioChannel);
+                        peerManager.getChannels().put(channel, nioChannel);
                     }
                         /*
                          The only port we haven't checked by this point is the one designated for the client.

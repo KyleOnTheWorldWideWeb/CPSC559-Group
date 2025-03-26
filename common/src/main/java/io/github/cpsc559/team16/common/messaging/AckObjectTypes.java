@@ -36,4 +36,6 @@ public class AckObjectTypes {
 
     public static final String DEMOTED = "Demoted";
 
+    public static final String OK = "Ok";
+
 }

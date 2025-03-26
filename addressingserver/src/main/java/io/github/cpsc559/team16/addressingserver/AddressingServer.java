@@ -260,7 +260,11 @@ public class AddressingServer {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
                 server.registerReplicaAddrServer();
-                server.getPingManager().run();
+
+                // TODO - A thread(s) must be spun up for this method call.
+                //  Since this invocation causes an infinite loop, the main thread will get hung up.
+                //  And the Replica won't enter the main event loop and function as intended.
+                //server.getPingManager().run();
             }
         }
         try {
