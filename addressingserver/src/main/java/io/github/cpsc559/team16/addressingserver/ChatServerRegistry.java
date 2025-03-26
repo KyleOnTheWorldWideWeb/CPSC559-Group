@@ -57,11 +57,10 @@ public class ChatServerRegistry {
         }
         ChatServerRecord existing = chatServerRecords.get(id);
         if (existing != null) {
-            System.out.println("Updating existing AddrServerRecord for ID: " + id);
+            System.out.println("Updating existing ChatServerRecord for ID: " + id);
         } else {
-            System.out.println("Inserting new AddrServerRecord for ID: " + id);
+            System.out.println("Inserting new ChatServerRecord for ID: " + id);
         }
-
         chatServerRecords.put(id, record);
         debugPrintAllServers();
     }
@@ -72,20 +71,29 @@ public class ChatServerRegistry {
 
 
     /**
-     * Updates the client count for the {@link io.github.cpsc559.team16.common.dto.ChatServerRecord}
-     * associated with the specified chat server PID.
+     * Updates the client count in the {@link io.github.cpsc559.team16.common.dto.ChatServerRecord}
+     * associated with the specified ChatServer PID.
      * <p>
-     * This method retrieves the {@code ChatServerRecord} from the internal registry map using the provided
-     * {@code chatServerPid} and sets its client count to the new value given by {@code newClientCount}.
+     * This method retrieves the {@code ChatServerRecord} corresponding to the provided {@code chatServerPid}
+     * from the internal registry map, updates its client count to the value specified by {@code newClientCount},
+     * and then returns the updated record.
      * </p>
      *
-     * @param newClientCount the new client count value to update in the ChatServerRecord.
+     * @param newClientCount the new client count to set in the ChatServerRecord.
      * @param chatServerPid  the process ID (PID) of the ChatServer whose record is to be updated.
+     * @return the updated {@link io.github.cpsc559.team16.common.dto.ChatServerRecord}.
      * @throws NullPointerException if no ChatServerRecord exists for the given {@code chatServerPid}.
      */
-    public void updateClientCount(int newClientCount, Long chatServerPid) {
-        this.chatServerRecords.get(chatServerPid).setClientCount(newClientCount);
+    public ChatServerRecord updateClientCount(int newClientCount, Long chatServerPid) {
+        ChatServerRecord record = chatServerRecords.get(chatServerPid);
+        if (record == null) {
+            System.err.println("Error: ChatServerRecord not found for PID: " + chatServerPid);
+            throw new NullPointerException("No ChatServerRecord exists for ChatServer PID: " + chatServerPid);
+        }
+        record.setClientCount(newClientCount);
+        return record;
     }
+
 
     /**
      * Creates a record for a chat server by generating a unique ID and inserting its
@@ -103,9 +111,8 @@ public class ChatServerRegistry {
      * @param chatPeerPort    the port used for peer-to-peer (gossip) communication.
      * @param maxClientCount  the maximum number of client connections allowed for this server.
      *
-     * @return serverPID The unique process id generated for the newly registered {@code ChatServer}
      */
-    public long createChatServerRecord(Long serverPID, String chatHostAddress, int addrServerPort, int chatClientPort,
+    public void createChatServerRecord(Long serverPID, String chatHostAddress, int addrServerPort, int chatClientPort,
                                         int chatPeerPort, int maxClientCount) {
         try {
             ChatServerRecord newServer = new ChatServerRecord(serverPID, chatHostAddress, addrServerPort,
@@ -115,12 +122,10 @@ public class ChatServerRegistry {
 
             if (previous != null) {
                 System.err.println("WARNING: A server with ID " + serverPID + " already existed. Overwriting existing entry.");
-                // TODO: add logic to skip a range of ID values and re-insert the overwritten record - "previous"
             } else {
                 System.out.println("\n**ChatServer** successfully registered with ID: " + serverPID + "\n");
                 debugPrintAllServers();
             }
-            return serverPID;
         } catch (Exception e) {
             System.err.println("Error registering chat server: " + e.getMessage());
             throw e;

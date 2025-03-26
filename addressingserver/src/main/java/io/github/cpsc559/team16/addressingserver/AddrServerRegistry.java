@@ -58,6 +58,7 @@ public class AddrServerRegistry {
             System.out.println("Inserting new AddrServerRecord for ID: " + id);
         }
         addrServerRecords.put(id, record);
+        debugPrintAllServers();
     }
 
 

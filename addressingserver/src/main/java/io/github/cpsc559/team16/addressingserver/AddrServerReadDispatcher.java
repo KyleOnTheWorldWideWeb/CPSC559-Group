@@ -6,6 +6,10 @@ import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 import io.github.cpsc559.team16.common.utilities.NetworkManager;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.messaging.MessageTypes;
+import io.github.cpsc559.team16.common.messaging.ObjectTypes;
+import io.github.cpsc559.team16.common.messaging.Roles;
+import io.github.cpsc559.team16.common.messaging.AckTypes;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
@@ -29,11 +33,15 @@ import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.dese
  */
 public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     private final AddressingServer server;
-
+    private final PeerManager peerManager;
+    private final ClientManager clientManager;
+    private final ChatServerManager chatServerManager;
 
     public AddrServerReadDispatcher(AddressingServer server) {
         this.server = server;
-
+        this.peerManager = server.getPeerManager();
+        this.clientManager = server.getClientManager();
+        this.chatServerManager = server.getChatServerManager();
     }
 
     /**
@@ -43,8 +51,6 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     private Long getPID() {
         return this.server.getConfig().getPID();
     }
-
-
 
     /**
      * Uses an {@link NIOMessageChannel} for safe and abstracted message I/O between two processes
@@ -69,7 +75,6 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
         }
     }
 
-
     /**
      * Dispatches a received message based on its type, sender role, and object type.
      *
@@ -80,25 +85,25 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      */
     private void dispatchMsgType(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getMsgType()) {
-            case "ACK" -> handleAck(channel, nioChannel, message);
+            case MessageTypes.ACK -> handleAck(channel, nioChannel, message);
             // I have removed this case so that ONLY a new connection request can register with the Primary. This is handled in the main event loop.
-            //case "REGISTER" -> handleRegistration(channel, nioChannel, message);
-            case "UPDATE" -> handleUpdate(channel, nioChannel, message);
-            case "REQUEST" -> handleRequest(channel, nioChannel, message);
-            case "PING" -> handlePing(channel, nioChannel, message);
-            case "NOTIFICATION" -> handleNotification(channel, nioChannel, message);
-            case "ELECTION" -> handleElection(channel, nioChannel, message);
+            //case MessageTypes.REGISTER -> handleRegistration(channel, nioChannel, message);
+            case MessageTypes.UPDATE -> handleUpdate(channel, nioChannel, message);
+            case MessageTypes.REQUEST -> handleRequest(channel, nioChannel, message);
+            case MessageTypes.PING -> handlePing(channel, nioChannel, message);
+            case MessageTypes.NOTIFICATION -> handleNotification(channel, nioChannel, message);
+            case MessageTypes.SERVERFAILURE -> handleServerFailure(channel, nioChannel, message);
+            case MessageTypes.ELECTION -> handleElection(channel, nioChannel, message);
             default -> System.err.println("Unrecognized message type: " + message.getMsgType());
         }
     }
-
 
     /**
      * <NOTE> Can probably remove the channel parameters, but I'm keeping them for now in case an ACK needs to trigger an action.</NOTE>
      */
     private void handleAck(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getObjectType()) {
-            case "Registered" -> {
+            case AckTypes.REGISTERED -> {
                 // This should ONLY ever be received by a REPLICA from the PRIMARY AddressingServer
                 // A Registration ACK is always sent with the pid as a string for the process as the payload.
                 Long assignedPID = Long.parseLong((String) message.getPayload());
@@ -120,87 +125,90 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     public void handleRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message)
             throws IOException {
         switch (message.getSenderRole()) {
-            case "CLIENT" -> {
+            case Roles.CLIENT -> {
                 // WE CAN TUNE THE RESPONSE HERE. FOR NOW I WILL SIMPLY DO AN ACK WITH THE CHATSERVER info as - PID-IPADDRESS:PORTNUMBER
-                ChatServerRecord updatedRecord = this.server.getClientManager().sendHostAck(server.getConfig().getPID(), nioChannel);
+                ChatServerRecord updatedRecord = this.clientManager.sendHostAck(server.getConfig().getPID(), nioChannel);
                 if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
                     System.out.println("Client directed to an active host.");
                     Long pid = this.getPID();
-                    this.server.getChatServerManager().broadcastChatServerRecord(pid, updatedRecord);
-                    
+                    this.chatServerManager.broadcastChatServerRecord(pid, updatedRecord);
                 } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
             }
-            case "CHATSERVER" -> {
+            case Roles.CHATSERVER -> {
                 Long pid = this.getPID();
                 // {@code registerServer} sends all the ChatServer records to the replica we are registering.
-                ChatServerRecord record = this.server.getChatServerManager().registerServer(
+                ChatServerRecord record = this.chatServerManager.registerServer(
                         channel, nioChannel,
                         this.server.generatePID(), pid,
                         message.safeCastPayload(ChatServerRecord.class)
                 );
                 this.server.getChatServerRegistry().debugPrintAllServers();
-                this.server.getPeerManager().broadcastChatServerRecord(pid, record);
-                this.server.getChatServerManager().sendAllAddrServerRecords(pid, nioChannel, this.server.getAddrServerRegistry().getRecords());
+                this.peerManager.broadcastChatServerRecord(pid, record);
+                this.chatServerManager.sendAllAddrServerRecords(pid, nioChannel, this.server.getAddrServerRegistry().getRecords());
             }
-            case "REPLICA" -> {
+            case Roles.REPLICA -> {
                 Long pid = this.getPID();
                 // {@code registerPeer} sends all the AddrServer records to the replica we are registering.
-                AddrServerRecord record = this.server.getPeerManager().registerPeer(
+                AddrServerRecord record = this.peerManager.registerPeer(
                         channel, nioChannel,
                         this.server.generatePID(), pid,
                         message.safeCastPayload(AddrServerRecord.class)
                 );
                 this.server.getAddrServerRegistry().debugPrintAllServers();
-                this.server.getChatServerManager().broadcastAddrServerRecord(pid, record);
+                this.chatServerManager.broadcastAddrServerRecord(pid, record);
             }
             default -> throw new IllegalArgumentException("Unrecognized sender role for REGISTER: " + message.getSenderRole());
         }
     }
 
-
     private void handleUpdate(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getSenderRole()) {
-            case "CHATSERVER" -> {
+            case Roles.CHATSERVER -> {
                 switch (message.getObjectType()) {
-                    case "ClientCount" -> {
-                        // server.updateClientCount(channel, nioChannel, message.getPayload());
+                    case ObjectTypes.CLIENT_COUNT -> {
+                        int newClientCount = message.safeCastPayload(Integer.class);
+                        Long csPid = message.getSenderPID();
+                        try {
+                            ChatServerRecord updatedRecord = this.server.getChatServerRegistry().updateClientCount(newClientCount, csPid);
+                            peerManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
+                            chatServerManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
+                        } catch (NullPointerException e) {
+                            System.err.println(e.getMessage());
+                            // TODO - Add response that tell the ChatServer to re-register.
+                        }
                     }
-                    case "ChatServerRecord" -> {
+                    case ObjectTypes.CHAT_SERVER_RECORD -> {
                         // server.updateChatServerInfo(channel, nioChannel, message.getPayload());
                     }
                 }
             }
-            case "PRIMARY" -> {
+            case Roles.PRIMARY -> {
                 switch (message.getObjectType()) {
-                    case "AddrServerRecord" -> {
+                    case ObjectTypes.ADDR_SERVER_RECORD -> {
                         System.out.println("REPLICA is in switch statement for updating AddrServerRecord from PRIMARY");
-                        server.getPeerManager().updateRecords(message.safeCastPayload(AddrServerRecord.class));
-                        this.server.getAddrServerRegistry().debugPrintAllServers();
+                        peerManager.updateRecords(message.safeCastPayload(AddrServerRecord.class));
                     }
-                    case "ChatServerRecord" -> {
-                        server.getChatServerManager().updateRecords(message.safeCastPayload(ChatServerRecord.class));
+                    case ObjectTypes.CHAT_SERVER_RECORD -> {
+                        chatServerManager.updateRecords(message.safeCastPayload(ChatServerRecord.class));
                         this.server.getChatServerRegistry().debugPrintAllServers();
                     }
-                    // server.updateAddrServerInfo(channel, nioChannel, message.getPayload());
                 }
             }
-            case "REPLICA" -> {
+            case Roles.REPLICA -> {
                 switch (message.getObjectType()) {
-                    case "AddrServerRecord" -> {
+                    case ObjectTypes.ADDR_SERVER_RECORD -> {
                         System.out.println("REPLICA is in switch statement for updating AddrServerRecord from REPLICA");
-                        server.getPeerManager().updateRecords(message.safeCastPayload(AddrServerRecord.class));
-                        this.server.getAddrServerRegistry().debugPrintAllServers();
+                        peerManager.updateRecords(message.safeCastPayload(AddrServerRecord.class));
                     }
-                    case "ChatServerRecord" -> {
-
+                    case ObjectTypes.CHAT_SERVER_RECORD -> {
+                        System.out.println("REPLICA is in switch statement for updating ChatServerRecord from REPLICA");
+                        chatServerManager.updateRecords(message.safeCastPayload(ChatServerRecord.class));
                     }
-                    // server.updateAddrServerInfo(channel, nioChannel, message.getPayload());
                 }
             }
             default -> System.err.println("Unrecognized sender role for UPDATE: " + message.getSenderRole());
         }
     }
-
 
     /**
      * Handles a request message based on the sender role and object type.
@@ -210,12 +218,12 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      */
     private void handleRequest(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getSenderRole()) {
-            case "CHATSERVER" -> {
+            case Roles.CHATSERVER -> {
                 if ("AllAddrServerInfo".equals(message.getObjectType())) {
                     // server.sendAddrServerInfo(channel);
                 }
             }
-            case "REPLICA" -> {
+            case Roles.REPLICA -> {
                 if ("AllChatServerInfo".equals(message.getObjectType())) {
                     // server.sendChatServerInfo(channel);
                 }
@@ -224,7 +232,6 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
         }
     }
 
-
     /**
      * Handles a ping request, typically used for failure detection.
      *
@@ -232,22 +239,38 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      * @param message The received ping message.
      */
     private void handlePing(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        if ("PRIMARY".equals(message.getTargetRole())) {
+        if (Roles.PRIMARY.equals(message.getTargetRole())) {
             //server.respondToPing(channel);
         }
     }
 
     /**
-     * Handles notification messages such as server failures or new registrations.
+     * Handles server failure messages.
+     *
+     * @param channel The channel from which the message originated.
+     * @param message The received server failure message.
+     */
+    private void handleServerFailure(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
+
+    }
+
+    /**
+     * Handles notification messages. THIS MAY NOT BE NEEDED
      *
      * @param channel The channel from which the notification originated.
      * @param message The received notification message.
      */
     private void handleNotification(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        if ("ServerFailure".equals(message.getObjectType())) {
-            //server.handleServerFailure(channel, nioChannel, message.getPayload());
+        switch (message.getObjectType()) {
+            case ObjectTypes.ELECTION_VOTE -> {
+
+            }
+            default -> System.err.println("Unknown notification message received and ignored.");
         }
     }
+
+
+
 
     /**
      * Handles election-related messages, used for leader election among Addressing Servers.
