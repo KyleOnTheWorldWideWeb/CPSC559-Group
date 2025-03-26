@@ -12,22 +12,140 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
+import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ChatLogUpdate;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
 
+/**
+ * Handles incoming messages specifically for interactions between server
+ * instances in the chat system.
+ * <p>
+ * The {@link ServerHandler} processes a variety of commands, including
+ * requesting and responding to chat logs,
+ * handling {@code PING} and {@code PONG} messages for connection health checks,
+ * and merging chat logs from peers.
+ * It also manages the registration of incoming peer connections and updates the
+ * state of the server accordingly.
+ * </p>
+ *
+ * <h3>Debugging:</h3>
+ * <p>
+ * The debug level controls the verbosity of logs throughout the server's
+ * operations. Different debug levels are used for:
+ * <ul>
+ * <li>{@link #DEBUG_BASIC} - Logs basic events, such as startup and major
+ * actions like connecting peers or sending messages.</li>
+ * <li>{@link #DEBUG_NORMAL} - Logs regular operations, including received
+ * messages and actions taken.</li>
+ * <li>{@link #DEBUG_DETAILED} - Logs detailed flow, like parsing messages and
+ * responding to clients.</li>
+ * <li>{@link #DEBUG_LOW_LEVEL} - Logs low-level operations, such as I/O
+ * activities like reading and writing data.</li>
+ * <li>{@link #DEBUG_EXTREME} - Logs everything, useful for debugging edge cases
+ * and deep issues.</li>
+ * </ul>
+ * </p>
+ *
+ * <h3>Core Methods:</h3>
+ * <ul>
+ * <li>{@link #handle(BaseMessage, ConnectionContext, SelectionKey)} - Processes
+ * incoming messages based on the command type.</li>
+ * <li>{@link #mergeChatlog(ServerServerMessage)} - Merges chat log data from a
+ * peer server into the local chat log.</li>
+ * <li>{@link #getChatLogContents(String)} - Retrieves the chat log content and
+ * formats it as a {@code RESPONSE_CHATLOG} message.</li>
+ * <li>{@link #printPrettyJson(String)} - Prints JSON data in a readable,
+ * formatted way for debugging purposes.</li>
+ * </ul>
+ *
+ * <h3>Message Handling:</h3>
+ * <p>
+ * The server responds to different types of messages, such as:
+ * <ul>
+ * <li>{@code REQUEST_CHATLOG} - Retrieves and sends the chat log to the
+ * requesting server.</li>
+ * <li>{@code RESPONSE_CHATLOG} - Receives and merges chat logs from peer
+ * servers.</li>
+ * <li>{@code PING} - Responds with a {@code PONG} to verify the server is
+ * alive.</li>
+ * <li>{@code PONG} - Acknowledges receipt of a {@code PING} message and resets
+ * the activity state.</li>
+ * </ul>
+ * </p>
+ * 
+ * @see ChatServer for the main chat server logic
+ * @see ConnectionContext for connection-related details
+ */
 @SuppressWarnings("unused")
 class ServerHandler implements ConnectionHandler {
 
+    /**
+     * The current debug level for controlling verbosity of server logs.
+     * <p>
+     * This is configurable at runtime using the environment variable
+     * <b>DEBUG_LEVEL</b>.
+     * If the environment variable is not set, the default level is
+     * {@code DEBUG_EXTREME} (5),
+     * meaning all debug messages will be printed.
+     * </p>
+     * <p>
+     * Example usage in shell to reduce output to basic info only:
+     * 
+     * <pre>{@code
+     * export DEBUG_LEVEL=1
+     * }</pre>
+     * </p>
+     */
     public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "5"));
 
     // Debug level constants
+
+    /**
+     * Debug level: No debug output. Use in production mode where logs are minimal.
+     */
     private static final int DEBUG_NONE = 0; // No debug output (production mode)
+
+    /**
+     * Debug level: Basic events such as startup, shutdown, and major transitions.
+     */
     private static final int DEBUG_BASIC = 1; // Basic info: startup, shutdown, major events
+
+    /**
+     * Debug level: Normal runtime activity such as new connections or message
+     * processing.
+     */
     private static final int DEBUG_NORMAL = 2; // Normal operation details: connections, requests
+
+    /**
+     * Debug level: Step-by-step logic, including function entry points and internal
+     * decisions.
+     */
     private static final int DEBUG_DETAILED = 3; // Detailed flow: entering methods, decision points
+
+    /**
+     * Debug level: Low-level I/O activity like byte reads/writes and selector
+     * state.
+     */
     private static final int DEBUG_LOW_LEVEL = 4; // Low-level operations: byte-level I/O, parsing
+
+    /**
+     * Debug level: Maximum verbosity including every possible detail.
+     * Useful for diagnosing edge cases or unexpected behavior.
+     */
     private static final int DEBUG_EXTREME = 5; // Extreme detail: everything, for deep debugging
+
+    /**
+     * Logs a debug message to standard output if the message level is
+     * less than or equal to the configured {@link #DEBUG_LEVEL}.
+     * <p>
+     * Each message is prefixed with a tag representing its severity.
+     * This helps developers visually filter relevant messages while debugging.
+     * </p>
+     *
+     * @param level   the severity level of the message (0–5)
+     * @param message the message to log
+     */
 
     private static void debug(int level, String message) {
         if (level <= DEBUG_LEVEL) {
@@ -42,6 +160,51 @@ class ServerHandler implements ConnectionHandler {
             System.out.println(prefix + message);
         }
     }
+
+    /**
+     * Handles incoming messages, processes different types of commands, and updates
+     * the connection state accordingly.
+     * <p>
+     * This method is the core message handler for the {@link ServerHandler},
+     * responsible for handling communication
+     * between server instances in the chat system. It processes different commands
+     * from peer servers, such as
+     * {@code REQUEST_CHATLOG}, {@code RESPONSE_CHATLOG}, {@code PING}, and
+     * {@code PONG}, and takes appropriate actions
+     * based on the command type.
+     * </p>
+     * <h3>Message Handling Flow:</h3>
+     * <ul>
+     * <li>First, checks if the received message is a {@link ServerServerMessage}.
+     * If it's not, it delegates handling to the
+     * {@link ClientHandler} for {@link ClientServerMessage} types.</li>
+     * <li>If the message is a valid {@code ServerServerMessage}, the method logs
+     * the received message details for debugging.</li>
+     * <li>For {@code REQUEST_CHATLOG} command, the server checks the sender’s peer
+     * ID and updates the connected peers map,
+     * then retrieves and sends the chat log contents back to the requesting
+     * peer.</li>
+     * <li>For {@code RESPONSE_CHATLOG} command, the server receives a chat log from
+     * a peer and merges it into the local chat log.</li>
+     * <li>For {@code PING} command, the server responds with a {@code PONG} message
+     * to confirm its availability and presence.</li>
+     * <li>For {@code PONG} command, the server updates the connection's state,
+     * acknowledging that the peer is still alive.</li>
+     * </ul>
+     * 
+     * <h3>Exceptions:</h3>
+     * <ul>
+     * <li>If a {@code ServerServerMessage} cannot be processed (e.g., invalid JSON
+     * format), an exception is logged, and the
+     * connection is not updated.</li>
+     * </ul>
+     *
+     * @param message the incoming {@link BaseMessage} (either
+     *                {@link ServerServerMessage} or {@link ClientServerMessage})
+     * @param ctx     the {@link ConnectionContext} associated with the connection
+     * @param key     the {@link SelectionKey} representing the client channel in
+     *                the selector
+     */
 
     public void handle(BaseMessage message, ConnectionContext ctx, SelectionKey key) {
         if (!(message instanceof ServerServerMessage msg)) {
@@ -134,6 +297,46 @@ class ServerHandler implements ConnectionHandler {
         }
     }
 
+    /**
+     * Merges the chat log content received from a peer server into the local chat
+     * log.
+     * <p>
+     * This method processes the received chat log, parses each line into individual
+     * {@link ClientServerMessage} objects,
+     * and adds them to the local chat log. If the received chat log is empty or
+     * contains invalid messages, the operation
+     * is skipped. If valid messages are found, they are merged into the chat log
+     * and the update is logged.
+     * </p>
+     *
+     * <h3>Steps:</h3>
+     * <ul>
+     * <li>Checks if the received content is empty. If it is, the merge process is
+     * skipped.</li>
+     * <li>Reads the content line by line, attempting to parse each line into a
+     * {@link ClientServerMessage} object.</li>
+     * <li>If parsing is successful, the message is added to the list of messages to
+     * be merged.</li>
+     * <li>If no valid messages are found in the content, the merge operation is
+     * skipped, and a debug message is logged.</li>
+     * <li>If valid messages are found, they are merged into the local chat log
+     * using the {@link ChatLog#merge(ChatLogUpdate)} method.</li>
+     * <li>The merge operation is logged for debugging purposes, indicating the
+     * number of messages merged.</li>
+     * </ul>
+     *
+     * <h3>Exceptions:</h3>
+     * <ul>
+     * <li>IOException: If there is an error reading the content of the received
+     * chat log.</li>
+     * <li>JsonProcessingException: If a message line cannot be parsed into a
+     * {@link ClientServerMessage} object.</li>
+     * </ul>
+     *
+     * @param msg the {@link ServerServerMessage} containing the chat log content to
+     *            be merged
+     */
+
     private static void mergeChatlog(ServerServerMessage msg) {
         String content = msg.getContent();
         if (content == null || content.isEmpty()) {
@@ -173,6 +376,45 @@ class ServerHandler implements ConnectionHandler {
         }
     }
 
+    /**
+     * Retrieves the chat log content from a file and constructs a
+     * {@link ServerServerMessage} containing the log data.
+     * <p>
+     * This method reads the chat log file line by line, appending the content to a
+     * {@link StringBuilder}. If the file is
+     * successfully read, the method creates a {@code RESPONSE_CHATLOG} message that
+     * includes the chat log content as its
+     * body. If there is an error reading the file, it logs an error and returns
+     * {@code null}.
+     * </p>
+     * 
+     * <h3>Steps:</h3>
+     * <ul>
+     * <li>Reads the chat log file specified by
+     * {@link ChatServer#getChatLogFile()}.</li>
+     * <li>Appends each line of the file to the {@link StringBuilder} to accumulate
+     * the log contents.</li>
+     * <li>If the file is read successfully, constructs a
+     * {@link ServerServerMessage} containing the chat log content.</li>
+     * <li>If an {@link IOException} occurs during file reading, logs an error
+     * message and returns {@code null}.</li>
+     * </ul>
+     *
+     * <h3>Return:</h3>
+     * <ul>
+     * <li>Returns a {@link ServerServerMessage} containing the chat log content if
+     * the file was read successfully.</li>
+     * <li>Returns {@code null} if an error occurred while reading the chat log
+     * file.</li>
+     * </ul>
+     *
+     * @param receiverPid the peer ID of the receiver to whom the chat log is being
+     *                    sent
+     * @return a {@link ServerServerMessage} containing the chat log content, or
+     *         {@code null} if an error occurred
+     * @see ChatServer#getChatLogFile() for the chat log file location
+     */
+
     private static ServerServerMessage getChatLogContents(String receiverPid) {
         StringBuilder logContents = new StringBuilder();
         String file = ChatServer.getChatLogFile();
@@ -196,6 +438,18 @@ class ServerHandler implements ConnectionHandler {
         );
     }
 
+    /**
+     * Prints the JSON string in a pretty, readable format to the console.
+     * <p>
+     * This method uses the Jackson {@link ObjectMapper} to parse and pretty-print
+     * the provided JSON string.
+     * If the string is valid JSON, it prints the formatted JSON to the console. If
+     * the string is invalid, it logs an error.
+     * </p>
+     * 
+     * @param jsonString the JSON string to be pretty-printed
+     * @see ObjectMapper for JSON parsing and formatting
+     */
     public static void printPrettyJson(String jsonString) {
         ObjectMapper mapper = new ObjectMapper();
         try {

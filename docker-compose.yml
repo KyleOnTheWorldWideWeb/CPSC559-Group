@@ -13,6 +13,55 @@ services:  # Defines the services (Docker containers) that will be run.
   #ports:
   #- "6667:6667"  # Maps port 6667 on the host to port 6667 in the container (used for communication)
 
+
+# -------------------------------
+# DOCKER WORKFLOW INSTRUCTIONS (what i used to run it)
+# -------------------------------
+
+# STEP 1: STOP AND REMOVE EVERYTHING
+# This command shuts down all services, removes associated volumes, and cleans up any orphan containers.
+# Use this to fully reset your environment before starting fresh.
+# docker compose --profile chatserver --profile addressingserver down --volumes --remove-orphans
+
+
+# STEP 2: REBUILD ALL SERVICES FROM SCRATCH (can remove --no-cache helpful if a lot of changes were made)
+# This ensures all services are rebuilt using the latest code, ignoring previous Docker cache.
+# docker compose --profile chatserver --profile addressingserver build --no-cache
+# docker compose build client
+
+
+# STEP 3: START SERVICES
+
+# Option A: Start all services at once (EXCEPT the client)
+# - you can remove force recreate it just makes it use a new container. 
+# but docker will tel you you have an orphan after (i think)
+# This launches 3 chat servers and the addressing server together.
+# --force-recreate ensures containers are always recreated.
+# docker compose --profile chatserver --profile addressingserver up --scale chatserver=3 --force-recreate
+
+# Option B (Recommended): Start services ONE BY ONE .
+# 1. Start Addressing Server:
+# docker compose --profile addressingserver up --force-recreate
+
+# 2. Start Chat Servers one at a time to ensure proper registration.
+# This avoids race conditions in the Addressing Server when multiple servers try to register simultaneously.
+# docker compose --profile chatserver up --scale chatserver=1 --force-recreate
+# docker compose --profile chatserver up --scale chatserver=2 --force-recreate
+# (Repeat and increase --scale as needed)
+
+
+# STEP 4: START CLIENT
+# --server-ports map the service's exposed ports to the host machine, so t
+# hat the application running inside the container can be accessed from outside the container
+# without this you cant interact with the terminal after it runs
+
+# Run client with a temporary container that is deleted after exit:
+# docker compose run --rm --service-ports client
+
+# Or, run client with a persistent container (container remains after exit):
+# docker compose run --service-ports client
+
+
   addressingserver:
     image: addressingserver:latest
     container_name: addressingserver
@@ -26,12 +75,16 @@ services:  # Defines the services (Docker containers) that will be run.
       - AS_NETWORK=chat_network
       - AS_ROLE=PRIMARY
       - HOST_ADDRESS=172.20.0.2
-    ports: ["49800:49800", "49801:49801","49802:49802","5050:5050"]
+    ports:
+      - "49800:49800"
+      - "49801:49801"
+      - "49802:49802"
+      - "5050:5050"
     networks:
       chat_network:
         ipv4_address: 172.20.0.2
     healthcheck:
-      test: [ "CMD", "sh", "/healthcheck.sh" ]
+      test: ["CMD", "sh", "/healthcheck.sh"]
       interval: 10s
       timeout: 10s
       retries: 3
@@ -52,7 +105,7 @@ services:  # Defines the services (Docker containers) that will be run.
     deploy:
       replicas: 1
     healthcheck:
-      test: [ "CMD", "sh", "/healthcheck.sh" ]
+      test: ["CMD", "sh", "/healthcheck.sh"]
       interval: 10s
       timeout: 10s
       retries: 3
@@ -60,11 +113,10 @@ services:  # Defines the services (Docker containers) that will be run.
 
   chatserver:
     image: chatserver:latest
-    container_name: chatserver
-    profiles: ["chatserver", "main-single"]
+    profiles: ["chatserver"]
     build:
       dockerfile: Dockerfile.chatserver
-    ports: ["2424:2424", "2425:2425"]
+    ports: ["2424", "2425"]  # Dynamic port allocation
     environment:
       - CS_PORT=2424
       - CS_PEER_PORT=2425
@@ -72,8 +124,10 @@ services:  # Defines the services (Docker containers) that will be run.
       - ADDRESS_SERVER_IP=172.20.0.2
     networks:
       - chat_network
+    # depends_on:
+    #   - addressingserver
     healthcheck:
-      test: [ "CMD", "sh", "/healthcheck.sh" ]
+      test: ["CMD", "sh", "/healthcheck.sh"]
       interval: 10s
       timeout: 10s
       retries: 3
@@ -85,20 +139,21 @@ services:  # Defines the services (Docker containers) that will be run.
     profiles: ["client", "main-single"]
     build:
       dockerfile: Dockerfile.client
-    ports: ["3000:3000",]
+    ports: ["3000:3000"]
     environment:
       - CLIENT_PORT=3000
       - HOST_ADDRESS=client
       - ADDRESS_HOST=172.20.0.2
     networks:
       - chat_network
-    tty: true        # You need these two lines to make the client interactive
-    stdin_open: true # Non-optional for interactive shell input
+    tty: true
+    stdin_open: true
 
 networks:
   chat_network:
     driver: bridge
     ipam:
+      driver: default
       config:
         - subnet: 172.20.0.0/16
 # This is different from the volume we define in a service. This is how we can ensure that any data...configs:

@@ -39,9 +39,26 @@ import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
  * - Interactive command-line interface with JLine terminal support
  * - Dynamic terminal resizing and display management
  * - Debug logging with configurable levels
+ *
+ * <h2>Key Functionalities</h2>
+ * <ul>
+ * <li>Client connects to an addressing server, retrieves chat server
+ * information, and connects to the chat server.</li>
+ * <li>Manages sending and receiving messages asynchronously with retry
+ * mechanisms on failure.</li>
+ * <li>Handles real-time user input, message sending, and updates the display
+ * with chat history and pending messages.</li>
+ * <li>Handles graceful shutdown, including cleanup of threads and
+ * resources.</li>
+ * <li>Provides interactive command-line interface (CLI) with JLine, allowing
+ * input from users.</li>
+ * <li>Logs debug messages at different levels based on a configurable debug
+ * level.</li>
+ * </ul>
+ *
+ * 
  */
-
-@SuppressWarnings("unused")
+// @SuppressWarnings("unused")
 public class Client {
 
     /**
@@ -86,67 +103,198 @@ public class Client {
     }
 
     // Client state
-    private String username; // User's display name in the chat
-    private int sendCounter = 0; // Unique message ID counter
-
-    // Server connection information
-    private String address; // Addressing server hostname
-    private int addressPort; // Addressing server port
-
-    // Connection management
-    private int reconnectTries = 0; // Current reconnection attempt count
-    private static final int MAX_RECONNECT_TRIES = 5; // Maximum reconnection attempts before giving up
-
-    // Chat server connection
-    private Socket chatServer; // Socket connection to chat server
-    private BufferedReader in; // Input stream reader
-    private PrintWriter out; // Output stream writer
-
-    // Message management
-    private final List<ClientServerMessage> msgLog = Collections.synchronizedList(new LinkedList<>()); // Complete chat
-                                                                                                       // history
-
-    private final List<ClientServerMessage> displayLog = Collections.synchronizedList(new LinkedList<>()); // Messages
-                                                                                                           // to display
-
-    private final Queue<ClientServerMessage> messageQueue = new ConcurrentLinkedQueue<>(); // Messages pending send
-
-
-
-    private final Queue<ClientServerMessage> awaitingAck = new ConcurrentLinkedQueue<>(); // Messages awaiting
-                                                                                          // acknowledgment
-
-    private final Set<String> processedMessageIds = Collections.synchronizedSet(new HashSet<>()); // Track processed
-                                                                                                  // message IDs
-
-    private final Set<String> pendingMessages = Collections.synchronizedSet(new HashSet<>()); // Track messages pending
-                                                                                              // acknowledgment
-
-    private final Object messageLock = new Object(); // Lock for message operations
-
-    // Thread management
-    private InputThread inputThread; // Handles user input
-    private OutputThread outputThread; // Handles UI updates
-    private SenderThread senderThread; // Handles message sending
-    private ReceiverThread receiverThread; // Handles message receiving
-    private final CountDownLatch shutdownLatch = new CountDownLatch(4); // One for each thread
-
-    // System utilities
-    private boolean terminate = false; // Shutdown flag
-    private boolean isConnected = false; // Connection state flag
-
-    // UI components
-    private Terminal terminal; // Terminal interface
-    private LineReader lineReader; // Command line reader
+    /**
+     * The username assigned to the client for display purposes in the chat
+     * application.
+     * This value is set when the client registers with the chat server.
+     */
+    private String username;
 
     /**
-     * Creates a new chat client.
+     * A counter that increments each time a message is sent.
+     * It is used to generate unique message IDs for tracking sent messages.
+     */
+    private int sendCounter = 0;
+
+    // Server connection information
+    /**
+     * The hostname or IP address of the addressing server that facilitates the
+     * initial connection to the chat server.
+     */
+    private String address;
+
+    /**
+     * The port number of the addressing server used for connecting and retrieving
+     * chat server information.
+     */
+    private int addressPort;
+
+    // Connection management
+    /**
+     * Tracks the number of reconnection attempts made by the client.
+     * It is reset after a successful reconnection.
+     */
+    private int reconnectTries = 0;
+
+    /**
+     * The maximum number of reconnection attempts allowed.
+     * If this limit is reached, the client will stop attempting to reconnect.
+     */
+    private static final int MAX_RECONNECT_TRIES = 5;
+
+    // Chat server connection
+    /**
+     * The socket used to establish a connection to the chat server.
+     * This is where messages are sent and received during the chat session.
+     */
+    private Socket chatServer;
+
+    /**
+     * The input stream reader used to read messages received from the chat server.
+     */
+    private BufferedReader in;
+
+    /**
+     * The output stream writer used to send messages to the chat server.
+     */
+    private PrintWriter out;
+
+    // Message management
+    /**
+     * A synchronized list that stores the complete chat history of messages
+     * exchanged
+     * between the client and other peers.
+     */
+    private final List<ClientServerMessage> msgLog = Collections.synchronizedList(new LinkedList<>());
+
+    /**
+     * A synchronized list that holds the messages ready to be displayed in the
+     * client
+     * interface. These messages are selected from the complete chat history.
+     */
+    private final List<ClientServerMessage> displayLog = Collections.synchronizedList(new LinkedList<>());
+
+    /**
+     * A thread-safe queue holding the messages that are pending to be sent to the
+     * chat server.
+     */
+    private final Queue<ClientServerMessage> messageQueue = new ConcurrentLinkedQueue<>();
+
+    /**
+     * A thread-safe queue holding the messages that have been sent but are still
+     * awaiting
+     * acknowledgment from the server.
+     */
+    private final Queue<ClientServerMessage> awaitingAck = new ConcurrentLinkedQueue<>();
+
+    /**
+     * A synchronized set that tracks the message IDs of messages that have already
+     * been
+     * processed by the client to prevent duplicate handling.
+     */
+    private final Set<String> processedMessageIds = Collections.synchronizedSet(new HashSet<>());
+
+    /**
+     * A synchronized set that tracks the message IDs of messages that are still
+     * awaiting
+     * acknowledgment from the server. This helps in ensuring messages are properly
+     * acknowledged.
+     */
+    private final Set<String> pendingMessages = Collections.synchronizedSet(new HashSet<>());
+
+    /**
+     * An object used as a lock to synchronize message operations, ensuring
+     * thread-safety when
+     * processing messages.
+     */
+    private final Object messageLock = new Object();
+
+    // Thread management
+    /**
+     * The thread responsible for handling user input.
+     * It reads commands and messages from the user, processes them, and adds them
+     * to the
+     * message queue for sending.
+     */
+    private InputThread inputThread;
+
+    /**
+     * The thread responsible for updating the user interface.
+     * It manages the display of messages, system information, and the input prompt.
+     */
+    private OutputThread outputThread;
+
+    /**
+     * The thread responsible for sending messages to the server.
+     * It manages the queue of pending messages and ensures they are sent to the
+     * server.
+     */
+    private SenderThread senderThread;
+
+    /**
+     * The thread responsible for receiving messages from the server.
+     * It processes incoming messages and updates the chat logs and display
+     * accordingly.
+     */
+    private ReceiverThread receiverThread;
+
+    /**
+     * A CountDownLatch used to coordinate the shutdown of the client.
+     * It ensures that all four threads (input, output, sender, receiver) complete
+     * their work
+     * before the client shuts down completely.
+     */
+    private final CountDownLatch shutdownLatch = new CountDownLatch(4);
+
+    // System utilities
+    /**
+     * A flag that indicates whether the client should shut down.
+     * Set to true when the client is being terminated.
+     */
+    private boolean terminate = false;
+
+    /**
+     * A flag that indicates the connection state of the client.
+     * It is set to true when the client is successfully connected to the chat
+     * server.
+     */
+    private boolean isConnected = false;
+
+    // UI components
+    /**
+     * The terminal interface used for displaying the chat interface to the user.
+     * It is managed by the JLine library and provides terminal-based input/output
+     * handling.
+     */
+    private Terminal terminal;
+
+    /**
+     * The command-line reader used for capturing user input in the terminal.
+     * It allows for command-line editing and handles user input interactively.
+     */
+    private LineReader lineReader;
+
+    /**
+     * Constructs a new chat client with the specified configuration.
+     * This constructor sets up the client with necessary information for connecting
+     * to an addressing server, initializes the terminal interface, and prepares
+     * the line reader for command-line input.
      * 
-     * @param username   The display name for this client
-     * @param serverName The hostname of the addressing server
-     * @param serverPort The port number of the addressing server
-     * @param terminal   The terminal instance to use
-     * @param lineReader The line reader instance to use
+     * @param username   The display name for this client. This will be used as the
+     *                   sender's identifier in the chat system.
+     * @param serverName The hostname or IP address of the addressing server.
+     *                   This server is responsible for directing the client to the
+     *                   appropriate chat server.
+     * @param serverPort The port number on which the addressing server is running.
+     * @param terminal   The terminal interface instance to be used for rendering
+     *                   the
+     *                   command-line interface. It enables interactive
+     *                   input/output.
+     * @param lineReader The line reader instance used to capture and process user
+     *                   input
+     *                   from the command line. This allows the user to interact
+     *                   with the
+     *                   chat client.
      */
     public Client(String username, String serverName, int serverPort, Terminal terminal, LineReader lineReader) {
         debug(DEBUG_BASIC, "Initializing client for user: " + username);
@@ -158,13 +306,40 @@ public class Client {
     }
 
     /**
-     * Starts the client application.
-     * This method:
-     * 1. Sets up the terminal interface
-     * 2. Establishes server connection
-     * 3. Registers with the server
-     * 4. Starts all necessary threads
-     * 5. Maintains the main application loop
+     * Starts the client application. This method performs the following steps:
+     * <ol>
+     * <li>Sets up the terminal interface for the client.</li>
+     * <li>Establishes a connection to the server via the addressing server.</li>
+     * <li>Registers the client with the server.</li>
+     * <li>Initializes and starts the necessary threads for input, output, message
+     * sending, and receiving.</li>
+     * <li>Maintains the main application loop that runs until termination.</li>
+     * </ol>
+     * 
+     * The method ensures that all components of the client application are running
+     * and handles errors gracefully.
+     * If any error occurs during the execution, the client will shut down properly.
+     * 
+     * <h2>Key Features:</h2>
+     * <ul>
+     * <li>Concurrent operations with separate threads for user input, message
+     * sending, and message receiving.</li>
+     * <li>Graceful shutdown process with cleanup of resources and thread
+     * management.</li>
+     * <li>Debug logging to monitor client behavior at various stages.</li>
+     * </ul>
+     * 
+     * <h2>Exception Handling:</h2>
+     * <ul>
+     * <li><code>InterruptedException</code>: Triggered if the client is interrupted
+     * during the main loop sleep.</li>
+     * <li><code>IOException</code>: Triggered if an error occurs while closing the
+     * chat server connection.</li>
+     * </ul>
+     * 
+     * @throws InterruptedException If the thread is interrupted during sleep.
+     * @throws IOException          If there is an error closing the chat server
+     *                              connection.
      */
     public void run() {
         debug(DEBUG_BASIC, "Starting client...");
@@ -188,7 +363,7 @@ public class Client {
 
             // Main application loop
             while (!terminate) {
-                Thread.sleep(1000);
+                Thread.sleep(1000); // refresh rate
             }
 
         } catch (Exception e) {
@@ -206,14 +381,47 @@ public class Client {
         }
     }
 
+    /**
+     * Registers the client with the addressing server by sending a registration
+     * message and
+     * awaiting a response. This method establishes a connection with the addressing
+     * server,
+     * sends the client's registration details, and processes the acknowledgment
+     * received
+     * from the server to retrieve the chat server's information.
+     * 
+     * The method performs the following steps:
+     * <ol>
+     * <li>Opens a socket connection to the addressing server</li>
+     * <li>Sends a registration message in JSON format</li>
+     * <li>Waits for the server's acknowledgment</li>
+     * <li>Deserializes the acknowledgment response to extract the chat server's
+     * information (PID, host, and port)</li>
+     * <li>Returns the extracted information as an array of strings in the format:
+     * {pid, host, port}</li>
+     * </ol>
+     * 
+     * @return A string array containing the chat server's PID, host address, and
+     *         port
+     * @throws IOException If there is a failure in communication with the
+     *                     addressing server,
+     *                     including connection issues, timeouts, or invalid
+     *                     responses.
+     */
+
     private String[] registerWithAddressingServer() throws IOException {
         // Open a socket to the addressing server
         try (Socket addressSocket = new Socket(address, addressPort)) {
+            addressSocket.setSoTimeout(5000); // Timeout after 5 seconds
+
+            debug(DEBUG_NORMAL, "trying to connect to addressing server");
+
             // Create the streams
             PrintWriter out = new PrintWriter(addressSocket.getOutputStream(), true);
             BufferedReader in = new BufferedReader(new InputStreamReader(addressSocket.getInputStream()));
 
-            // Create a REGISTER message for the client. Currently it doesn't send any additional information,
+            // Create a REGISTER message for the client. Currently it doesn't send any
+            // additional information,
             // but I'm guessing this is where we would do the token stuff??? - Aidan
             RegisterMessage<String> regMsg = RegisterMessage.fromClient();
             // Send the registration JSON message
@@ -225,11 +433,14 @@ public class Client {
                 throw new IOException("No response from Addressing Server.");
             }
 
+            debug(DEBUG_NORMAL, "RECEIVED FROM SERVER: " + ackJson);
+
             // Deserialize the JSON into an AckMessage
             ObjectMapper mapper = new ObjectMapper();
             AckMessage ackMessage = mapper.readValue(ackJson, AckMessage.class);
 
-            // Extract the payload. It should be a String in the format "pid:hostAddress:clientPort"
+            // Extract the payload. It should be a String in the format
+            // "pid:hostAddress:clientPort"
 
             if (ackMessage.getObjectType().equals(AckTypes.HOSTADDRESS)) {
                 String payload = (String) ackMessage.getPayload();
@@ -241,34 +452,57 @@ public class Client {
                 if (substrings.length != 3) {
                     throw new IOException("Expected 3 parts in the payload, but got " + substrings.length);
                 }
+                // System.out.println("done");
+
                 return substrings;
-            }
-            else {
+
+            } else {
                 System.out.println("ACK message indicated there were no chat servers available.");
                 return null;
             }
         }
     }
 
-
     /**
-     * Establishes connection to the chat server through the addressing server.
-     * The process:
-     * 1. Connects to the addressing server
-     * 2. Retrieves chat server information
-     * 3. Establishes connection to the chat server
+     * Establishes a connection to the chat server through the addressing server.
      * 
-     * @throws IOException if connection fails
+     * This method performs the following steps:
+     * <ol>
+     * <li>Connects to the addressing server using the provided address and
+     * port.</li>
+     * <li>Retrieves chat server details (PID, address, and port) from the
+     * addressing server.</li>
+     * <li>Establishes a direct connection to the retrieved chat server using the
+     * provided address and port.</li>
+     * <li>Sends a registration message to the chat server to register the
+     * client.</li>
+     * </ol>
+     * 
+     * The method will repeatedly attempt to register with the addressing server if
+     * the initial attempt fails.
+     * It retries once per second until a successful response is received. Upon
+     * success, the client will be registered
+     * with the chat server.
+     * 
+     * If the connection to the chat server fails at any point, an
+     * {@link IOException} will be thrown.
+     * 
+     * @throws IOException if there is a failure while connecting to the addressing
+     *                     server,
+     *                     the chat server, or during the message exchange.
      */
     @SuppressWarnings("resource")
     private void connect() throws IOException {
         if (!terminate) {
             try {
+                debug(DEBUG_NORMAL, "trying to connect to server");
+
                 // Establish server connection
                 String[] substrings = null;
                 while (substrings == null) {
                     substrings = registerWithAddressingServer();
-                    wait(1000); // Artificiallly high - dono what to set it as.
+                    Thread.sleep(1000); // pause 1s before retrying
+                    // System.out.println("read");
                 }
                 Long serverPid = Long.parseLong(substrings[0]);
                 String chatServerAddress = substrings[1];
@@ -280,8 +514,13 @@ public class Client {
                 out = new PrintWriter(chatServer.getOutputStream(), true); // autoFlush = true
                 in = new BufferedReader(new InputStreamReader(chatServer.getInputStream()));
                 isConnected = true;
+
+                ClientServerMessage registration = new ClientServerMessage(username, "server", -1, "");
+                registration.setCommand("REGISTER");
+                out.println(registration.toJson());
+
                 debug(DEBUG_BASIC, "Successfully connected to chat server");
-                System.out.println("CONNECTED");
+                // System.out.println("CONNECTED");
             } catch (IOException e) {
                 debug(DEBUG_BASIC, "Connection error: " + e.getMessage());
                 throw e;
@@ -292,15 +531,44 @@ public class Client {
     }
 
     /**
-     * Attempts to reconnect to the server network.
-     * Implements exponential backoff with a maximum number of attempts.
-     * Features:
-     * - Exponential backoff between attempts (starting at 1s, doubling each time)
-     * - Maximum retry limit (5 attempts)
-     * - Connection state tracking
-     * - Automatic retry on failure
-     * - Graceful shutdown if max attempts reached
-     * - Fallback to addressing server for new server assignment
+     * Attempts to reconnect to the server network after a connection failure.
+     * This method ensures the client can recover from network interruptions by
+     * trying to
+     * reconnect multiple times with an exponential backoff strategy.
+     * 
+     * <p>
+     * The reconnect process involves retrying the connection up to a maximum number
+     * of attempts
+     * (defined by {@code MAX_RECONNECT_TRIES}). The backoff time between each
+     * reconnection attempt
+     * doubles, starting with a 1-second wait time. If all reconnection attempts
+     * fail, the method will
+     * attempt to retrieve a new chat server address from the Addressing Server and
+     * reconnect using
+     * that information. If the reconnection attempts ultimately fail, an error
+     * message is displayed
+     * and the client shuts down gracefully.
+     * </p>
+     *
+     * <p>
+     * Key operations:
+     * </p>
+     * <ul>
+     * <li>Establishes a new connection with the chat server using exponential
+     * backoff after each failure.</li>
+     * <li>If the reconnection attempts are exhausted, it tries connecting via the
+     * Addressing Server for a new server.</li>
+     * <li>Handles retries with an interval that doubles after each failed attempt
+     * to reduce server load.</li>
+     * <li>In case of failure after all attempts, the method provides feedback to
+     * the user and shuts down the client.</li>
+     * </ul>
+     *
+     * @throws IOException If the connection attempts to either the chat server or
+     *                     the Addressing Server fail
+     *                     after the maximum retry attempts have been reached. This
+     *                     ensures the client gracefully
+     *                     handles persistent connection issues.
      */
     private void reconnect() {
         debug(DEBUG_BASIC, "Starting reconnection process");
@@ -347,25 +615,37 @@ public class Client {
         }
     }
 
-    private String[] getNewChatServerFromAddressingServer() throws IOException {
-        debug(DEBUG_DETAILED, "Connecting to addressing server at " + address + ":" + addressPort);
-        try (Socket addressSocket = new Socket(address, addressPort)) {
-            BufferedReader addrReader = new BufferedReader(new InputStreamReader(addressSocket.getInputStream()));
-            String serverInfo = addrReader.readLine();
-            debug(DEBUG_LOW_LEVEL, "Received server info: " + serverInfo);
-
-            if (serverInfo == null || !serverInfo.contains(":")) {
-                throw new IOException("Invalid response from Addressing Server: " + serverInfo);
-            }
-
-            String[] parts = serverInfo.split(":");
-            return new String[] { parts[0].trim(), parts[1].trim() };
-        }
-    }
-
     /**
      * Gracefully shuts down all client threads.
-     * Ensures clean termination of all running threads.
+     * This method ensures that all running client threads are cleanly terminated.
+     * It interrupts each thread to signal them to stop their execution, ensuring
+     * that resources are properly released, and no background processes are left
+     * running.
+     * 
+     * <p>
+     * This method is called during the shutdown process to ensure that all
+     * active threads are safely interrupted before the client application
+     * terminates.
+     * It helps avoid issues such as memory leaks, incomplete operations, or
+     * unhandled exceptions in any of the worker threads.
+     * </p>
+     * 
+     * <p>
+     * The threads that are interrupted include:
+     * </p>
+     * <ul>
+     * <li>{@code senderThread} - Handles message sending.</li>
+     * <li>{@code receiverThread} - Handles receiving messages.</li>
+     * <li>{@code inputThread} - Handles reading user input.</li>
+     * <li>{@code outputThread} - Handles updating the user interface.</li>
+     * </ul>
+     * 
+     * <p>
+     * By interrupting the threads, we signal them to stop their tasks and exit
+     * cleanly.
+     * Each thread will be responsible for handling its own shutdown operations once
+     * interrupted.
+     * </p>
      */
     private void shutdownThreads() {
         debug(DEBUG_DETAILED, "Shutting down client threads");
@@ -380,18 +660,59 @@ public class Client {
     }
 
     /**
-     * Performs a clean shutdown of the client.
-     * This includes:
-     * 1. Setting the terminate flag
-     * 2. Signaling shutdown to all threads
-     * 3. Waiting for threads to complete (with timeout)
-     * 4. Closing all network connections
-     * 5. Cleaning up resources
+     * Performs a clean shutdown of the client application.
+     * This method ensures all client resources are properly cleaned up and all
+     * threads
+     * are terminated before the client shuts down. It handles the following steps:
+     * <ul>
+     * <li>Setting the terminate flag to signal that the client should stop.</li>
+     * <li>Signaling shutdown to all running threads to stop their execution.</li>
+     * <li>Waiting for all threads to complete their tasks with a timeout (5
+     * seconds).</li>
+     * <li>Closing network connections (e.g., chat server connection).</li>
+     * <li>Cleaning up other resources such as input/output streams and
+     * terminal.</li>
+     * </ul>
+     *
+     * <p>
+     * The shutdown process utilizes a {@link CountDownLatch} to coordinate the
+     * termination
+     * of threads, ensuring they finish their operations before the client
+     * application fully shuts down.
+     * </p>
      * 
-     * The shutdown process uses a CountDownLatch to coordinate thread termination,
-     * ensuring all threads complete their work before proceeding. A 5-second
-     * timeout
-     * prevents hanging if threads fail to respond to the shutdown signal.
+     * <p>
+     * If any thread fails to terminate within the specified timeout, the shutdown
+     * will proceed
+     * with a forced exit. This prevents the client from hanging indefinitely due to
+     * unresponsive threads.
+     * </p>
+     *
+     * <p>
+     * Steps involved in this process:
+     * </p>
+     * <ol>
+     * <li>Set the {@code terminate} flag to {@code true} to signal all threads to
+     * stop.</li>
+     * <li>Interrupt all running threads using {@link #shutdownThreads()}.</li>
+     * <li>Wait for all threads to finish with a timeout of 5 seconds using the
+     * {@code shutdownLatch}.</li>
+     * <li>Close all network connections (chat server and input/output streams) and
+     * cleanup resources.</li>
+     * <li>If any resources cannot be cleaned up, handle the errors gracefully and
+     * log them.</li>
+     * </ol>
+     * 
+     * <p>
+     * Note: The method gracefully handles interruptions and errors during shutdown
+     * to ensure
+     * that no resources are left in an inconsistent state.
+     * </p>
+     * 
+     * @throws InterruptedException if the current thread is interrupted while
+     *                              waiting for other threads to finish
+     * @throws IOException          if there is an error while closing network
+     *                              connections or resources
      */
     public void shutdown() {
         debug(DEBUG_BASIC, "Initiating client shutdown");
@@ -470,21 +791,67 @@ public class Client {
     }
 
     /**
-     * Thread responsible for sending messages to the server.
-     * Features:
-     * - Polls message queue every 100ms for pending messages
-     * - Implements automatic retry for failed messages
-     * - Maintains connection state awareness
-     * - Handles reconnection scenarios
-     * - Thread-safe message queue management
+     * A thread responsible for sending messages to the server.
+     * <p>
+     * This thread manages the process of sending messages from a message queue to
+     * the server,
+     * with features such as:
+     * <ul>
+     * <li>Polling the message queue every 100ms for pending messages.</li>
+     * <li>Implementing automatic retries for failed message sends.</li>
+     * <li>Maintaining awareness of the connection state and handling
+     * disconnections.</li>
+     * <li>Ensuring thread-safe management of the message queue.</li>
+     * </ul>
+     * </p>
+     * <p>
+     * The {@link SenderThread} thread performs the following tasks:
+     * <ol>
+     * <li>Check if the client is connected to the server.</li>
+     * <li>Poll the message queue for any pending messages to send.</li>
+     * <li>Send messages to the server if the client is connected.</li>
+     * <li>Sleep for 100ms between attempts if the queue is empty or there is no
+     * connection.</li>
+     * <li>Handle any exceptions or errors that occur while sending messages.</li>
+     * </ol>
+     * </p>
      * 
-     * The thread will:
-     * 1. Check connection status
-     * 2. Poll message queue for pending messages
-     * 3. Attempt to send messages if connected
-     * 4. Sleep if disconnected or no messages
-     * 5. Handle any exceptions during sending
+     * <p>
+     * If the connection is lost or the message queue is empty, the thread will
+     * sleep for
+     * longer periods (up to 1 second) to reduce the load on the system.
+     * </p>
+     *
+     * <p>
+     * The {@link SenderThread} uses the {@code messageQueue} to manage messages
+     * pending for delivery.
+     * The thread ensures that messages are sent in the order they were added to the
+     * queue, and it retries
+     * messages that failed to send. If the client is disconnected, the thread waits
+     * before attempting to
+     * send again.
+     * </p>
+     *
+     * <p>
+     * After the message is successfully sent or the attempt fails, the thread will
+     * proceed to the next message
+     * or retry the failed message, depending on the connection status and available
+     * messages in the queue.
+     * </p>
+     * 
+     * <p>
+     * When the {@code terminate} flag is set to {@code true}, the thread will exit
+     * gracefully. The thread also
+     * uses {@link #shutdownLatch} to signal that it has finished and is ready for
+     * shutdown.
+     * </p>
+     * 
+     * @see ClientServerMessage
+     * @see shutdownLatch
+     * @see messageQueue
+     * @see sendMessage
      */
+
     private class SenderThread extends Thread {
         @Override
         public void run() {
@@ -524,26 +891,63 @@ public class Client {
     }
 
     /**
-     * Thread responsible for receiving messages from the server.
-     * Features:
-     * - Processes incoming messages in real-time
-     * - Handles message acknowledgments
-     * - Manages message status updates (sending, sent)
-     * - Maintains chat history in both msgLog and displayLog
-     * - Handles reconnection scenarios
-     * - Thread-safe message handling with synchronized collections
-     * - Prevents duplicate message processing and display
-     * - Special handling for registration messages
-     * 
+     * A thread responsible for receiving messages from the server.
+     * <p>
+     * This thread handles the real-time reception of messages from the chat server,
+     * managing the acknowledgment and status updates of messages. It ensures that:
+     * <ul>
+     * <li>Messages are processed as they arrive.</li>
+     * <li>Message IDs are checked to prevent processing duplicates.</li>
+     * <li>Message logs are updated in a thread-safe manner using synchronized
+     * collections.</li>
+     * <li>Special handling is applied to registration and acknowledgment
+     * messages.</li>
+     * <li>Reconnection scenarios are handled if the server connection is lost.</li>
+     * </ul>
+     * </p>
+     * <p>
      * Message Processing Flow:
-     * 1. Read message from server
-     * 2. Parse JSON into ClientServerMessage
-     * 3. Check for duplicate message IDs
-     * 4. Process based on message type:
-     * - Registration messages
-     * - Acknowledgment messages
-     * - Regular chat messages
-     * 5. Update appropriate logs and display
+     * <ol>
+     * <li>Read a message from the server.</li>
+     * <li>Parse the message from JSON into a {@link ClientServerMessage}
+     * object.</li>
+     * <li>Check for duplicate message IDs and skip if already processed.</li>
+     * <li>Based on the message type:
+     * <ul>
+     * <li>If it's a "REGISTER" message, update the registration status and log
+     * it.</li>
+     * <li>If it's an acknowledgment message, update message status in logs.</li>
+     * <li>If it's a regular chat message, add it to the chat log and display
+     * it.</li>
+     * </ul>
+     * </li>
+     * <li>Update the display log only if the message hasn't been displayed
+     * yet.</li>
+     * </ol>
+     * </p>
+     * <p>
+     * The thread also manages the following:
+     * <ul>
+     * <li>Preventing duplicate processing of messages by maintaining a set of
+     * processed message IDs.</li>
+     * <li>Handling both regular chat messages and system-specific messages like
+     * registration.</li>
+     * <li>Gracefully handling server disconnections and reconnecting to the server
+     * when necessary.</li>
+     * </ul>
+     * </p>
+     * 
+     * <p>
+     * When the {@code terminate} flag is set to {@code true}, the thread will exit
+     * gracefully. The thread also
+     * uses {@link #shutdownLatch} to signal that it has finished and is ready for
+     * shutdown.
+     * </p>
+     * 
+     * @see ClientServerMessage
+     * @see processedMessageIds
+     * @see messageLock
+     * @see displayLog
      */
     private class ReceiverThread extends Thread {
         private volatile boolean isRegistered = false;
@@ -628,25 +1032,65 @@ public class Client {
     }
 
     /**
-     * Thread responsible for handling user input.
-     * Features:
-     * - Reads user input using JLine with line editing support
-     * - Processes special commands (/exit, /quit)
-     * - Creates and queues new messages with unique IDs
-     * - Maintains input buffer state
-     * - Thread-safe message queue management
-     * - Rate limiting for message sending (100ms minimum interval)
-     * - Prevents duplicate message sending
-     * - Tracks pending messages for acknowledgment
+     * A thread responsible for handling user input from the command line interface.
+     * <p>
+     * This thread processes user input in real-time, supports command-line editing
+     * via JLine, and manages the
+     * message sending process with rate limiting to prevent spamming. It also
+     * supports special commands like "/exit"
+     * and "/quit" to gracefully shut down the client.
+     * </p>
      * 
+     * <p>
+     * Key features of the InputThread:
+     * <ul>
+     * <li>Reads user input from the terminal using JLine with line editing
+     * support.</li>
+     * <li>Processes special commands like "/exit" and "/quit" for client
+     * shutdown.</li>
+     * <li>Creates and queues new messages with unique message IDs to prevent
+     * duplicates.</li>
+     * <li>Ensures thread-safe management of message queues with proper
+     * synchronization.</li>
+     * <li>Implements rate limiting for message sending with a minimum interval of
+     * 100 milliseconds between messages.</li>
+     * <li>Prevents duplicate message sending by tracking sent message IDs.</li>
+     * <li>Tracks pending messages and queues them for acknowledgment by the
+     * server.</li>
+     * </ul>
+     * </p>
+     * 
+     * <p>
      * Input Processing Flow:
-     * 1. Read input from terminal
-     * 2. Clear input buffer
-     * 3. Check for special commands
-     * 4. Apply rate limiting if needed
-     * 5. Create new message
-     * 6. Add to pending messages
-     * 7. Queue for sending
+     * <ol>
+     * <li>Read input from terminal using JLine's line reader.</li>
+     * <li>Clear input buffer after reading the line.</li>
+     * <li>Check if the input matches special commands such as "/exit" or "/quit" to
+     * trigger client shutdown.</li>
+     * <li>If the input is not a special command, apply rate limiting to prevent
+     * sending messages too quickly (100ms minimum interval).</li>
+     * <li>Create a new message with the content entered by the user and a unique
+     * message ID.</li>
+     * <li>Add the new message to the pending messages set and to the awaiting
+     * acknowledgment and message queues.</li>
+     * <li>Update the last message timestamp to enforce rate limiting and avoid
+     * sending too many messages in a short time.</li>
+     * </ol>
+     * </p>
+     * 
+     * <p>
+     * This thread also ensures that only one message is sent within the minimum
+     * interval, preventing rapid, repeated submissions.
+     * It will also gracefully handle any interruptions or errors during its
+     * operation, with the ability to shut down the client
+     * when appropriate.
+     * </p>
+     * 
+     * @see ClientServerMessage
+     * @see messageLock
+     * @see pendingMessages
+     * @see awaitingAck
+     * @see messageQueue
      */
     private class InputThread extends Thread {
         private final LineReader lineReader;
@@ -654,10 +1098,33 @@ public class Client {
         private long lastMessageTime = 0;
         private final Set<String> sentMessageIds = Collections.synchronizedSet(new HashSet<>());
 
+        /**
+         * Constructs a new InputThread for handling user input.
+         * 
+         * @param lineReader The JLine LineReader instance used to read user input from
+         *                   the terminal.
+         */
         public InputThread(LineReader lineReader) {
             this.lineReader = lineReader;
         }
 
+        /**
+         * The main run method that continuously reads input from the user, processes
+         * it, and sends messages to the server.
+         * <p>
+         * The method performs the following tasks:
+         * <ul>
+         * <li>Reads user input from the terminal using JLine.</li>
+         * <li>Processes special commands like "/exit" and "/quit" to terminate the
+         * client.</li>
+         * <li>Applies rate limiting to prevent sending too many messages in a short
+         * period.</li>
+         * <li>Creates new messages with unique IDs and queues them for sending.</li>
+         * <li>Manages synchronization of message queues to ensure thread-safe
+         * operations.</li>
+         * </ul>
+         * </p>
+         */
         @Override
         public void run() {
             while (!terminate) {
@@ -729,92 +1196,164 @@ public class Client {
     }
 
     /**
-     * Thread responsible for updating the user interface.
-     * Features:
-     * - Manages terminal display updates with synchronized output
-     * - Handles message area redrawing with dynamic sizing
-     * - Maintains input line state at the bottom of the terminal
-     * - Adapts to terminal size changes automatically
-     * - Ensures thread-safe display updates
-     * - 20ms refresh rate for UI updates
-     * - Preserves message history with proper spacing
-     * - Shows pending messages with [sending...] status
-     * - Limits display to most recent 100 messages
-     * - Special formatting for system messages (INFO command)
+     * A thread responsible for managing and updating the user interface in the
+     * terminal.
+     * <p>
+     * This thread is responsible for rendering the message area, updating the input
+     * line, and refreshing the terminal display
+     * periodically. It ensures that the chat messages and the input buffer are
+     * displayed correctly while maintaining the
+     * message history and ensuring that pending messages are displayed with the
+     * [sending...] status. The thread also handles
+     * terminal resizing and adapts the layout dynamically.
+     * </p>
      * 
+     * <p>
+     * Key Features:
+     * <ul>
+     * <li>Manages terminal display updates with synchronized output to ensure
+     * thread-safe terminal operations.</li>
+     * <li>Handles dynamic resizing of the message area based on the terminal's
+     * size.</li>
+     * <li>Displays chat history, including timestamps, senders, and content, while
+     * limiting the display to the most recent 100 messages.</li>
+     * <li>Displays pending messages with a [sending...] status for messages
+     * awaiting acknowledgment.</li>
+     * <li>Special formatting for system messages (INFO command), which are
+     * displayed without sender information.</li>
+     * <li>Ensures thread-safe management of the display and message updates using
+     * synchronized collections.</li>
+     * </ul>
+     * </p>
+     * 
+     * <p>
      * Display Layout:
-     * 1. Header (lines 1-3)
-     * - Title
-     * - Connection status
-     * - Separator lines
-     * 2. Message area (starting at line 4)
-     * - Most recent messages first
-     * - Timestamp and sender for each message
-     * - Special formatting for system messages
-     * 3. Pending messages section
-     * - Messages awaiting acknowledgment
-     * - [sending...] status indicator
-     * 4. Spacing (3 lines)
-     * 5. Input line (bottom of terminal)
-     * - Command prompt
-     * - Current input buffer
+     * <ol>
+     * <li>Header (lines 1-3):
+     * <ul>
+     * <li>Title of the application (Chat Client)</li>
+     * <li>Connection status (Connected or Disconnected)</li>
+     * <li>Separator lines</li>
+     * </ul>
+     * </li>
+     * <li>Message Area (starting at line 4):
+     * <ul>
+     * <li>Most recent messages displayed first</li>
+     * <li>Timestamp and sender information for each message</li>
+     * <li>Special formatting for system messages (INFO command)</li>
+     * </ul>
+     * </li>
+     * <li>Pending Messages Section:
+     * <ul>
+     * <li>Displays messages awaiting acknowledgment with a [sending...] status</li>
+     * </ul>
+     * </li>
+     * <li>Input Line (bottom of the terminal):
+     * <ul>
+     * <li>Displays the command prompt and the current input buffer</li>
+     * </ul>
+     * </li>
+     * </ol>
+     * </p>
      * 
+     * <p>
      * Thread Safety:
-     * - All display operations are synchronized
-     * - Message lists are thread-safe collections
-     * - Terminal operations are atomic
+     * <ul>
+     * <li>All display operations are synchronized to prevent concurrent access
+     * issues.</li>
+     * <li>Message lists (displayLog and awaitingAck) are thread-safe collections to
+     * ensure consistent access from multiple threads.</li>
+     * <li>Terminal operations are atomic to avoid inconsistencies during UI
+     * updates.</li>
+     * </ul>
+     * </p>
      * 
+     * <p>
      * Performance:
-     * - Only redraws when necessary (content changed)
-     * - Maintains display position to minimize screen updates
-     * - Efficient message history management
+     * <ul>
+     * <li>The display only redraws when necessary (if content changes or terminal
+     * dimensions change).</li>
+     * <li>Maintains the display position to minimize unnecessary screen
+     * updates.</li>
+     * <li>Efficient message history management by limiting the display to the most
+     * recent 100 messages.</li>
+     * </ul>
+     * </p>
+     * 
+     * @see ClientServerMessage
+     * @see displayLog
+     * @see awaitingAck
+     * @see terminal
+     * @see inputLine
      */
     private class OutputThread extends Thread {
         private final LineReader lineReader;
-        private int lastDisplaySize = 0;
-        private int lastAwaitingSize = 0;
-        private boolean needsRedraw = true;
-        private int messageAreaStartLine = 4;
-        private int inputLine = 0;
-        private static final int MAX_MESSAGES = 100;
-        private static final int MESSAGE_INPUT_SPACING = 3;
+        private int lastDisplaySize = 0; // Last size of the display log (for comparison)
+        private int lastAwaitingSize = 0; // Last size of the awaiting messages (for comparison)
+        private boolean needsRedraw = true; // Flag to track if the display needs to be redrawn
+        private int messageAreaStartLine = 4; // The starting line for the message area in the terminal
+        private int inputLine = 0; // The line where the input field is displayed in the terminal
+        private static final int MAX_MESSAGES = 100; // Maximum number of messages to display at once
+        private static final int MESSAGE_INPUT_SPACING = 3; // Number of lines of spacing before the input field
 
+        /**
+         * Constructs an OutputThread instance for handling terminal display updates.
+         * 
+         * @param lineReader The JLine LineReader instance used for handling user input
+         *                   and terminal line reading.
+         */
         public OutputThread(LineReader lineReader) {
             this.lineReader = lineReader;
-            updateTerminalDimensions();
+            updateTerminalDimensions(); // Initialize terminal dimensions
         }
 
+        /**
+         * Updates the terminal dimensions and recalculates the input line position.
+         * This method ensures the input line is correctly positioned at the bottom of
+         * the terminal.
+         */
         private void updateTerminalDimensions() {
             try {
-                inputLine = terminal.getHeight() - 1;
+                inputLine = terminal.getHeight() - 1; // Set the input line to the last row of the terminal
             } catch (Exception e) {
                 // If terminal operations fail during shutdown, use a default value
                 inputLine = 24; // Default terminal height
             }
         }
 
+        /**
+         * Sets up the initial display with a title, status, and separator lines.
+         * This method is called when the application starts to initialize the terminal
+         * view.
+         */
         private void setupDisplay() {
             try {
                 synchronized (System.out) {
-                    System.out.print("\033[H\033[2J");
+                    System.out.print("\033[H\033[2J"); // Clear the terminal screen
                     System.out.println("=== Chat Client ===");
                     System.out.println("Status: Connected");
                     System.out.println("-------------------");
                     System.out.println("-------------------");
                     System.out.println();
                     System.out.print("> ");
-                    System.out.flush();
+                    System.out.flush(); // Flush the output to ensure it displays immediately
                 }
             } catch (Exception e) {
                 // Ignore terminal errors during shutdown
             }
         }
 
+        /**
+         * Renders the terminal display, including the message area and the input field.
+         * This method is responsible for updating the message area, showing pending
+         * messages,
+         * and ensuring the input buffer is visible at the bottom of the terminal.
+         */
         private void render() {
             try {
                 synchronized (System.out) {
-                    int currentDisplaySize = displayLog.size();
-                    int currentAwaitingSize = awaitingAck.size();
+                    int currentDisplaySize = displayLog.size(); // Get the current size of the displayed messages
+                    int currentAwaitingSize = awaitingAck.size(); // Get the current size of the pending messages
                     boolean sizeChanged = currentDisplaySize != lastDisplaySize
                             || currentAwaitingSize != lastAwaitingSize;
 
@@ -827,24 +1366,26 @@ public class Client {
                         List<ClientServerMessage> recentMessages;
                         synchronized (displayLog) {
                             recentMessages = displayLog.stream()
-                                    .skip(Math.max(0, displayLog.size() - MAX_MESSAGES))
+                                    .skip(Math.max(0, displayLog.size() - MAX_MESSAGES)) // Display the most recent
+                                                                                         // messages
                                     .toList();
                         }
 
                         // Display messages
                         for (ClientServerMessage msg : recentMessages) {
                             if (msg.getCommand().equals("INFO")) {
-                                System.out.println(msg.getContent());
+                                System.out.println(msg.getContent()); // System messages are displayed without sender
+                                                                      // (server) info
                             } else {
-                                String timeStr = msg.getTimeSent().toString().split(" ")[3];
+                                String timeStr = msg.getTimeSent().toString().split(" ")[3]; // Extract timestamp
                                 System.out.printf("[%s] %s: %s%n", timeStr, msg.getSender(), msg.getContent());
                             }
                         }
 
-                        // Display pending messages
+                        // Display pending messages (messages awaiting acknowledgment)
                         for (ClientServerMessage msg : awaitingAck) {
-                            if (!msg.getCommand().equals("REGISTER")) {
-                                String timeStr = msg.getTimeSent().toString().split(" ")[3];
+                            if (!msg.getCommand().equals("REGISTER")) { // Skip registration messages
+                                String timeStr = msg.getTimeSent().toString().split(" ")[3]; // Extract timestamp
                                 System.out.printf("[%s] %s: %s [sending...]%n", timeStr, msg.getSender(),
                                         msg.getContent());
                             }
@@ -871,18 +1412,29 @@ public class Client {
             }
         }
 
+        /**
+         * The main method for the OutputThread, which continuously updates the terminal
+         * display.
+         * This method is called in a loop, updating the display at a rate of every
+         * 20ms,
+         * and checking if the terminal size has changed.
+         * <p>
+         * The method will continuously render the terminal display and handle any
+         * interruptions or exceptions.
+         * </p>
+         */
         @Override
         public void run() {
             try {
-                setupDisplay();
+                setupDisplay(); // Set up the initial display
                 while (!terminate) {
                     try {
-                        if (terminal.getHeight() != inputLine + 1) {
-                            updateTerminalDimensions();
-                            needsRedraw = true;
+                        if (terminal.getHeight() != inputLine + 1) { // Check if the terminal size has changed
+                            updateTerminalDimensions(); // Update terminal dimensions
+                            needsRedraw = true; // Mark the display as needing a redraw
                         }
-                        render();
-                        Thread.sleep(20);
+                        render(); // Update the display
+                        Thread.sleep(20); // Wait for 20ms before the next update
                     } catch (InterruptedException e) {
                         if (!terminate) {
                             debug(DEBUG_NORMAL, "Output thread interrupted");
@@ -903,18 +1455,43 @@ public class Client {
 
     /**
      * Main entry point for the client application.
-     * Configures the client using environment variables:
-     * - SERVER_ADDRESS: The addressing server hostname (defaults to "localhost")
-     * - SERVER_PORT: The addressing server port (defaults to 49800)
-     * - DEBUG_LEVEL: The level of debug output (0-5, defaults to 0)
+     * <p>
+     * This method performs the following tasks:
+     * <ul>
+     * <li>Initializes the terminal interface for user interaction using JLine.</li>
+     * <li>Prompts the user to enter a username. If the user fails to provide one,
+     * the default username "Anonymous" is used.</li>
+     * <li>Clears the terminal screen after the username input to prepare for the
+     * chat application.</li>
+     * <li>Reads environment variables to configure the client:
+     * <ul>
+     * <li>SERVER_ADDRESS: Specifies the hostname of the addressing server (defaults
+     * to "localhost").</li>
+     * <li>SERVER_PORT: Specifies the port of the addressing server (defaults to
+     * 49800).</li>
+     * <li>DEBUG_LEVEL: Specifies the level of debug output (0-5, defaults to
+     * 0).</li>
+     * </ul>
+     * </li>
+     * <li>Logs the client configuration using the debug level specified in the
+     * environment variables.</li>
+     * <li>Instantiates and runs the client application with the provided
+     * configuration.</li>
+     * </ul>
+     * </p>
      * 
      * Features:
-     * - Interactive username prompt with JLine support
-     * - Fallback to "Anonymous" if no username provided
-     * - Terminal cleanup after username input
-     * - Debug logging of configuration
+     * <ul>
+     * <li>Interactive username prompt with JLine support for reading input from the
+     * terminal.</li>
+     * <li>If the user does not provide a username, it defaults to "Anonymous".</li>
+     * <li>The terminal is cleared after username input to clean up the screen
+     * before starting the chat application.</li>
+     * <li>Configurable debug logging based on the provided environment variables,
+     * helping track the application's state.</li>
+     * </ul>
      * 
-     * @param args Command line arguments (not used)
+     * @param args Command line arguments (not used in this implementation).
      */
     public static void main(String[] args) {
         debug(DEBUG_BASIC, "Starting client application");
@@ -922,12 +1499,16 @@ public class Client {
         // Initialize terminal for username input
         Terminal terminal = null;
         LineReader lineReader = null;
-        String username = "Anonymous";
+        String username = "Anonymous"; // Default username
         try {
             terminal = TerminalBuilder.builder().system(true).build();
             lineReader = LineReaderBuilder.builder().terminal(terminal).build();
+
+            // Prompt the user for a username
             System.out.print("Enter your username: ");
             username = lineReader.readLine().trim();
+
+            // If no username is provided, fall back to "Anonymous"
             if (username.isEmpty()) {
                 username = "Anonymous";
             }
@@ -937,13 +1518,14 @@ public class Client {
         } catch (Exception e) {
             debug(DEBUG_BASIC, "Error reading username, using default: Anonymous");
         }
-
-        String serverAddress = System.getenv().getOrDefault("SERVER_ADDRESS", "localhost");
+        // Read the server configuration from environment variables
+        String serverAddress = System.getenv().getOrDefault("ADDRESS_HOST", "localhost");
         int serverPort = Integer.parseInt(System.getenv().getOrDefault("SERVER_PORT", "49800"));
 
         debug(DEBUG_NORMAL, String.format("Client configuration - Username: %s, Server: %s:%d",
                 username, serverAddress, serverPort));
 
+        // Instantiate and run the client with the provided configuration
         Client client = new Client(username, serverAddress, serverPort, terminal, lineReader);
         client.run();
     }
