@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -28,6 +29,9 @@ import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 
 @SuppressWarnings("unused")
 public class ChatServer {
@@ -75,6 +79,9 @@ public class ChatServer {
     private static final int MAX_CLIENTS = 10; // max clients
     private static Selector selector;
 
+    private static volatile boolean registered = false;
+    private static final CountDownLatch registrationLatch = new CountDownLatch(1);
+
     enum ConnectionType {
         CLIENT, SERVER, ADDRESSING_SERVER
     }
@@ -107,9 +114,31 @@ public class ChatServer {
             CLIENT_PORT = port;
         }
 
-        if (!registerWithAddressingServer(selector)) {
-            debug(DEBUG_BASIC, "Failed to register with Addressing Server. Shutting down.");
-            return;
+        connectToAddressingServer(selector);
+
+        while (!isRegistered()) {
+            selector.select();
+            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+
+            while (keys.hasNext()) {
+                SelectionKey key = keys.next();
+                keys.remove();
+
+                if (!key.isValid())
+                    continue;
+
+                ConnectionContext ctx = (ConnectionContext) key.attachment();
+                if (ctx == null || ctx.type != ConnectionType.ADDRESSING_SERVER)
+                    continue;
+
+                if (key.isConnectable()) {
+                    handleConnect(key);
+                } else if (key.isWritable()) {
+                    handleWrite(key);
+                } else if (key.isReadable()) {
+                    handleRead(key);
+                }
+            }
         }
 
         debug(DEBUG_BASIC, String.format("Chat Server process started with PID: %d", ProcessUtils.getPid()));
@@ -172,7 +201,7 @@ public class ChatServer {
 
         if (socketChannel.finishConnect()) {
             debug(DEBUG_NORMAL, "Finished connecting to peer: " + socketChannel.getRemoteAddress());
-            key.interestOps(SelectionKey.OP_READ); // ready to read
+            key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
             if (ctx.type == ConnectionType.SERVER && ctx.peerID != ID) {
                 debug(DEBUG_BASIC, "Marked peer " + ctx.peerID + " as connected.");
@@ -215,9 +244,7 @@ public class ChatServer {
         return server;
     }
 
-    private static boolean registerWithAddressingServer(Selector selector) {
-        debug(DEBUG_BASIC, "Registering with Addressing Server...");
-
+    private static void connectToAddressingServer(Selector selector) {
         try {
             SocketChannel channel = SocketChannel.open();
             channel.configureBlocking(false);
@@ -225,103 +252,30 @@ public class ChatServer {
 
             ConnectionContext ctx = new ConnectionContext(channel);
             ctx.type = ConnectionType.ADDRESSING_SERVER;
+
+            // Save registration payload in ctx (optional, in case needed later)
+            ChatServerRecord record = new ChatServerRecord(
+                    0L,
+                    InetAddress.getLocalHost().getHostAddress(),
+                    CLIENT_PORT,
+                    PEER_LISTEN_PORT,
+                    ADDRESSING_SERVER_PORT,
+                    MAX_CLIENTS);
+
+            BaseAddrServerMessage<ChatServerRecord> registrationMsg = new BaseAddrServerMessage<>(
+                    "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
+
+            String json = registrationMsg.toJson() + "\n";
+            ctx.writeQueue.add(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
+
             channel.register(selector, SelectionKey.OP_CONNECT, ctx);
-
-            StringBuilder responseBuilder = new StringBuilder();
-            boolean receivedPid = false;
-
-            while (true) {
-                selector.select();
-                Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-
-                while (keys.hasNext()) {
-                    SelectionKey selKey = keys.next();
-                    keys.remove();
-
-                    if (!selKey.isValid()) {
-                        debug(DEBUG_DETAILED, "Skipping invalid key during registration");
-                        continue;
-                    }
-
-                    SocketChannel sc = (SocketChannel) selKey.channel();
-
-                    if (selKey.isConnectable()) {
-                        if (sc.finishConnect()) {
-                            debug(DEBUG_NORMAL, "Connected to Addressing Server");
-                            selKey.interestOps(SelectionKey.OP_WRITE);
-                        }
-                    } else if (selKey.isWritable()) {
-                        // Prepare registration payload
-                        JSONObject payload = new JSONObject();
-                        payload.put("pid", 0); // 0 means new PID requested
-                        payload.put("hostAddress", InetAddress.getLocalHost().getHostAddress());
-                        payload.put("chatServerPort", CLIENT_PORT);
-                        payload.put("chatPeerPort", PEER_LISTEN_PORT);
-                        payload.put("maxClients", MAX_CLIENTS);
-
-                        JSONObject message = new JSONObject();
-                        message.put("msgType", "REGISTER");
-                        message.put("senderRole", "CHATSERVER");
-                        message.put("payload", payload);
-
-                        String json = message.toString() + "\n";
-
-                        debug(DEBUG_DETAILED, "Sending registration data to Addressing Server...");
-                        if (DEBUG_LEVEL >= DEBUG_LOW_LEVEL) {
-                            debug(DEBUG_LOW_LEVEL, "Formatted Registration JSON:");
-                            printPrettyJson(json.trim());
-                        }
-
-                        sc.write(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
-                        selKey.interestOps(SelectionKey.OP_READ);
-                    } else if (selKey.isReadable()) {
-                        ByteBuffer buffer = ByteBuffer.allocate(1024);
-                        int bytesRead = sc.read(buffer);
-                        if (bytesRead == -1) {
-                            debug(DEBUG_BASIC,
-                                    "Connection closed by Addressing Server before completing registration.");
-                            sc.close();
-                            return false;
-                        }
-
-                        buffer.flip();
-                        String data = StandardCharsets.UTF_8.decode(buffer).toString();
-                        debug(DEBUG_LOW_LEVEL, "Received raw data from Addressing Server: " + data.trim());
-
-                        responseBuilder.append(data);
-                        String[] lines = responseBuilder.toString().split("\n");
-
-                        if (lines.length >= 1 && !receivedPid) {
-                            if (lines[0].trim().matches("\\d+")) {
-                                ID = Integer.parseInt(lines[0].trim());
-                                CHATLOG_FILE = "src/main/java/com/Logs/chatlog_" + ID + ".log";
-                                INDEX_FILE = "src/main/java/com/Logs/index_" + ID + ".json";
-                                chatLog = new ChatLog(CHATLOG_FILE, INDEX_FILE);
-                                debug(DEBUG_BASIC, "Registered with PID: " + ID);
-                                receivedPid = true;
-                            }
-                        }
-
-                        if (lines.length >= 2 && receivedPid) {
-                            String serverListJson = lines[1].trim();
-                            if (!serverListJson.isEmpty()) {
-                                debug(DEBUG_NORMAL, "Received peer server list from Addressing Server:");
-                                if (DEBUG_LEVEL >= DEBUG_LOW_LEVEL)
-                                    printPrettyJson(serverListJson);
-                                processChatServerList(serverListJson, selector);
-                            }
-                            return true;
-                        }
-                    }
-                }
-            }
+            debug(DEBUG_BASIC, "Initiated non-blocking registration to Addressing Server");
         } catch (IOException e) {
-            debug(DEBUG_BASIC, "Error during non-blocking registration: " + e.getMessage());
-            return false;
+            debug(DEBUG_BASIC, "Failed to connect to Addressing Server: " + e.getMessage());
         }
     }
 
-    private static void processChatServerList(String jsonString, Selector selector) {
+    public static void processChatServerList(String jsonString, Selector selector) {
         debug(DEBUG_NORMAL, "Processing chat server list from Addressing Server...");
         printPrettyJson(jsonString);
 
@@ -362,7 +316,7 @@ public class ChatServer {
         }
     }
 
-    private static void connectToPeerServer(Selector selector, String host, int port, int peerID) {
+    public static void connectToPeerServer(Selector selector, String host, int port, int peerID) {
         debug(DEBUG_BASIC, String.format("Attempting to connect to peer server PID=%d at %s:%d", peerID, host, port));
 
         try {
@@ -639,6 +593,14 @@ public class ChatServer {
 
     public static Map<Integer, ConnectionContext> getConnectedPeers() {
         return connectedPeers;
+    }
+
+    public static synchronized boolean isRegistered() {
+        return registered;
+    }
+
+    public static synchronized void setRegistered(boolean value) {
+        registered = value;
     }
 
 }
