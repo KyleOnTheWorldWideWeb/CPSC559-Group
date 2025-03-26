@@ -26,10 +26,16 @@ services:  # Defines the services (Docker containers) that will be run.
       - AS_NETWORK=chat_network
       - AS_ROLE=PRIMARY
       - HOST_ADDRESS=172.20.0.2
-    ports: ["49800:49800", "49801:49801","49802:49802"]
+    ports: ["49800:49800", "49801:49801","49802:49802","5050:5050"]
     networks:
       chat_network:
         ipv4_address: 172.20.0.2
+    healthcheck:
+      test: [ "CMD", "sh", "/healthcheck.sh" ]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    restart: on-failure
 
   addressingserver_replicas:
     image: addressingserver:latest
@@ -45,6 +51,12 @@ services:  # Defines the services (Docker containers) that will be run.
       - chat_network
     deploy:
       replicas: 1
+    healthcheck:
+      test: [ "CMD", "sh", "/healthcheck.sh" ]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    restart: on-failure
 
   chatserver:
     image: chatserver:latest
@@ -60,6 +72,12 @@ services:  # Defines the services (Docker containers) that will be run.
       - ADDRESS_SERVER_IP=172.20.0.2
     networks:
       - chat_network
+    healthcheck:
+      test: [ "CMD", "sh", "/healthcheck.sh" ]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    restart: on-failure
 
   client:
     image: client:latest

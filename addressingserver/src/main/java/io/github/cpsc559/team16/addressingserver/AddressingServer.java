@@ -60,6 +60,13 @@ public class AddressingServer {
         return chatServerManager;
     }
 
+    /**
+     * The process responsible for managing interactions between the
+     * {@code AddressingServer} and {@code ChatServer}'s
+     */
+    private final ClientManager clientManager;
+
+    public ClientManager getClientManager() { return clientManager;}
 
 
     /**
@@ -102,9 +109,10 @@ public class AddressingServer {
         this.addrServerRegistry = new AddrServerRegistry();
         this.peerManager = new PeerManager(addrServerRegistry);
         this.chatServerRegistry = new ChatServerRegistry();
-        chatServerManager = new ChatServerManager(chatServerRegistry);
+        this.chatServerManager = new ChatServerManager(chatServerRegistry);
+        clientManager = new ClientManager(chatServerRegistry);
         try {
-            this.networkManager = new AddrServerNetworkManager(peerManager, chatServerManager);
+            this.networkManager = new AddrServerNetworkManager(peerManager, chatServerManager, this.config);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }

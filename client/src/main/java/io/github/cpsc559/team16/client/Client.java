@@ -15,6 +15,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.AckTypes;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
@@ -107,6 +111,8 @@ public class Client {
 
     private final Queue<ClientServerMessage> messageQueue = new ConcurrentLinkedQueue<>(); // Messages pending send
 
+
+
     private final Queue<ClientServerMessage> awaitingAck = new ConcurrentLinkedQueue<>(); // Messages awaiting
                                                                                           // acknowledgment
 
@@ -165,15 +171,7 @@ public class Client {
         terminate = false;
 
         try {
-            // Establish server connection
             connect();
-
-            // Register with the server
-            ClientServerMessage registrationMsg = new ClientServerMessage(username, "server", sendCounter++, "");
-            registrationMsg.setCommand("REGISTER");
-            debug(DEBUG_NORMAL, "Sending registration message");
-            sendMessage(registrationMsg);
-
             // Initialize and start worker threads
             debug(DEBUG_DETAILED, "Creating client threads");
             inputThread = new InputThread(lineReader);
@@ -208,6 +206,51 @@ public class Client {
         }
     }
 
+    private String[] registerWithAddressingServer() throws IOException {
+        // Open a socket to the addressing server
+        try (Socket addressSocket = new Socket(address, addressPort)) {
+            // Create the streams
+            PrintWriter out = new PrintWriter(addressSocket.getOutputStream(), true);
+            BufferedReader in = new BufferedReader(new InputStreamReader(addressSocket.getInputStream()));
+
+            // Create a REGISTER message for the client. Currently it doesn't send any additional information,
+            // but I'm guessing this is where we would do the token stuff??? - Aidan
+            RegisterMessage<String> regMsg = RegisterMessage.fromClient();
+            // Send the registration JSON message
+            out.println(regMsg.toJson());
+
+            // Wait for the addressing server's response ()
+            String ackJson = in.readLine();
+            if (ackJson == null) {
+                throw new IOException("No response from Addressing Server.");
+            }
+
+            // Deserialize the JSON into an AckMessage
+            ObjectMapper mapper = new ObjectMapper();
+            AckMessage ackMessage = mapper.readValue(ackJson, AckMessage.class);
+
+            // Extract the payload. It should be a String in the format "pid:hostAddress:clientPort"
+
+            if (ackMessage.getObjectType().equals(AckTypes.HOSTADDRESS)) {
+                String payload = (String) ackMessage.getPayload();
+                if (payload == null || !payload.contains(":")) {
+                    throw new IOException("Invalid payload from Addressing Server: " + payload);
+                }
+                // Split the payload into 3 parts: pid, host, and port
+                String[] substrings = payload.split(":");
+                if (substrings.length != 3) {
+                    throw new IOException("Expected 3 parts in the payload, but got " + substrings.length);
+                }
+                return substrings;
+            }
+            else {
+                System.out.println("ACK message indicated there were no chat servers available.");
+                return null;
+            }
+        }
+    }
+
+
     /**
      * Establishes connection to the chat server through the addressing server.
      * The process:
@@ -221,10 +264,15 @@ public class Client {
     private void connect() throws IOException {
         if (!terminate) {
             try {
-                // Step 1: Get info from addressing server
-                String[] serverDetails = getNewChatServerFromAddressingServer();
-                String chatServerAddress = serverDetails[0];
-                int chatServerPort = Integer.parseInt(serverDetails[1]);
+                // Establish server connection
+                String[] substrings = null;
+                while (substrings == null) {
+                    substrings = registerWithAddressingServer();
+                    wait(1000); // Artificiallly high - dono what to set it as.
+                }
+                Long serverPid = Long.parseLong(substrings[0]);
+                String chatServerAddress = substrings[1];
+                int chatServerPort = Integer.parseInt(substrings[2]);
 
                 // Step 2: Connect to chat server
                 debug(DEBUG_NORMAL, "Connecting to chat server at " + chatServerAddress + ":" + chatServerPort);
@@ -233,10 +281,12 @@ public class Client {
                 in = new BufferedReader(new InputStreamReader(chatServer.getInputStream()));
                 isConnected = true;
                 debug(DEBUG_BASIC, "Successfully connected to chat server");
-
+                System.out.println("CONNECTED");
             } catch (IOException e) {
                 debug(DEBUG_BASIC, "Connection error: " + e.getMessage());
                 throw e;
+            } catch (Exception e) {
+                System.err.println("Error parsing chat server address: " + e.getMessage());
             }
         }
     }
