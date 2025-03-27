@@ -82,7 +82,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      * @param message The parsed {@link BaseAddrServerMessage} containing the message details.
      *
      */
-    private void dispatchMsgType(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
+    public void dispatchMsgType(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
         switch (message.getMsgType()) {
             case MessageTypes.ACK -> handleAck(channel, nioChannel, message);
             // I have removed this case so that ONLY a new connection request can register with the Primary. This is handled in the main event loop.
@@ -103,6 +103,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
     private void handleAck(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> ackMessage) {
         switch (ackMessage.getObjectType()) {
             case AckObjectTypes.REGISTERED -> {
+                System.out.println("ACK ENTERED");
                 // This should ONLY ever be received by a REPLICA from the PRIMARY AddressingServer
                 // A Registration ACK is always sent with the pid as a string for the process as the payload.
                 Long assignedPID = ackMessage.safeCastPayload(Long.class);

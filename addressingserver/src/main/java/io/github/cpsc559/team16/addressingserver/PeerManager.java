@@ -131,10 +131,6 @@ public class PeerManager {
 
         System.out.println("Replica registered: " + replicaHostAddr + " (PID: " + peerPID + ")");
 
-        try{
-            Thread.sleep(1000);
-        } catch (Exception ignore) {}
-
         // WE SEND THE RECORD TO ALL SERVERS (THIS ONE INCLUDED) AFTER THIS METHOD RETURNS. NO NEED TO SEND IT NOW.
 
         // Send the new record explicitly. Race conditions can occur where the hashmap doesn't update quick enough.

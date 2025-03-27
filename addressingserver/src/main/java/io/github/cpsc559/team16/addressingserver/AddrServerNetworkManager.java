@@ -386,7 +386,7 @@ public class AddrServerNetworkManager {
                          The only port we haven't checked by this point is the one designated for the client.
                          We don't store persistent channels for clients.
                          */
-                    executorService.submit(() -> {
+                    //executorService.submit(() -> {
                         try {
                             readDispatcher.handleRegistration(channel, nioChannel, message);
                             if (!isPersistentConnection(channel)) {
@@ -415,7 +415,7 @@ public class AddrServerNetworkManager {
                                 key.cancel();
                             }
                         }
-                    });
+                    //});
                 }
                 /*
                  * Handling read events for registered channels.
@@ -425,7 +425,7 @@ public class AddrServerNetworkManager {
                     SocketChannel channel = (SocketChannel) key.channel();
 
                     // Retrieve existing NIOMessageChannel for persistent connections.
-                    final NIOMessageChannel persistentNioChannel = getKnownPersistentChannel(channel);
+                    NIOMessageChannel persistentNioChannel = getKnownPersistentChannel(channel);
                     // If it doesn't exist, close the channel and cancel the event key to prevent errors.
                     if (persistentNioChannel == null) {
                         key.cancel();
@@ -437,7 +437,7 @@ public class AddrServerNetworkManager {
                         key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
                         // Dispatch message for processing. This will throw errors if the connection is closed or I/O operations fail.
                         // Handle persistent connections asynchronously
-                        executorService.submit(() -> {
+                        //executorService.submit(() -> {
                             try {
                                 readDispatcher.dispatch(channel, persistentNioChannel);
                                 // Now that the data on the input channel has been processed, re-enable read events.
@@ -449,7 +449,7 @@ public class AddrServerNetworkManager {
                             } catch (IOException ioe) {
                                 cleanupPersistentConnection(channel, key, false);
                             }
-                        });
+                        //});
                     }
                 }
             }
