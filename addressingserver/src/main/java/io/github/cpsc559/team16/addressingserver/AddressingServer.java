@@ -245,12 +245,8 @@ public class AddressingServer {
         } catch (Exception e) {
             System.err.println(e.getMessage());
         }
-        System.out.printf("Addressing Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
-
         AddressingServer server = new AddressingServer();
-
         String serverRole = System.getenv("AS_ROLE");
-
         if (serverRole != null) {
             if (serverRole.equals("PRIMARY")) {
                 System.out.println("AS_ROLE is set to: " + serverRole);

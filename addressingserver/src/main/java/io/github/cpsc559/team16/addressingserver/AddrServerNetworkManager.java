@@ -260,16 +260,15 @@ public class AddrServerNetworkManager {
                 channel,
                 cce ? "remote process disconnection." : "I/O failure."
         );
-        NIOMessageChannel ch = getKnownPersistentChannel(channel);
-        if (ch != null) {
-            Long pid = ch.getServerPID();
-            if (chatServerManager.getChannels().containsKey(channel)) {
-                chatServerManager.removeRemoteProcess(channel);
-            } else if (peerManager.getChannels().containsKey(channel)) {
-                peerManager.removeRemoteProcess(channel);
-            }
-            else {
-                System.err.println("Unknown channel type — not found in either ChatServer or PeerManager.");
+        if (cce) {
+            NIOMessageChannel ch = getKnownPersistentChannel(channel);
+            if (ch != null) {
+                Long pid = ch.getServerPID();
+                if (chatServerManager.getChannels().containsKey(channel)) {
+                    chatServerManager.removeRemoteProcess(channel);
+                } else if (peerManager.getChannels().containsKey(channel)) {
+                    peerManager.removeRemoteProcess(channel);
+                }
             }
         }
         key.cancel();

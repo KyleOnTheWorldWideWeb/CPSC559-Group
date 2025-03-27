@@ -176,38 +176,6 @@ public class NIOMessageChannel {
     }
 
 
-    /**
-     * Reads and retrieves all complete messages currently available in the message buffer.
-     * <p>
-     * This method first attempts to read new data from the {@code SocketChannel} and appends it to the message buffer.
-     * It then extracts all fully received messages (delimited by {@code \n}) and returns them as a list.
-     * </p>
-     *
-     * <p><strong>Behavior:</strong></p>
-     * <ul>
-     *     <li>If multiple messages are present, they are returned in order.</li>
-     *     <li>Partial messages remain in the buffer until a full message is received.</li>
-     *     <li>If no new data is available and the buffer is empty, the method returns {@code null}.</li>
-     * </ul>
-     *
-     * @return A list of all fully received messages, or {@code null} if no complete messages are available.
-     * @throws IOException If an I/O error occurs while reading from the channel.
-     */
-    public List<String> receiveAllMessages() throws IOException {
-        if (!fillMessageBuffer()) {
-            return null;  // Connection closed OR no new data available
-        }
-        List<String> messages = new ArrayList<>();
-        // Extract ALL complete messages
-        int newlineIndex;
-        while ((newlineIndex = messageBuffer.indexOf("\n")) != -1) {
-            String completeMessage = messageBuffer.substring(0, newlineIndex).trim();
-            messageBuffer.delete(0, newlineIndex + 1); // Remove processed message
-            messages.add(completeMessage);
-        }
-
-        return messages.isEmpty() ? null : messages;
-    }
 
 
     /**
