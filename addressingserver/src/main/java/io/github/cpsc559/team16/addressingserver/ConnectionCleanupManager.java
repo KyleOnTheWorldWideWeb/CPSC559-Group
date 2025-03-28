@@ -4,7 +4,6 @@ import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
-import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 
 public class ConnectionCleanupManager {
@@ -81,13 +80,12 @@ public class ConnectionCleanupManager {
      *     <li>Cancels the selection key and closes the channel gracefully.</li>
      * </ul>
      * </p>
+     *  @param channel the {@code SocketChannel} being cleaned up.
      *
-     * @param channel the {@code SocketChannel} being cleaned up.
-     * @param key the {@code SelectionKey} associated with the channel, used for deregistration.
      * @param cce {@code true} if the cleanup is due to a remote disconnect (i.e., {@link ConnectionClosedException}),
      *            {@code false} if due to a local I/O failure.
      */
-    public void cleanupPersistentConnection(SocketChannel channel, SelectionKey key, Boolean cce) {
+    public void cleanupPersistentConnection(SocketChannel channel, Boolean cce) {
 //        System.err.printf("Channel cleanup triggered for -> %s - due to -> (%s)\n",
 //                channel,
 //                cce ? "remote process disconnection." : "I/O failure."
@@ -103,7 +101,8 @@ public class ConnectionCleanupManager {
                 }
             }
         }
-        key.cancel();
+        //key.cancel();  Keys for closed SocketChannels are canceled during the next selector.select event in the main event loop. No need to do that here.
+        //key.cancel();
         try {
             channel.close();
         } catch (IOException ignored) {}  // if the channel is already closed, we don't need to do anything.

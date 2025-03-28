@@ -54,16 +54,18 @@ public class BroadcastManager {
      * @param chatServerChannels a map of persistent chat server channels (from SocketChannel to NIOMessageChannel)
      * @return a list of {@link NIOMessageChannel} instances for which sending the message failed; an empty list if all sends succeed
      */
-    public static List<NIOMessageChannel> serverFailure(Long senderPID, String senderRole, Long failedPID, String failedServerRole,
+    public void serverFailure(Long senderPID, String senderRole, Long failedPID, String failedServerRole,
                                                         Map<SocketChannel, NIOMessageChannel> peerChannels,
                                                         Map<SocketChannel, NIOMessageChannel> chatServerChannels) {
-        List<NIOMessageChannel> failures = new ArrayList<>();
+        // Create the message with the proper {@code ObjectType} so the receiver knows which kind of record/connection to remove.
         ServerFailureMessage<Long> message;
         if (failedServerRole.equals(Roles.CHATSERVER)) {
             message = ServerFailureMessage.chatServerFailed(senderPID, senderRole, failedServerRole, failedPID);
         } else {    // It's an addressing server (REPLICA or PRIMARY)
             message = ServerFailureMessage.addrServerFailed(senderPID, senderRole, failedServerRole, failedPID);
         }
+        // Serialize the message and return if a failure occurs. This would only happen because of a
+        // logic error introduced by us (the programmers), so it shouldn't shut down the program, but we need to log it and fix it.
         String jsonMessage;
         try {
             jsonMessage = message.toJson();
@@ -72,27 +74,28 @@ public class BroadcastManager {
                     "Failed to serialize ServerFailureMessage<%s> for broadcast. Context: senderPID=%d, senderRole=%s, failedPID=%d, failedServerRole=%s. Exception: %s%n",
                     message.getObjectType(), senderPID, senderRole, failedPID, failedServerRole, e.getMessage()
             );
-            return failures;
+            return;
         }
+        // Send the message to each addressing server in the network. If a failure occurs, handle removing the process appropriately.
         for (NIOMessageChannel nioChannel : peerChannels.values()) {
             try {
                 nioChannel.sendMessage(jsonMessage);
             } catch (IOException ioe) {
                 System.err.printf("Failed to send ServerFailureMessage<%s> on peer channel (remote PID: %s): %s%n",
                         message.getObjectType(), nioChannel.getServerPID(), ioe.getMessage());
-                failures.add(nioChannel);
+                cleanupManager.cleanupPersistentConnection(nioChannel.getSocketChannel(), true);
             }
         }
+        // Send the message to each chat server in the network. If a failure occurs, handle removing the process appropriately.
         for (NIOMessageChannel nioChannel : chatServerChannels.values()) {
             try {
                 nioChannel.sendMessage(jsonMessage);
             } catch (IOException ioe) {
                 System.err.printf("Failed to send ServerFailureMessage<%s> on chat server channel (remote PID: %s): %s%n",
                         message.getObjectType(), nioChannel.getServerPID(), ioe.getMessage());
-                failures.add(nioChannel);
+                cleanupManager.cleanupPersistentConnection(nioChannel.getSocketChannel(), true);
             }
         }
-        return failures;
     }
 
 

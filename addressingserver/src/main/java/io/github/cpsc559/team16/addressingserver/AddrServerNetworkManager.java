@@ -397,7 +397,7 @@ public class AddrServerNetworkManager {
                             }
                         } catch (ConnectionClosedException cce) {
                             if (cleanupManager.isPersistentConnection(channel)) {
-                                cleanupManager.cleanupPersistentConnection(channel, key, true);
+                                cleanupManager.cleanupPersistentConnection(channel, true);
                             } else {
                                 try {
                                     channel.close();
@@ -407,7 +407,7 @@ public class AddrServerNetworkManager {
                             }
                         } catch (Exception e) {
                             if (cleanupManager.isPersistentConnection(channel)) {
-                                cleanupManager.cleanupPersistentConnection(channel, key, false);
+                                cleanupManager.cleanupPersistentConnection(channel, false);
                             } else {
                                 try {
                                     channel.close();
@@ -461,7 +461,7 @@ public class AddrServerNetworkManager {
                                     System.err.printf("ConnectionClosedException on channel (remote address unavailable, interestOps=%d): %s\n",
                                             key.interestOps(), cce.getMessage());
                                 }
-                                cleanupManager.cleanupPersistentConnection(channel, key, true);
+                                cleanupManager.cleanupPersistentConnection(channel, true);
                             } catch (IOException ioe) {
                                 try {
                                     System.err.printf("IOException on channel %s (interestOps=%d): %s\n",
@@ -470,7 +470,7 @@ public class AddrServerNetworkManager {
                                     System.err.printf("IOException on channel (remote address unavailable, interestOps=%d): %s\n",
                                             key.interestOps(), ioe.getMessage());
                                 }
-                                cleanupManager.cleanupPersistentConnection(channel, key, false);
+                                cleanupManager.cleanupPersistentConnection(channel, false);
                             }
                         //});
                     }
