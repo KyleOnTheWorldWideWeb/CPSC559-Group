@@ -68,7 +68,11 @@ public class PeerManager {
         Long pid = ch.getServerPID();
         try {
             this.registry.removeRecordByKey(pid);
-            System.out.println("Removed the network communication channels for the AddressingServer process with PID: " + pid);
+            try {
+                System.out.printf("Successfully removed *communication channels* for Network Process with PID: %d " +
+                        "- and Host Address: %s%n", pid, channel.getRemoteAddress());
+            } catch (IOException ignore) {}
+
         } catch (NullPointerException e){
             System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer that had no AddrServerRecord. It's network PID was - " + pid);
         }
@@ -95,6 +99,32 @@ public class PeerManager {
     }
 
     /**
+     * Removes a failed server from the network based on its process ID.
+     * <p>
+     * This method checks the peer channels for a connection associated with the given failed process ID.
+     * If it finds a channel in which the associated {@code NIOMessageChannel} has a matching server PID,
+     * it removes the connection and any {@code AddrServerRecord} in the registry by calling the local
+     * {@link #removeProcessCloseConnection(SocketChannel)} method.
+     * </p>
+     * <p>
+     * If no channel with a matching server PID is found, the method falls back to removing any
+     * AddrServerRecord with the same PID directly from the local registry.
+     * </p>
+     *
+     * @param failedPID the process ID of the failed server to remove
+     */
+    public void removeFailedServer(Long failedPID) {
+        NIOMessageChannel nioChannel;
+        for (SocketChannel channel : peerChannels.keySet()) {
+            if (peerChannels.get(channel).getServerPID().equals(failedPID)) {
+                removeProcessCloseConnection(channel);
+                return;
+            }
+        }
+        registry.removeRecordByKey(failedPID);
+    }
+
+    /**
      * Registers a replica AddressingServer and sets up a persistent connection to it.
      * <p>
      * This method also updates the replica’s {@code AddrServerRecord} with its resolved host address and PID,
@@ -110,7 +140,7 @@ public class PeerManager {
      * @throws IOException if an error occurs during network communication.
      */
     public AddrServerRecord registerPeer(SocketChannel socketChannel, NIOMessageChannel nioChannel, Long peerPID,
-                             Long primaryPID, AddrServerRecord record) throws IOException {
+                                         Long primaryPID, AddrServerRecord record) throws IOException {
         // Set the NIOChannel process ID to match that of the remote process before storing it for use.
         nioChannel.setServerPID(peerPID);
         peerChannels.put(socketChannel, nioChannel);
@@ -154,17 +184,16 @@ public class PeerManager {
      * @param primaryPID the PID of the primary server sending the updates.
      * @param nioChannel the channel over which to send the records.
      */
-    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel) {
+    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel) throws IOException {
         for (AddrServerRecord record : this.registry.getRecords().values()) {
             UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
                 System.err.println("Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
-                return;
             } catch (IOException ioe) {
                 System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
-                removeProcessCloseConnection(nioChannel.getSocketChannel());
+                throw ioe;
             }
         }
         System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
@@ -182,17 +211,17 @@ public class PeerManager {
      * @param nioChannel  the channel over which to send the records.
      * @param chatRecords a {@code HashMap} containing all {@code ChatServerRecord} entries.
      */
-    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel, Map<Long, ChatServerRecord> chatRecords) {
+    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
+                                         Map<Long, ChatServerRecord> chatRecords) throws IOException {
         for (ChatServerRecord record : chatRecords.values()) {
             UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
                 System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
-                return;
             } catch (IOException ioe) {
                 System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
-                removeProcessCloseConnection(nioChannel.getSocketChannel());
+                throw ioe;
             }
         }
         System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
@@ -276,6 +305,7 @@ public class PeerManager {
                     nioChannel.sendMessage(jsonMessage);
                 } catch (IOException ioe) {
                     System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+                    // TODO - I need to log this error and deal with it later, not remove it immediately.
                     removeProcessCloseConnection(nioChannel.getSocketChannel());
                 }
             }
@@ -284,6 +314,9 @@ public class PeerManager {
             return;
         }
     }
+
+
+
 
 
     /**
@@ -358,6 +391,10 @@ public class PeerManager {
             e.printStackTrace();
             return Optional.empty();
         }
+    }
+
+    public String getServerRole(Long pid) {
+        return this.registry.getRecords().get(pid).getRole().toString();
     }
 
     /**

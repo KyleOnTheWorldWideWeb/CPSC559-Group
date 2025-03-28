@@ -6,6 +6,7 @@ import java.nio.channels.SocketChannel; // Used for conditionals that don't rely
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
@@ -51,6 +52,16 @@ public class AddressingServer {
     }
 
     /**
+     * The process responsible for managing interactions between the
+     * {@code AddressingServer} and {@code ChatServer}'s
+     */
+    private final ChatServerManager chatServerManager;
+
+    public ChatServerManager getChatServerManager() {
+        return chatServerManager;
+    }
+
+    /**
      * The process responsible for initiating elections and handling election messages from
      * {@code AddressingServer} peers.
      */
@@ -69,15 +80,6 @@ public class AddressingServer {
         return pingManager;
     }
 
-    /**
-     * The process responsible for managing interactions between the
-     * {@code AddressingServer} and {@code ChatServer}'s
-     */
-    private final ChatServerManager chatServerManager;
-
-    public ChatServerManager getChatServerManager() {
-        return chatServerManager;
-    }
 
     /**
      * The process responsible for managing interactions between the
@@ -86,6 +88,38 @@ public class AddressingServer {
     private final ClientManager clientManager;
 
     public ClientManager getClientManager() { return clientManager;}
+
+    /**
+     * The BroadcastManager is responsible for sending messages to all active channels.
+     * It works directly with the live channel maps retrieved from PeerManager and ChatServerManager,
+     * ensuring that any changes in those maps (such as channel additions or removals) are immediately visible.
+     */
+    private final BroadcastManager broadcastManager;
+
+    /**
+     * Retrieves the BroadcastManager instance for this AddressingServer.
+     *
+     * @return the BroadcastManager used to broadcast messages across channels.
+     */
+    public BroadcastManager getBroadcastManager() {
+        return broadcastManager;
+    }
+
+    /**
+     * The ConnectionCleanupManager centralizes the logic for cleaning up and closing failed connections.
+     * It holds references to both PeerManager and ChatServerManager so that any channel failures can be
+     * promptly removed from the live channel maps and properly closed.
+     */
+    private final ConnectionCleanupManager cleanupManager;
+
+    /**
+     * Retrieves the ConnectionCleanupManager instance for this AddressingServer.
+     *
+     * @return the ConnectionCleanupManager used for cleaning up failed connections.
+     */
+    public ConnectionCleanupManager getCleanupManager() {
+        return cleanupManager;
+    }
 
 
     /**
@@ -131,12 +165,14 @@ public class AddressingServer {
         this.pingManager = new PingManager(this);
         this.chatServerRegistry = new ChatServerRegistry();
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
-        clientManager = new ClientManager(chatServerRegistry);
+        this.clientManager = new ClientManager(chatServerRegistry);
+        this.cleanupManager = new ConnectionCleanupManager(peerManager, chatServerManager);
         try {
-            this.networkManager = new AddrServerNetworkManager(peerManager, chatServerManager, this.config);
+            this.networkManager = new AddrServerNetworkManager(cleanupManager, this.config);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
+        this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
         this.pidCounter = 0L;
     }
 

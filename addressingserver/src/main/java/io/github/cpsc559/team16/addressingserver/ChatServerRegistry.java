@@ -1,5 +1,6 @@
 package io.github.cpsc559.team16.addressingserver;
 
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 
 import java.io.IOException;
@@ -78,8 +79,9 @@ public class ChatServerRegistry {
      * @param pid the unique process ID of the chat server to remove from the registry.
      */
     public void removeRecordByKey(Long pid) {
-        if (chatServerRecords.remove(pid) != null) {
-            System.out.println("Successfully removed ChatServerRecord for Network Process with PID: " + pid);
+        ChatServerRecord record = chatServerRecords.remove(pid);
+        if (record != null) {
+            System.out.printf("Successfully removed *ChatServerRecord* for Network Process with PID: %d - and Host Address: %s%n", pid, record.getHostAddress());
         } else {
             System.out.println("No ChatServerRecord found for PID: " + pid + " — nothing to remove.");
         }

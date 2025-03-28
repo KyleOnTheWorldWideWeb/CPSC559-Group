@@ -72,7 +72,7 @@ public class AddrServerNetworkManager {
      * It maintains a map of {@link SocketChannel} to {@link NIOMessageChannel} for message exchange.
      * </p>
      */
-    private final PeerManager peerManager;
+//    private final PeerManager peerManager;
 
     /**
      * Handles all communication, registration, and record synchronization
@@ -82,7 +82,10 @@ public class AddrServerNetworkManager {
      * pushes network updates to them, and manages updates to the shared {@link ChatServerRegistry}.
      * </p>
      */
-    private final ChatServerManager chatServerManager;
+//    private final ChatServerManager chatServerManager;
+
+
+    private final ConnectionCleanupManager cleanupManager;
 
     /**
      * The network configuration for this {@code AddressingServer} process.
@@ -108,9 +111,8 @@ public class AddrServerNetworkManager {
      *
      * @throws IOException If the selector fails to initialize.
      */
-    public AddrServerNetworkManager(PeerManager peerManager, ChatServerManager csManager, AddrServerConfig config) throws IOException {
-        this.peerManager = peerManager;
-        this.chatServerManager = csManager;
+    public AddrServerNetworkManager(ConnectionCleanupManager cleanupManager, AddrServerConfig config) throws IOException {
+        this.cleanupManager = cleanupManager;
         this.selector = Selector.open();
         this.config = config;
         /*
@@ -203,40 +205,40 @@ public class AddrServerNetworkManager {
         }
     }
 
-    /**
-     * Determines whether the specified {@link SocketChannel} is associated with a persistent server-to-server connection.
-     * <p>
-     * Persistent connections are long-lived channels used for internal communication between
-     * {@code AddressingServer}s (peers) and {@code ChatServer}s. These are stored and tracked
-     * using their respective manager classes.
-     * </p>
-     *
-     * @param channel the {@code SocketChannel} to inspect.
-     * @return {@code true} if the channel is known to be persistent (i.e., belongs to a peer or chat server), {@code false} otherwise.
-     */
-    private boolean isPersistentConnection(SocketChannel channel) {
-        return peerManager.getChannels().containsKey(channel)
-                || chatServerManager.getChannels().containsKey(channel);
-    }
+//    /**
+//     * Determines whether the specified {@link SocketChannel} is associated with a persistent server-to-server connection.
+//     * <p>
+//     * Persistent connections are long-lived channels used for internal communication between
+//     * {@code AddressingServer}s (peers) and {@code ChatServer}s. These are stored and tracked
+//     * using their respective manager classes.
+//     * </p>
+//     *
+//     * @param channel the {@code SocketChannel} to inspect.
+//     * @return {@code true} if the channel is known to be persistent (i.e., belongs to a peer or chat server), {@code false} otherwise.
+//     */
+//    private boolean isPersistentConnection(SocketChannel channel) {
+//        return peerManager.getChannels().containsKey(channel)
+//                || chatServerManager.getChannels().containsKey(channel);
+//    }
 
-    /**
-     * Retrieves the {@link NIOMessageChannel} wrapper for a known persistent connection.
-     * <p>
-     * This method searches the internal maps of both the {@code PeerManager} and {@code ChatServerManager}
-     * to find the {@code NIOMessageChannel} corresponding to the provided {@link SocketChannel}.
-     * </p>
-     * <p>
-     * If the channel is not found in either manager, the method returns {@code null}.
-     * </p>
-     *
-     * @param channel the {@code SocketChannel} to look up.
-     * @return the associated {@code NIOMessageChannel}, or {@code null} if not found.
-     */
-    private NIOMessageChannel getKnownPersistentChannel(SocketChannel channel) {
-        NIOMessageChannel ch = peerManager.getChannels().get(channel);
-        if (ch != null) return ch;
-        return chatServerManager.getChannels().get(channel); // Will return null if it doesn't exist (which is what we want)
-    }
+//    /**
+//     * Retrieves the {@link NIOMessageChannel} wrapper for a known persistent connection.
+//     * <p>
+//     * This method searches the internal maps of both the {@code PeerManager} and {@code ChatServerManager}
+//     * to find the {@code NIOMessageChannel} corresponding to the provided {@link SocketChannel}.
+//     * </p>
+//     * <p>
+//     * If the channel is not found in either manager, the method returns {@code null}.
+//     * </p>
+//     *
+//     * @param channel the {@code SocketChannel} to look up.
+//     * @return the associated {@code NIOMessageChannel}, or {@code null} if not found.
+//     */
+//    private NIOMessageChannel getKnownPersistentChannel(SocketChannel channel) {
+//        NIOMessageChannel ch = peerManager.getChannels().get(channel);
+//        if (ch != null) return ch;
+//        return chatServerManager.getChannels().get(channel); // Will return null if it doesn't exist (which is what we want)
+//    }
 
     /**
      * Cleans up a persistent connection and deregisters it from the internal selector.
@@ -255,27 +257,27 @@ public class AddrServerNetworkManager {
      * @param cce {@code true} if the cleanup is due to a remote disconnect (i.e., {@link ConnectionClosedException}),
      *            {@code false} if due to a local I/O failure.
      */
-    private void cleanupPersistentConnection(SocketChannel channel, SelectionKey key, Boolean cce) {
-//        System.err.printf("Channel cleanup triggered for -> %s - due to -> (%s)\n",
-//                channel,
-//                cce ? "remote process disconnection." : "I/O failure."
-//        );
-        if (cce) {
-            NIOMessageChannel ch = getKnownPersistentChannel(channel);
-            if (ch != null) {
-                Long pid = ch.getServerPID();
-                if (chatServerManager.getChannels().containsKey(channel)) {
-                    chatServerManager.removeRemoteProcess(channel);
-                } else if (peerManager.getChannels().containsKey(channel)) {
-                    peerManager.removeRemoteProcess(channel);
-                }
-            }
-        }
-        key.cancel();
-        try {
-            channel.close();
-        } catch (IOException ignored) {}  // if the channel is already closed, we don't need to do anything.
-    }
+//    private void cleanupPersistentConnection(SocketChannel channel, SelectionKey key, Boolean cce) {
+////        System.err.printf("Channel cleanup triggered for -> %s - due to -> (%s)\n",
+////                channel,
+////                cce ? "remote process disconnection." : "I/O failure."
+////        );
+//        if (cce) {
+//            NIOMessageChannel ch = getKnownPersistentChannel(channel);
+//            if (ch != null) {
+//                Long pid = ch.getServerPID();
+//                if (chatServerManager.getChannels().containsKey(channel)) {
+//                    chatServerManager.removeRemoteProcess(channel);
+//                } else if (peerManager.getChannels().containsKey(channel)) {
+//                    peerManager.removeRemoteProcess(channel);
+//                }
+//            }
+//        }
+//        key.cancel();
+//        try {
+//            channel.close();
+//        } catch (IOException ignored) {}  // if the channel is already closed, we don't need to do anything.
+//    }
 
     /**
      * Retrieves the internal {@link Selector} used for multiplexing non-blocking I/O operations.
@@ -374,13 +376,12 @@ public class AddrServerNetworkManager {
                             continue;
                         }
                     }
-
                     if (listenerSC.equals(chatServerListenerChannel)) {
                         openPersistentChannel(channel);
-                        chatServerManager.getChannels().put(channel, nioChannel);
+                        cleanupManager.getChatServerManager().getChannels().put(channel, nioChannel);
                     } else if (listenerSC.equals(peerListenerChannel)) {
                         openPersistentChannel(channel);
-                        peerManager.getChannels().put(channel, nioChannel);
+                        cleanupManager.getPeerManager().getChannels().put(channel, nioChannel);
                     }
                         /*
                          The only port we haven't checked by this point is the one designated for the client.
@@ -389,14 +390,14 @@ public class AddrServerNetworkManager {
                     //executorService.submit(() -> {
                         try {
                             readDispatcher.handleRegistration(channel, nioChannel, message);
-                            if (!isPersistentConnection(channel)) {
+                            if (!cleanupManager.isPersistentConnection(channel)) {
                                 // Client process -> close the channel immediately after registration.
                                 channel.close();
                                 key.cancel();
                             }
                         } catch (ConnectionClosedException cce) {
-                            if (isPersistentConnection(channel)) {
-                                cleanupPersistentConnection(channel, key, true);
+                            if (cleanupManager.isPersistentConnection(channel)) {
+                                cleanupManager.cleanupPersistentConnection(channel, key, true);
                             } else {
                                 try {
                                     channel.close();
@@ -405,8 +406,8 @@ public class AddrServerNetworkManager {
                                 key.cancel();
                             }
                         } catch (Exception e) {
-                            if (isPersistentConnection(channel)) {
-                                cleanupPersistentConnection(channel, key, false);
+                            if (cleanupManager.isPersistentConnection(channel)) {
+                                cleanupManager.cleanupPersistentConnection(channel, key, false);
                             } else {
                                 try {
                                     channel.close();
@@ -425,7 +426,7 @@ public class AddrServerNetworkManager {
                     SocketChannel channel = (SocketChannel) key.channel();
 
                     // Retrieve existing NIOMessageChannel for persistent connections.
-                    NIOMessageChannel persistentNioChannel = getKnownPersistentChannel(channel);
+                    NIOMessageChannel persistentNioChannel = cleanupManager.getKnownPersistentChannel(channel);
                     // If it doesn't exist, close the channel and cancel the event key to prevent errors.
                     if (persistentNioChannel == null) {
                         try {
@@ -460,7 +461,7 @@ public class AddrServerNetworkManager {
                                     System.err.printf("ConnectionClosedException on channel (remote address unavailable, interestOps=%d): %s\n",
                                             key.interestOps(), cce.getMessage());
                                 }
-                                cleanupPersistentConnection(channel, key, true);
+                                cleanupManager.cleanupPersistentConnection(channel, key, true);
                             } catch (IOException ioe) {
                                 try {
                                     System.err.printf("IOException on channel %s (interestOps=%d): %s\n",
@@ -469,7 +470,7 @@ public class AddrServerNetworkManager {
                                     System.err.printf("IOException on channel (remote address unavailable, interestOps=%d): %s\n",
                                             key.interestOps(), ioe.getMessage());
                                 }
-                                cleanupPersistentConnection(channel, key, false);
+                                cleanupManager.cleanupPersistentConnection(channel, key, false);
                             }
                         //});
                     }

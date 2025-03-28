@@ -73,8 +73,9 @@ public class AddrServerRegistry {
      * @param pid the unique process ID of the AddressingServer to remove from the registry.
      */
     public void removeRecordByKey(Long pid) {
-        if (addrServerRecords.remove(pid) != null) {
-            System.out.println("Successfully removed AddrServerRecord for Network Process with PID: " + pid);
+        AddrServerRecord record = addrServerRecords.remove(pid);
+        if (record != null) {
+            System.out.printf("Successfully removed *AddrServerRecord* for Network Process with PID: %d - and Host Address: %s%n", pid, record.getHostAddress());
         } else {
             System.out.println("No AddrServerRecord found for PID: " + pid + " — nothing to remove.");
         }
