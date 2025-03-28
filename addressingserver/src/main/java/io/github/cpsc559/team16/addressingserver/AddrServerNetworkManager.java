@@ -256,10 +256,10 @@ public class AddrServerNetworkManager {
      *            {@code false} if due to a local I/O failure.
      */
     private void cleanupPersistentConnection(SocketChannel channel, SelectionKey key, Boolean cce) {
-        System.err.printf("Channel cleanup triggered for -> %s - due to -> (%s)\n",
-                channel,
-                cce ? "remote process disconnection." : "I/O failure."
-        );
+//        System.err.printf("Channel cleanup triggered for -> %s - due to -> (%s)\n",
+//                channel,
+//                cce ? "remote process disconnection." : "I/O failure."
+//        );
         if (cce) {
             NIOMessageChannel ch = getKnownPersistentChannel(channel);
             if (ch != null) {
@@ -428,12 +428,20 @@ public class AddrServerNetworkManager {
                     NIOMessageChannel persistentNioChannel = getKnownPersistentChannel(channel);
                     // If it doesn't exist, close the channel and cancel the event key to prevent errors.
                     if (persistentNioChannel == null) {
+                        try {
+                            System.err.printf("No persistent NIO channel found for SocketChannel %s. Closing channel.\n",
+                                    channel.getRemoteAddress());
+                        } catch (IOException e) {
+                            System.err.println("No persistent NIO channel found for a channel (remote address unavailable). Closing channel.");
+                        }
                         key.cancel();
-                        channel.close();
+                        try {
+                            channel.close();
+                        } catch (IOException ignored) { }
                     }
                     // Handle persistent connection input/read events (Chat Servers & Replicas)
                     else {
-                        // Temporarily disable OP_READ to avoid re-triggering on every incoming byte.
+                        // Temporarily disable OP_READ to avoid re-triggering an event on every incoming byte.
                         key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
                         // Dispatch message for processing. This will throw errors if the connection is closed or I/O operations fail.
                         // Handle persistent connections asynchronously
@@ -445,8 +453,22 @@ public class AddrServerNetworkManager {
                                     key.interestOps(key.interestOps() | SelectionKey.OP_READ);
                                 }
                             } catch (ConnectionClosedException cce) {
+                                try {
+                                    System.err.printf("ConnectionClosedException on channel %s (interestOps=%d): %s\n",
+                                            channel.getRemoteAddress(), key.interestOps(), cce.getMessage());
+                                } catch (IOException e) {
+                                    System.err.printf("ConnectionClosedException on channel (remote address unavailable, interestOps=%d): %s\n",
+                                            key.interestOps(), cce.getMessage());
+                                }
                                 cleanupPersistentConnection(channel, key, true);
                             } catch (IOException ioe) {
+                                try {
+                                    System.err.printf("IOException on channel %s (interestOps=%d): %s\n",
+                                            channel.getRemoteAddress(), key.interestOps(), ioe.getMessage());
+                                } catch (IOException e) {
+                                    System.err.printf("IOException on channel (remote address unavailable, interestOps=%d): %s\n",
+                                            key.interestOps(), ioe.getMessage());
+                                }
                                 cleanupPersistentConnection(channel, key, false);
                             }
                         //});
