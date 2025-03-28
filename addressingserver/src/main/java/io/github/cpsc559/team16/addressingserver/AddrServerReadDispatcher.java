@@ -30,7 +30,7 @@ import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
  *     </li>
  * </ul>
  */
-public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
+public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher  {
     private final AddressingServer server;
     private final PeerManager peerManager;
     private final ClientManager clientManager;
