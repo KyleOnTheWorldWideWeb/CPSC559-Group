@@ -95,6 +95,32 @@ public class PeerManager {
     }
 
     /**
+     * Removes a failed server from the network based on its process ID.
+     * <p>
+     * This method checks the peer channels for a connection associated with the given failed process ID.
+     * If it finds a channel in which the associated {@code NIOMessageChannel} has a matching server PID,
+     * it removes the connection and any {@code AddrServerRecord} in the registry by calling the local
+     * {@link #removeProcessCloseConnection(SocketChannel)} method.
+     * </p>
+     * <p>
+     * If no channel with a matching server PID is found, the method falls back to removing any
+     * AddrServerRecord with the same PID directly from the local registry.
+     * </p>
+     *
+     * @param failedPID the process ID of the failed server to remove
+     */
+    public void removeFailedServer(Long failedPID) {
+        NIOMessageChannel nioChannel;
+        for (SocketChannel channel : peerChannels.keySet()) {
+            if (peerChannels.get(channel).getServerPID().equals(failedPID)) {
+                removeProcessCloseConnection(channel);
+                return;
+            }
+        }
+        registry.removeRecordByKey(failedPID);
+    }
+
+    /**
      * Registers a replica AddressingServer and sets up a persistent connection to it.
      * <p>
      * This method also updates the replica’s {@code AddrServerRecord} with its resolved host address and PID,
@@ -110,7 +136,7 @@ public class PeerManager {
      * @throws IOException if an error occurs during network communication.
      */
     public AddrServerRecord registerPeer(SocketChannel socketChannel, NIOMessageChannel nioChannel, Long peerPID,
-                             Long primaryPID, AddrServerRecord record) throws IOException {
+                                         Long primaryPID, AddrServerRecord record) throws IOException {
         // Set the NIOChannel process ID to match that of the remote process before storing it for use.
         nioChannel.setServerPID(peerPID);
         peerChannels.put(socketChannel, nioChannel);
@@ -286,6 +312,9 @@ public class PeerManager {
     }
 
 
+
+
+
     /**
      * Broadcasts a message to all peer replicas in the {@code peerChannels}.
      * <p>
@@ -358,6 +387,10 @@ public class PeerManager {
             e.printStackTrace();
             return Optional.empty();
         }
+    }
+
+    public String getServerRole(Long pid) {
+        return this.registry.getRecords().get(pid).getRole().toString();
     }
 
     /**

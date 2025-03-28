@@ -6,6 +6,7 @@ import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.messaging.*;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
+import javax.management.relation.Role;
 import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
@@ -55,6 +56,7 @@ public class ChatServerManager {
         Long pid = ch.getServerPID();
         try {
             this.registry.removeRecordByKey(pid);
+
             System.out.println("Removed the network communication channels for the ChatServer with PID: " + pid);
         } catch (NullPointerException e){
             System.err.println("Removed a NIOMessageChannel and SocketChannel connection for a ChatServer that had no ChatServerRecord. It's network PID was - " + pid);
@@ -80,6 +82,31 @@ public class ChatServerManager {
         try { channelToRemove.close(); }
         catch(IOException ignored) {};
     }
+
+
+
+    /**
+     * Removes a failed chat server's connection and its registry record using only its process ID.
+     * <p>
+     * This method iterates over the chat server channels to locate a connection whose associated
+     * {@code NIOMessageChannel} has a matching server PID. If found, it removes the connection and any
+     * {@code ChatServerRecord} in the registry by calling
+     * {@code removeProcessCloseConnection} on that channel and then returns. If no channel is found,
+     * the method directly removes the record from the local registry.
+     * </p>
+     *
+     * @param failedPID the process ID of the failed chat server to remove
+     */
+    public void removeFailedChatServer(Long failedPID) {
+        for (SocketChannel channel : chatServerChannels.keySet()) {
+            if (chatServerChannels.get(channel).getServerPID().equals(failedPID)) {
+                removeProcessCloseConnection(channel);
+                return;
+            }
+        }
+        registry.removeRecordByKey(failedPID);
+    }
+
 
 
     /**

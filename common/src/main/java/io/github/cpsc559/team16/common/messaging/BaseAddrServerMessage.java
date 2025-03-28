@@ -102,7 +102,7 @@ public class BaseAddrServerMessage<T> {
     private String objectType;
 
     /** The process ID (PID) of the sender of the message. */
-    private long senderPID;
+    private Long senderPID;
 
     /** The role of the sender in the distributed system (PRIMARY, REPLICA, CHATSERVER, CLIENT). */
     private String senderRole;
@@ -128,7 +128,7 @@ public class BaseAddrServerMessage<T> {
      * @param targetRole The intended recipient's role.
      * @param payload The actual data being sent.
      */
-    public BaseAddrServerMessage(String msgType, String objectType, long senderPID, String senderRole, String targetRole, T payload) {
+    public BaseAddrServerMessage(String msgType, String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
         this.msgType = msgType;
         this.objectType = objectType;
         this.senderPID = senderPID;
@@ -168,6 +168,27 @@ public class BaseAddrServerMessage<T> {
         return objectMapper.readValue(json, objectMapper.getTypeFactory().constructParametricType(BaseAddrServerMessage.class, payloadClass));
     }
 
+    /**
+     * Resolves a string objectType into a corresponding Java class.
+     *
+     * @param objectType The string identifier of the payload's type.
+     * @return The corresponding Java class, or {@code null} if unrecognized.
+     */
+    private Class<?> resolveObjectTypeToClass(String objectType) {
+        return switch (objectType) {
+            case "AddrServerRecord" -> io.github.cpsc559.team16.common.dto.AddrServerRecord.class;
+            case "ChatServerRecord" -> io.github.cpsc559.team16.common.dto.ChatServerRecord.class;
+            case "ClientCount"    -> Integer.class;
+            case "ChatServerFailure" -> Long.class;
+            case "AddrServerFailure" -> Long.class;
+            case "ElectionVote"   -> io.github.cpsc559.team16.common.dto.ElectionVote.class;
+            case "Long"           -> Long.class;
+            case "Registered"     -> Long.class;
+            case "String"         -> String.class;
+            case "NONE"           -> Object.class;
+            default               -> null;
+        };
+    }
 
     /**
      * Casts the payload to the type declared in the {@code objectType} field.
@@ -182,10 +203,9 @@ public class BaseAddrServerMessage<T> {
     @SuppressWarnings("unchecked")
     public <U> U safeCastPayload(Class<U> expectedClass) {
         // Resolve the class from the objectType string
-        Class<?> resolvedType = ObjectTypes.getPayloadClass(this.objectType);
+        Class<?> resolvedType = resolveObjectTypeToClass(this.objectType);
 
         if (resolvedType == null) {
-            System.err.println("Unrecognized objectType");
             throw new IllegalStateException("Unrecognized objectType: " + objectType);
         }
 
@@ -196,6 +216,7 @@ public class BaseAddrServerMessage<T> {
 
         return (U) payload;
     }
+
 
 
 }

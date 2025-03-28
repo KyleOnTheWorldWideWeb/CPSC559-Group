@@ -257,7 +257,16 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
      * @param message The received server failure message.
      */
     private void handleServerFailure(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-
+        switch (message.getObjectType()) {
+            case ObjectTypes.ADDRSERVER_FAILURE -> {
+                Long failedPID = message.safeCastPayload(Long.class);
+                peerManager.removeFailedServer(failedPID);
+            }
+            case ObjectTypes.CHATSERVER_FAILURE -> {
+                Long failedPID = message.safeCastPayload(Long.class);
+                chatServerManager.removeFailedChatServer(failedPID);
+            }
+        }
     }
 
     /**

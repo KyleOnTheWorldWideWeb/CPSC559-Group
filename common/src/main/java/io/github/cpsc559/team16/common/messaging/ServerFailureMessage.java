@@ -1,28 +1,9 @@
 package io.github.cpsc559.team16.common.messaging;
 
-/**
- * A standardized acknowledgment message used for confirming successful communication,
- * such as registration or message receipt.
- * <p>
- * The payload of an {@code AckMessage} is typically a string (e.g., "OK", "Registered", or an error reason).
- * </p>
- *
- * <pre>
- * Example:
- * {
- *   "msgType": "ACK",
- *   "objectType": "Registration",
- *   "senderPID": 101,
- *   "senderRole": "PRIMARY",
- *   "targetRole": "REPLICA",
- *   "payload": "Registered"
- * }
- * </pre>
- */
-public class NotificationMessage<T> extends BaseAddrServerMessage<T> {
+public class ServerFailureMessage<T> extends BaseAddrServerMessage<T> {
 
     /**
-     * Constructs a new acknowledgment message.
+     * Constructs a new failed server message.
      *
      * @param objectType Describes what action is being acknowledged (e.g., "Registration", "Update").
      * @param senderPID The ID of the process sending the acknowledgment.
@@ -30,8 +11,8 @@ public class NotificationMessage<T> extends BaseAddrServerMessage<T> {
      * @param targetRole The role of the process being acknowledged (e.g., CHATSERVER, REPLICA).
      * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
-    public NotificationMessage(String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.NOTIFICATION, objectType, senderPID, senderRole, targetRole, payload);
+    public ServerFailureMessage(String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
+        super(MessageTypes.SERVERFAILURE, objectType, senderPID, senderRole, targetRole, payload);
     }
 
     /**
@@ -51,10 +32,10 @@ public class NotificationMessage<T> extends BaseAddrServerMessage<T> {
      * @param senderRole   the role of the sender (for example, {@code Roles.PRIMARY})
      * @param receiverRole the role of the intended recipient (for example, {@code Roles.REPLICA})
      * @param failedPID    the process ID of the failed ChatServer process
-     * @return a {@code NotificationMessage<Long>} encapsulating the failure event for a ChatServer
+     * @return a {@code ServerFailureMessage<Long>} encapsulating the failure event for a ChatServer
      */
-    public static NotificationMessage<Long> chatServerFailed(long senderPID, String senderRole, String receiverRole, Long failedPID) {
-        return new NotificationMessage<>(ObjectTypes.CHATSERVER_FAILURE, senderPID, senderRole, receiverRole, failedPID);
+    public static ServerFailureMessage<Long> chatServerFailed(long senderPID, String senderRole, String receiverRole, Long failedPID) {
+        return new ServerFailureMessage<>(ObjectTypes.CHATSERVER_FAILURE, senderPID, senderRole, receiverRole, failedPID);
     }
 
 
@@ -75,11 +56,9 @@ public class NotificationMessage<T> extends BaseAddrServerMessage<T> {
      * @param senderRole   the role of the sender (for example, {@code Roles.PRIMARY})
      * @param receiverRole the role of the intended recipient (for example, {@code Roles.REPLICA})
      * @param failedPID    the process ID of the failed AddressingServer process
-     * @return a {@code NotificationMessage<Long>} encapsulating the failure event for an AddressingServer
+     * @return a {@code ServerFailureMessage<Long>} encapsulating the failure event for an AddressingServer
      */
-    public static NotificationMessage<Long> addrServerFailed(long senderPID, String senderRole, String receiverRole, Long failedPID) {
-        return new NotificationMessage<>(ObjectTypes.ADDRSERVER_FAILURE,senderPID, senderRole, receiverRole, failedPID);
+    public static ServerFailureMessage<Long> addrServerFailed(long senderPID, String senderRole, String receiverRole, Long failedPID) {
+        return new ServerFailureMessage<>(ObjectTypes.ADDRSERVER_FAILURE,senderPID, senderRole, receiverRole, failedPID);
     }
-
-
 }

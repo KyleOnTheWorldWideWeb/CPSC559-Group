@@ -2,6 +2,8 @@ package io.github.cpsc559.team16.addressingserver;
 
 // For thread management
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -238,6 +240,8 @@ public class AddrServerNetworkManager {
         return chatServerManager.getChannels().get(channel); // Will return null if it doesn't exist (which is what we want)
     }
 
+
+
     /**
      * Cleans up a persistent connection and deregisters it from the internal selector.
      * <p>
@@ -249,29 +253,47 @@ public class AddrServerNetworkManager {
      *     <li>Cancels the selection key and closes the channel gracefully.</li>
      * </ul>
      * </p>
+     *  @param channel the {@code SocketChannel} being cleaned up.
      *
-     * @param channel the {@code SocketChannel} being cleaned up.
-     * @param key the {@code SelectionKey} associated with the channel, used for deregistration.
      * @param cce {@code true} if the cleanup is due to a remote disconnect (i.e., {@link ConnectionClosedException}),
      *            {@code false} if due to a local I/O failure.
      */
-    private void cleanupPersistentConnection(SocketChannel channel, SelectionKey key, Boolean cce) {
+    private void cleanupPersistentConnection(SocketChannel channel, Boolean cce) {
         System.err.printf("Channel cleanup triggered for -> %s - due to -> (%s)\n",
                 channel,
                 cce ? "remote process disconnection." : "I/O failure."
         );
         if (cce) {
             NIOMessageChannel ch = getKnownPersistentChannel(channel);
+            List<NIOMessageChannel> failedChannels = new ArrayList<>();
             if (ch != null) {
-                Long pid = ch.getServerPID();
+                Long failedPID = ch.getServerPID();
                 if (chatServerManager.getChannels().containsKey(channel)) {
                     chatServerManager.removeRemoteProcess(channel);
+                    failedChannels = BroadcastManager.serverFailure(config.getPID(), config.getRole().toString(),
+                            failedPID, Roles.CHATSERVER, peerManager.getChannels(), chatServerManager.getChannels());
                 } else if (peerManager.getChannels().containsKey(channel)) {
                     peerManager.removeRemoteProcess(channel);
+                    String role = peerManager.getServerRole(failedPID);
+                    // primary or replica, chat servers need to know either way!
+                    if (role.equals(Roles.PRIMARY)) {
+                        // TODO - This is where an election cycle should trigger!
+                        // No need to broadcast to peers because you'll be hosting the election with them!
+                        failedChannels = BroadcastManager.serverFailure(config.getPID(), config.getRole().toString(),
+                                failedPID, Roles.PRIMARY, peerManager.getChannels(), chatServerManager.getChannels());
+                    }
+                    else {
+                        failedChannels = BroadcastManager.serverFailure(config.getPID(), config.getRole().toString(),
+                                failedPID, Roles.REPLICA, peerManager.getChannels(), chatServerManager.getChannels());
+                    }
+                }
+                //Repeat the process for any new failures!
+                for (NIOMessageChannel failedChannel : failedChannels) {
+                    // Retrieve the corresponding SelectionKey for failedChannel, then clean up.
+                    cleanupPersistentConnection(failedChannel.getSocketChannel(),true);
                 }
             }
         }
-        key.cancel();
         try {
             channel.close();
         } catch (IOException ignored) {}  // if the channel is already closed, we don't need to do anything.
@@ -396,7 +418,7 @@ public class AddrServerNetworkManager {
                             }
                         } catch (ConnectionClosedException cce) {
                             if (isPersistentConnection(channel)) {
-                                cleanupPersistentConnection(channel, key, true);
+                                cleanupPersistentConnection(channel, true);
                             } else {
                                 try {
                                     channel.close();
@@ -406,7 +428,7 @@ public class AddrServerNetworkManager {
                             }
                         } catch (Exception e) {
                             if (isPersistentConnection(channel)) {
-                                cleanupPersistentConnection(channel, key, false);
+                                cleanupPersistentConnection(channel, false);
                             } else {
                                 try {
                                     channel.close();
@@ -445,9 +467,9 @@ public class AddrServerNetworkManager {
                                     key.interestOps(key.interestOps() | SelectionKey.OP_READ);
                                 }
                             } catch (ConnectionClosedException cce) {
-                                cleanupPersistentConnection(channel, key, true);
+                                cleanupPersistentConnection(channel, true);
                             } catch (IOException ioe) {
-                                cleanupPersistentConnection(channel, key, false);
+                                cleanupPersistentConnection(channel, false);
                             }
                         //});
                     }

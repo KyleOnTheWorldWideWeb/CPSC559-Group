@@ -27,7 +27,6 @@ public class MessageDeserializer {
         try {
             // Step 1: Parse only the msgType and objectType fields
             JsonNode rootNode = objectMapper.readTree(json);
-            String msgType = rootNode.has("msgType") ? rootNode.get("msgType").asText() : "UNKNOWN";
             String objectType = rootNode.has("objectType") ? rootNode.get("objectType").asText() : "NONE";
 
             // Step 2: Determine the correct payload class

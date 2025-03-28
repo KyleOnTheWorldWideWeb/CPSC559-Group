@@ -22,11 +22,19 @@ public class Roles {
      */
     public static final String REPLICA = "REPLICA";
 
+    public static boolean isReplica(Roles role) {
+        return role.toString().equals(REPLICA);
+    }
+
     /**
      * Represents the chat server role.
      * Chat servers handle client connections and messaging within the chat system.
      */
     public static final String CHATSERVER = "CHATSERVER";
+
+    public static boolean isChatServer(Roles role) {
+        return role.toString().equals(CHATSERVER);
+    }
 
     /**
      * Represents the client role.
@@ -36,4 +44,8 @@ public class Roles {
      * Host PID, and HostAddress of an ACTIVE ChatServer with room to accept new clients.
      */
     public static final String CLIENT = "CLIENT";
+
+    public static boolean isClient(Roles role) {
+        return role.toString().equals(CLIENT);
+    }
 }
