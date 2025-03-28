@@ -310,7 +310,6 @@ public class AddrServerNetworkManager {
      *
      * @return the internal {@code Selector} used by this {@code AddrServerNetworkManager}.
      */
-
     public Selector getSelector() {
         return selector;
     }

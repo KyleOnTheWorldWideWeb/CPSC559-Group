@@ -102,7 +102,7 @@ public class BaseAddrServerMessage<T> {
     private String objectType;
 
     /** The process ID (PID) of the sender of the message. */
-    private Long senderPID;
+    private long senderPID;
 
     /** The role of the sender in the distributed system (PRIMARY, REPLICA, CHATSERVER, CLIENT). */
     private String senderRole;
@@ -128,7 +128,7 @@ public class BaseAddrServerMessage<T> {
      * @param targetRole The intended recipient's role.
      * @param payload The actual data being sent.
      */
-    public BaseAddrServerMessage(String msgType, String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
+    public BaseAddrServerMessage(String msgType, String objectType, long senderPID, String senderRole, String targetRole, T payload) {
         this.msgType = msgType;
         this.objectType = objectType;
         this.senderPID = senderPID;

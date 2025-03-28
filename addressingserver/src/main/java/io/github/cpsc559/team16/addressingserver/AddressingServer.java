@@ -200,7 +200,7 @@ public class AddressingServer {
             }
 
             maybeChannel = peerManager.registerWithPrimary(
-                    System.getenv("HOST_ADDRESS"), 49801,
+                    System.getenv("HOST_ADDRESS"), Integer.parseInt(System.getenv("AS_REPLICA_PORT")),
                     config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
         }
 

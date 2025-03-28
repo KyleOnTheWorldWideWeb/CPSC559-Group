@@ -30,56 +30,11 @@ public class NotificationMessage<T> extends BaseAddrServerMessage<T> {
      * @param targetRole The role of the process being acknowledged (e.g., CHATSERVER, REPLICA).
      * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
-    public NotificationMessage(String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
+    public NotificationMessage(String objectType, long senderPID, String senderRole, String targetRole, T payload) {
         super(MessageTypes.NOTIFICATION, objectType, senderPID, senderRole, targetRole, payload);
     }
 
-    /**
-     * Creates a notification message indicating that a ChatServer process has failed.
-     * This notification is intended for any server in the network to inform others that a ChatServer
-     * is no longer active. Recipients should terminate any connections (channels) with the failed process
-     * and remove its record from their local registry.
-     *
-     * <p>
-     * This factory method generates a {@code NotificationMessage} with the object type set to
-     * {@link ObjectTypes#CHATSERVER_FAILURE}. The sender and receiver roles should be specified using the
-     * allowed values defined in {@link Roles} (for example, {@code Roles.PRIMARY}, {@code Roles.REPLICA},
-     * or {@code Roles.CHATSERVER}).
-     * </p>
-     *
-     * @param senderPID    the process ID of the server sending this notification
-     * @param senderRole   the role of the sender (for example, {@code Roles.PRIMARY})
-     * @param receiverRole the role of the intended recipient (for example, {@code Roles.REPLICA})
-     * @param failedPID    the process ID of the failed ChatServer process
-     * @return a {@code NotificationMessage<Long>} encapsulating the failure event for a ChatServer
-     */
-    public static NotificationMessage<Long> chatServerFailed(long senderPID, String senderRole, String receiverRole, Long failedPID) {
-        return new NotificationMessage<>(ObjectTypes.CHATSERVER_FAILURE, senderPID, senderRole, receiverRole, failedPID);
-    }
 
-
-    /**
-     * Creates a notification message indicating that an AddressingServer process has failed.
-     * This notification is intended for any server in the network to inform others that an AddressingServer
-     * is no longer active. Recipients should terminate any connections (channels) with the failed process
-     * and remove its record from their local registry.
-     *
-     * <p>
-     * This factory method generates a {@code NotificationMessage} with the object type set to
-     * {@link ObjectTypes#ADDRSERVER_FAILURE}. The sender and receiver roles should be specified using the
-     * allowed values defined in {@link Roles} (for example, {@code Roles.PRIMARY}, {@code Roles.REPLICA},
-     * or {@code Roles.CHATSERVER}).
-     * </p>
-     *
-     * @param senderPID    the process ID of the server sending this notification
-     * @param senderRole   the role of the sender (for example, {@code Roles.PRIMARY})
-     * @param receiverRole the role of the intended recipient (for example, {@code Roles.REPLICA})
-     * @param failedPID    the process ID of the failed AddressingServer process
-     * @return a {@code NotificationMessage<Long>} encapsulating the failure event for an AddressingServer
-     */
-    public static NotificationMessage<Long> addrServerFailed(long senderPID, String senderRole, String receiverRole, Long failedPID) {
-        return new NotificationMessage<>(ObjectTypes.ADDRSERVER_FAILURE,senderPID, senderRole, receiverRole, failedPID);
-    }
 
 
 }

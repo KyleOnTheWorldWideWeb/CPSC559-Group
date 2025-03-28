@@ -78,6 +78,7 @@ public class NIOMessageChannel {
     public NIOMessageChannel(SocketChannel channel) {
         this.channel = channel;
         this.streamBuffer = ByteBuffer.allocate(1024);  // Adjustable buffer size
+        this.serverPID = 0L;
     }
 
     public void setServerPID(Long pid) {
