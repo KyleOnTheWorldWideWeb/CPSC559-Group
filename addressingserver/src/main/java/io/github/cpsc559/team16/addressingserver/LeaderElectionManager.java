@@ -162,7 +162,7 @@ public class LeaderElectionManager {
      * @return A collection of {@link NIOMessageChannel} objects representing connected peers.
      */
     private Collection<NIOMessageChannel> getPeerChannels() {
-        return peerManager.getPeerChannels().values();
+        return peerManager.getChannels().values();
     }
 
     /**

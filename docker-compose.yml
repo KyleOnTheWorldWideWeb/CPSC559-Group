@@ -30,12 +30,12 @@ services:  # Defines the services (Docker containers) that will be run.
     networks:
       chat_network:
         ipv4_address: 172.20.0.2
-    healthcheck:
-      test: [ "CMD", "sh", "/healthcheck.sh" ]
-      interval: 10s
-      timeout: 10s
-      retries: 3
-    restart: on-failure
+#    healthcheck:
+#      test: [ "CMD", "sh", "/healthcheck.sh" ]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 3
+#    restart: on-failure
 
   addressingserver_replicas:
     image: addressingserver:latest
@@ -50,7 +50,7 @@ services:  # Defines the services (Docker containers) that will be run.
     networks:
       - chat_network
     deploy:
-      replicas: 1
+      replicas: 2
 
   chatserver:
     image: chatserver:latest

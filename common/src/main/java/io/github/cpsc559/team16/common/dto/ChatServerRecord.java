@@ -44,9 +44,6 @@ public class ChatServerRecord extends ServerRecord {
      */
     private ServerStatus status;
 
-    public int getAddrServerPort() { return this.addrServerPort; }
-    public int getClientCount() { return this.clientCount; }
-    public ServerStatus getStatus() { return this.status; }
 
     // TODO Decide if we are assigning a subset of chat servers to each chat server as its peers -> create instance record.
     /**
@@ -82,7 +79,6 @@ public class ChatServerRecord extends ServerRecord {
 
     /**
      * Attempts to add a new client to the server.
-     * TODO - Decide if we want client ID's or addresses recorded in the ChatServerRecord class
      * Any calling code should perform its own capacity check prior to invocation of this method.
      * It exists as a secondary guard only.
      * <ul>
@@ -206,4 +202,10 @@ public class ChatServerRecord extends ServerRecord {
     public void setHostAddress(String hostAddress) {
         super.setHostAddress(hostAddress);
     }
+
+    public int getAddrServerPort() { return this.addrServerPort; }
+
+    public int getClientCount() { return this.clientCount; }
+
+    public ServerStatus getStatus() { return this.status; }
 }

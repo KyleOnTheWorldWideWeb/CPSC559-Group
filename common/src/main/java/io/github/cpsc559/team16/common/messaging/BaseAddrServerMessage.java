@@ -71,6 +71,7 @@ public class BaseAddrServerMessage<T> {
      *     <li><strong>REQUEST</strong> - A request for information, such as retrieving updated records.</li>
      *     <li><strong>PING</strong> - Used for failure detection, ensuring peers are still responsive.</li>
      *     <li><strong>NOTIFICATION</strong> - A general event notification, such as a server joining or leaving the network.</li>
+     *     <li><strong>SERVERFAILURE</strong> - Used by any process to notify others in the network that a process has failed and needs to be expunged from all records and channels.</li>
      *     <li><strong>ELECTION</strong> - Used for Addressing Server leadership election messages.</li>
      *     <li><strong>ACK</strong> - Used for custom one-time responses.</li>
      * </ul>
@@ -91,7 +92,8 @@ public class BaseAddrServerMessage<T> {
      *     <li><strong>ChatServerRecord</strong> - Contains details about a registered chat server, such as host address and active client count.</li>
      *     <li><strong>AddrServerRecord</strong> - Provides information about an Addressing Server, including its role (PRIMARY or REPLICA).</li>
      *     <li><strong>ClientCount</strong> - Indicates an update to the number of active clients connected to a chat server.</li>
-     *     <li><strong>ServerFailure</strong> - A notification that a chat server or addressing server has failed.</li>
+     *     <li><strong>ChatServerFailure</strong> - A notification that a chat server has failed. The payload is a Long containing the failed PID.</li>
+     *     <li><strong>AddrServerFailure</strong> - A notification that an addressing server has failed. The payload is a Long containing the failed PID.</li>
      *     <li><strong>ElectionMessage</strong> - Used during an election process to determine a new PRIMARY server.</li>
      * </ul>
      * <p>
@@ -168,25 +170,6 @@ public class BaseAddrServerMessage<T> {
         return objectMapper.readValue(json, objectMapper.getTypeFactory().constructParametricType(BaseAddrServerMessage.class, payloadClass));
     }
 
-    /**
-     * Resolves a string objectType into a corresponding Java class.
-     *
-     * @param objectType The string identifier of the payload's type.
-     * @return The corresponding Java class, or {@code null} if unrecognized.
-     */
-    private Class<?> resolveObjectTypeToClass(String objectType) {
-        return switch (objectType) {
-            case "AddrServerRecord" -> io.github.cpsc559.team16.common.dto.AddrServerRecord.class;
-            case "ChatServerRecord" -> io.github.cpsc559.team16.common.dto.ChatServerRecord.class;
-            case "ClientCount"    -> Integer.class;
-            case "ServerFailure"  -> String.class;
-            case "ElectionVote"   -> io.github.cpsc559.team16.common.dto.ElectionVote.class;
-            case "Long"           -> Long.class;
-            case "String"         -> String.class;
-            case "NONE"           -> Object.class;
-            default               -> null;
-        };
-    }
 
     /**
      * Casts the payload to the type declared in the {@code objectType} field.
@@ -201,9 +184,10 @@ public class BaseAddrServerMessage<T> {
     @SuppressWarnings("unchecked")
     public <U> U safeCastPayload(Class<U> expectedClass) {
         // Resolve the class from the objectType string
-        Class<?> resolvedType = resolveObjectTypeToClass(this.objectType);
+        Class<?> resolvedType = ObjectTypes.getPayloadClass(this.objectType);
 
         if (resolvedType == null) {
+            System.err.println("Unrecognized objectType");
             throw new IllegalStateException("Unrecognized objectType: " + objectType);
         }
 
@@ -214,7 +198,6 @@ public class BaseAddrServerMessage<T> {
 
         return (U) payload;
     }
-
 
 
 }
