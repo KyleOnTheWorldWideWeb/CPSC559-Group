@@ -302,6 +302,7 @@ public class PeerManager {
                     nioChannel.sendMessage(jsonMessage);
                 } catch (IOException ioe) {
                     System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+                    // TODO - I need to log this error and deal with it later, not remove it immediately.
                     removeProcessCloseConnection(nioChannel.getSocketChannel());
                 }
             }

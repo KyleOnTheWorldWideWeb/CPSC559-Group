@@ -276,15 +276,16 @@ public class AddrServerNetworkManager {
                     peerManager.removeRemoteProcess(channel);
                     String role = peerManager.getServerRole(failedPID);
                     // primary or replica, chat servers need to know either way!
-                    if (role.equals(Roles.PRIMARY)) {
-                        // TODO - This is where an election cycle should trigger!
-                        // No need to broadcast to peers because you'll be hosting the election with them!
-                        failedChannels = BroadcastManager.serverFailure(config.getPID(), config.getRole().toString(),
-                                failedPID, Roles.PRIMARY, peerManager.getChannels(), chatServerManager.getChannels());
-                    }
-                    else {
-                        failedChannels = BroadcastManager.serverFailure(config.getPID(), config.getRole().toString(),
-                                failedPID, Roles.REPLICA, peerManager.getChannels(), chatServerManager.getChannels());
+                    if (role != null) {
+                        if (role.equals(Roles.PRIMARY)) {
+                            // TODO - This is where an election cycle should trigger!
+                            // No need to broadcast to peers because you'll be hosting the election with them!
+                            failedChannels = BroadcastManager.serverFailure(config.getPID(), config.getRole().toString(),
+                                    failedPID, Roles.PRIMARY, peerManager.getChannels(), chatServerManager.getChannels());
+                        } else {
+                            failedChannels = BroadcastManager.serverFailure(config.getPID(), config.getRole().toString(),
+                                    failedPID, Roles.REPLICA, peerManager.getChannels(), chatServerManager.getChannels());
+                        }
                     }
                 }
                 //Repeat the process for any new failures!
