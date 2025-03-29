@@ -3,6 +3,7 @@ package io.github.cpsc559.team16.addressingserver;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.messaging.*;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
@@ -34,7 +35,7 @@ public class PeerManager {
      * The registry containing all known {@code AddrServerRecord} entries,
      * used to track state across the distributed network of AddressingServers.
      */
-    private AddrServerRegistry registry;
+    private final AddrServerRegistry registry;
 
     /**
      * Constructs a {@code PeerManager} and binds it to a shared {@code AddrServerRegistry}.
@@ -114,14 +115,15 @@ public class PeerManager {
      * @param failedPID the process ID of the failed server to remove
      */
     public void removeFailedServer(Long failedPID) {
-        NIOMessageChannel nioChannel;
         for (SocketChannel channel : peerChannels.keySet()) {
+            // NIOChannel objects should always have an instance variable set that references the PID of the remote process.
+            // We iterate through all the channels(keys) and respective NIOMessageChannels(values) until we find a match.
             if (peerChannels.get(channel).getServerPID().equals(failedPID)) {
                 removeProcessCloseConnection(channel);
                 return;
             }
         }
-        registry.removeRecordByKey(failedPID);
+        registry.removeRecordByKey(failedPID); // Remove the AddrServerRecord for the failed remote network process.
     }
 
     /**
@@ -155,7 +157,7 @@ public class PeerManager {
 //        System.out.println("Socket Channel ID = " + socketChannel.toString());
         // Send all current AddrServerRecord's to the remote process before adding the record.
         // This is done because the AddrServerReadDispatcher will broadcast the new record once this method returns.
-        this.sendAllAddrServerRecords(primaryPID, nioChannel);
+        //this.sendAllAddrServerRecords(primaryPID, nioChannel);
 
         registry.putAddrServerRecord(peerPID, record);
 
@@ -184,20 +186,20 @@ public class PeerManager {
      * @param primaryPID the PID of the primary server sending the updates.
      * @param nioChannel the channel over which to send the records.
      */
-    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel) throws IOException {
-        for (AddrServerRecord record : this.registry.getRecords().values()) {
-            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
-            try {
-                nioChannel.sendMessage(message.toJson());
-            } catch (JsonProcessingException e) {
-                System.err.println("Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
-            } catch (IOException ioe) {
-                System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
-                throw ioe;
-            }
-        }
-        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
-    }
+//    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel) throws IOException {
+//        for (AddrServerRecord record : this.registry.getRecords().values()) {
+//            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
+//            try {
+//                nioChannel.sendMessage(message.toJson());
+//            } catch (JsonProcessingException e) {
+//                System.err.println("Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
+//            } catch (IOException ioe) {
+//                System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
+//                throw ioe;
+//            }
+//        }
+//        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
+//    }
 
     /**
      * Sends all currently known {@code ChatServerRecord} entries in the network.
@@ -211,21 +213,21 @@ public class PeerManager {
      * @param nioChannel  the channel over which to send the records.
      * @param chatRecords a {@code HashMap} containing all {@code ChatServerRecord} entries.
      */
-    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
-                                         Map<Long, ChatServerRecord> chatRecords) throws IOException {
-        for (ChatServerRecord record : chatRecords.values()) {
-            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
-            try {
-                nioChannel.sendMessage(message.toJson());
-            } catch (JsonProcessingException e) {
-                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
-            } catch (IOException ioe) {
-                System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
-                throw ioe;
-            }
-        }
-        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
-    }
+//    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
+//                                         Map<Long, ChatServerRecord> chatRecords) throws IOException {
+//        for (ChatServerRecord record : chatRecords.values()) {
+//            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
+//            try {
+//                nioChannel.sendMessage(message.toJson());
+//            } catch (JsonProcessingException e) {
+//                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
+//            } catch (IOException ioe) {
+//                System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
+//                throw ioe;
+//            }
+//        }
+//        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
+//    }
 
 
     /**
@@ -395,6 +397,13 @@ public class PeerManager {
 
     public String getServerRole(Long pid) {
         return this.registry.getRecords().get(pid).getRole().toString();
+    }
+
+    public Long getPrimaryPID() {
+        for (AddrServerRecord record : registry.getRecords().values()) {
+            if (record.getRole().equals(ServerRole.PRIMARY)) return record.getPID();
+        }
+        return 0L;
     }
 
     /**

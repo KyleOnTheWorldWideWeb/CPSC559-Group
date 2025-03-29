@@ -35,12 +35,14 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher  
     private final PeerManager peerManager;
     private final ClientManager clientManager;
     private final ChatServerManager chatServerManager;
+    private final BroadcastManager broadcastManager;
 
     public AddrServerReadDispatcher(AddressingServer server) {
         this.server = server;
         this.peerManager = server.getPeerManager();
         this.clientManager = server.getClientManager();
         this.chatServerManager = server.getChatServerManager();
+        this.broadcastManager = server.getBroadcastManager();
     }
 
     /**
@@ -133,34 +135,36 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher  
                 if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
                     System.out.println("Client directed to an active host.");
                     Long pid = this.getPID();
-                    this.chatServerManager.broadcastChatServerRecord(pid, updatedRecord);
+                    this.broadcastManager.broadcastChatServerRecord(pid, updatedRecord); // Broadcast the updated (client count) record to all servers.
                     this.server.getChatServerRegistry().debugPrintServer(updatedRecord);
                 } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
             }
             case Roles.CHATSERVER -> {
                 Long pid = this.getPID();
-                // {@code registerServer} sends all the ChatServer records to the Chat Server we are registering.
+                // Send all the AddrServerRecord's and ChatServerRecords to the newly registered process.
+                this.broadcastManager.sendAllRecordsToProcess(pid, nioChannel,
+                        server.getChatServerRegistry().getRecords(),
+                        server.getAddrServerRegistry().getRecords());
+                // Register the new process and create a ChatServerRecord for it.
                 ChatServerRecord record = this.chatServerManager.registerServer(
                         channel, nioChannel,
                         this.server.generatePID(), pid,
                         registerMessage.safeCastPayload(ChatServerRecord.class)
                 );
-                this.chatServerManager.sendAllAddrServerRecords(pid, nioChannel, this.server.getAddrServerRegistry().getRecords());
-                this.chatServerManager.broadcastChatServerRecord(pid, record); // Broadcast the record to all chat servers
-                this.peerManager.broadcastChatServerRecord(pid, record);       // Broadcast the record to all Replicas
+                this.broadcastManager.broadcastChatServerRecord(pid, record); // Broadcast the record to all servers.
                 this.server.getChatServerRegistry().debugPrintAllServers();
             }
             case Roles.REPLICA -> {
                 Long pid = this.getPID();
-                // {@code registerPeer} sends all the current AddrServer records to the replica we are registering.
+                this.broadcastManager.sendAllRecordsToProcess(pid, nioChannel,
+                        server.getChatServerRegistry().getRecords(),
+                        server.getAddrServerRegistry().getRecords());
                 AddrServerRecord record = this.peerManager.registerPeer(
                         channel, nioChannel,
                         this.server.generatePID(), pid,
                         registerMessage.safeCastPayload(AddrServerRecord.class)
                 );
-                this.peerManager.sendAllChatServerRecords(pid, nioChannel, this.server.getChatServerRegistry().getRecords());
-                this.peerManager.broadcastAddrServerRecord(pid, record);
-                this.chatServerManager.broadcastAddrServerRecord(pid, record);
+                this.broadcastManager.broadcastAddrServerRecord(pid, record); // Broadcast the record to all servers.
                 this.server.getAddrServerRegistry().debugPrintAllServers();
             }
             default -> throw new IllegalArgumentException("Unrecognized sender role for REGISTER: " + registerMessage.getSenderRole());
@@ -170,14 +174,15 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher  
     private void handleUpdate(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> updateMessage) {
         switch (updateMessage.getSenderRole()) {
             case Roles.CHATSERVER -> {
-                switch (updateMessage.getObjectType()) {
+                switch (updateMessage.getObjectType()) {  // THIS IS THE CASE WHERE A CHAT SERVER UPDATES THE ADDRESSING SERVER WITH ITS NEW CLIENT COUNT.
                     case ObjectTypes.CLIENT_COUNT -> {
                         int newClientCount = updateMessage.safeCastPayload(Integer.class);
                         Long csPid = updateMessage.getSenderPID();
                         try {
                             ChatServerRecord updatedRecord = this.server.getChatServerRegistry().updateClientCount(newClientCount, csPid);
-                            peerManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
-                            chatServerManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
+                            broadcastManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
+//                            peerManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
+//                            chatServerManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
                         } catch (NullPointerException e) {
                             System.err.println(e.getMessage());
                             // TODO - Add response that tell the ChatServer to re-register.
@@ -190,12 +195,10 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher  
             case Roles.PRIMARY -> {
                 switch (updateMessage.getObjectType()) {
                     case ObjectTypes.ADDR_SERVER_RECORD -> {
-                        System.out.println("REPLICA is updating AddrServerRecord received from PRIMARY");
                         peerManager.updateRecords(updateMessage.safeCastPayload(AddrServerRecord.class));
                     }
                     case ObjectTypes.CHAT_SERVER_RECORD -> {
                         chatServerManager.updateRecords(updateMessage.safeCastPayload(ChatServerRecord.class));
-                        System.out.println("REPLICA is updating ChatServerRecord received from PRIMARY");
                         this.server.getChatServerRegistry().debugPrintAllServers();
                     }
                 }
@@ -257,7 +260,18 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher  
      * @param message The received server failure message.
      */
     private void handleServerFailure(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-
+        switch (message.getObjectType()) {
+            case ObjectTypes.ADDRSERVER_FAILURE -> {
+                Long failedPID = message.safeCastPayload(Long.class);
+                peerManager.removeFailedServer(failedPID);
+                this.server.getAddrServerRegistry().debugPrintAllServers();
+            }
+            case ObjectTypes.CHATSERVER_FAILURE -> {
+                Long failedPID = message.safeCastPayload(Long.class);
+                chatServerManager.removeFailedChatServer(failedPID);
+                this.server.getChatServerRegistry().debugPrintAllServers();
+            }
+        }
     }
 
     /**
