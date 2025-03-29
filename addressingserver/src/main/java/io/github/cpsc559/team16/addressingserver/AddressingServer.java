@@ -41,6 +41,14 @@ public class AddressingServer {
     }
 
     /**
+     * The process responsible for managing {@code ClientRecord} records.
+     */
+    private final ClientRegistry clientRegistry;
+    public ClientRegistry getClientRegistry() {
+        return clientRegistry;
+    }
+
+    /**
      * The process responsible for managing interactions between the Primary
      * {@code AddressingServer} and its replicas.
      */
@@ -131,7 +139,8 @@ public class AddressingServer {
         this.pingManager = new PingManager(this);
         this.chatServerRegistry = new ChatServerRegistry();
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
-        clientManager = new ClientManager(chatServerRegistry);
+        this.clientRegistry = new ClientRegistry();
+        clientManager = new ClientManager(this);
         try {
             this.networkManager = new AddrServerNetworkManager(peerManager, chatServerManager, this.config);
         } catch (IOException e) {
