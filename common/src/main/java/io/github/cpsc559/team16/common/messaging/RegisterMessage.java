@@ -1,7 +1,8 @@
 package io.github.cpsc559.team16.common.messaging;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ClientLoginAttempt;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 
 /**
@@ -79,5 +80,15 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
         return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
     }
 
-
+    /**
+     * Factory method for registering a client.
+     *
+     * @param username The username of the client.
+     * @param password The submitted password of the client.
+     * @return A {@code RegisterMessage} containing a {@code ClientLoginData} payload.
+     */
+    public static RegisterMessage<ClientLoginAttempt> fromClient(String username, String password) {
+        ClientLoginAttempt login = new ClientLoginAttempt(username, password);
+        return new RegisterMessage<>(ObjectTypes.CLIENT_LOGIN_ATTEMPT, Roles.CLIENT, Roles.PRIMARY, login);
+    }
 }
