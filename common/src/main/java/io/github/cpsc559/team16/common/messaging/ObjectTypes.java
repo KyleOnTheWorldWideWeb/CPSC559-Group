@@ -9,6 +9,7 @@ public class ObjectTypes {
     public static final String ADDR_SERVER_RECORD = "AddrServerRecord";
     public static final String CHAT_SERVER_RECORD = "ChatServerRecord";
     public static final String CLIENT_LOGIN_ATTEMPT = "ClientLoginAttempt";
+    public static final String CLIENT_CONNECT_TOKEN = "ClientConnectToken";
     public static final String CLIENT_COUNT = "ClientCount";
     public static final String SERVER_FAILURE = "ServerFailure";
     public static final String ELECTION_VOTE = "ElectionVote";

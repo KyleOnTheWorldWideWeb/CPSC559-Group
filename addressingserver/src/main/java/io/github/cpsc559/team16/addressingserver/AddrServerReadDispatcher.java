@@ -111,7 +111,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
             throws IOException {
         switch (message.getSenderRole()) {
             case "CLIENT" -> {
-                this.server.getClientManager().handleClientConnection(channel, nioChannel, message);
+                this.server.getClientManager().handleClientMessage(channel, nioChannel, message);
             }
             case "CHATSERVER" -> {
                 ChatServerRecord record = this.server.getChatServerManager().registerServer(

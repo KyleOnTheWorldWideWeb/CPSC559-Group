@@ -3,6 +3,7 @@ package io.github.cpsc559.team16.common.messaging;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.ClientLoginAttempt;
+import io.github.cpsc559.team16.common.dto.ClientToken;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 
 /**
@@ -81,14 +82,23 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
     }
 
     /**
-     * Factory method for registering a client.
+     * Factory method for registering a client session.
      *
      * @param username The username of the client.
      * @param password The submitted password of the client.
      * @return A {@code RegisterMessage} containing a {@code ClientLoginData} payload.
      */
-    public static RegisterMessage<ClientLoginAttempt> fromClient(String username, String password) {
+    public static RegisterMessage<ClientLoginAttempt> clientLogin(String username, String password) {
         ClientLoginAttempt login = new ClientLoginAttempt(username, password);
         return new RegisterMessage<>(ObjectTypes.CLIENT_LOGIN_ATTEMPT, Roles.CLIENT, Roles.PRIMARY, login);
+    }
+
+    /**
+     * Factory method for registering a client with a chatserver.
+     *
+     * @return A {@code RegisterMessage} containing a {@code ClientLoginData} payload.
+     */
+    public static RegisterMessage<ClientToken> clientConnect(ClientToken clientToken) {
+        return new RegisterMessage<>(ObjectTypes.CLIENT_CONNECT_TOKEN, Roles.CLIENT, Roles.PRIMARY, clientToken);
     }
 }

@@ -48,6 +48,14 @@ public class AckTypes {
      */
     public static final String AUTH_FAILED = "AuthenticationFailed";
 
+    /**
+     * Used to send an acknowledgement to a Client that their token is valid.
+     * <p>
+     * This acknowledgment is sent to a Client following their initial connection request to the AddressingServer.
+     * </p>
+     */
+    public static final String INVALID_TOKEN = "InvalidToken";
+
 
     public static final String DEMOTED = "Demoted";
 

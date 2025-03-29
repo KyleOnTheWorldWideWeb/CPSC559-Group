@@ -6,10 +6,12 @@ import java.util.Optional;
 
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.ClientLoginAttempt;
+import io.github.cpsc559.team16.common.dto.ClientToken;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
 import io.github.cpsc559.team16.common.messaging.AckTypes;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.ObjectTypes;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
@@ -86,9 +88,78 @@ public class ClientManager {
     }
 
     /**
-     * Handles incoming connection from a client.
+     * Handles incoming messages from clients.
      * <p>
      * This method is invoked when a client sends a message to the AddressingServer.
+     * It processes the message based on its type and takes appropriate actions.
+     * </p>
+     *
+     * @param channel The SocketChannel associated with the client connection.
+     * @param nioChannel The NIOMessageChannel used for sending messages.
+     * @param message The incoming message from the client.
+     */
+    public void handleClientMessage(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
+        // Handle incoming message from a client
+        switch (message.getObjectType()) {
+
+            case ObjectTypes.CLIENT_LOGIN_ATTEMPT -> {
+                try {
+                    handleClientLogin(channel, nioChannel, message);
+                } catch (IOException e) {
+                    System.err.println("Error handling client login: " + e.getMessage());
+                }
+            }
+
+            case ObjectTypes.CLIENT_CONNECT_TOKEN -> {
+                try {
+                    handleClientConnection(channel, nioChannel, message);
+                } catch (IOException e) {
+                    System.err.println("Error handling client connection: " + e.getMessage());
+                }
+            }
+
+            default -> {
+                System.out.println("Unknown message type received from client.");
+            }
+        }
+    }
+
+    /**
+     * 
+     * Handles incoming client connections.
+     * <p>
+     * This method is invoked when an authenticated client attempts to connect to a chat server.
+     * It processes the incoming message and sends client chat server information.
+     * </p>
+     * 
+     * @param channel The SocketChannel associated with the client connection.
+     * @param nioChannel The NIOMessageChannel used for sending messages.
+     * @param message The incoming message from the client.
+     */
+    public void handleClientConnection(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message)
+            throws IOException {
+
+        ClientToken token = message.safeCastPayload(ClientToken.class);
+
+        if (!validateToken(token)) {
+            System.out.println("Invalid token received from client.");
+            nioChannel.sendMessage(new AckMessage(AckTypes.INVALID_TOKEN, server.getConfig().getPID(), Roles.PRIMARY, Roles.CLIENT, "Invalid token.").toJson());
+        } else {
+            ChatServerRecord updatedRecord = sendHostAck(server.getConfig().getPID(), nioChannel);
+            if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
+                System.out.println("Client directed to an active host.");
+                long pid = this.server.getConfig().getPID();
+                this.server.getPeerManager().broadcastChatServerRecord(pid, updatedRecord);
+                this.server.getChatServerManager().broadcastChatServerRecord(pid, updatedRecord);
+            } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
+        }
+
+    }
+
+    /**
+     * Handles incoming login from a client.
+     * <p>
+     * This method is invoked when a client sends a login message to the AddressingServer.
      * It processes the message and sends an appropriate response back to the client.
      * </p>
      *
@@ -96,7 +167,7 @@ public class ClientManager {
      * @param nioChannel The NIOMessageChannel used for sending messages.
      * @param message  The incoming message from the client.
      */
-    public void handleClientConnection(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) 
+    private void handleClientLogin(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) 
             throws IOException {
         // WE CAN TUNE THE RESPONSE HERE. FOR NOW I WILL SIMPLY DO AN ACK WITH THE CHATSERVER info as - PID-IPADDRESS:PORTNUMBER
 
@@ -109,6 +180,9 @@ public class ClientManager {
         if (!clientRegistry.clientExists(username)) {
             System.out.println("New client detected. Adding to registry.");
             server.getClientRegistry().addClient(username, password);
+
+            this.server.getPeerManager().broadcastClientRegistryUpdate(clientRegistry);
+            this.server.getChatServerManager().broadcastClientRegistryUpdate(clientRegistry);
         }
 
         // INCORRECT PASSWORD
@@ -128,6 +202,21 @@ public class ClientManager {
             } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
         }
 
+    }
+
+    /**
+     * TODO: implement this
+     * 
+     * Validates the client token.
+     * <p>
+     * This method checks if the provided token is valid for the client.
+     * </p>
+     *
+     * @param token The client token to be validated.
+     * @return true if the token is valid, false otherwise.
+     */
+    private boolean validateToken(ClientToken token) {
+        return true;
     }
 
 }
