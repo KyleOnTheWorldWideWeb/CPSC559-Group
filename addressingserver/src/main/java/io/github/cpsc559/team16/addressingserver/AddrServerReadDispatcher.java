@@ -111,14 +111,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
             throws IOException {
         switch (message.getSenderRole()) {
             case "CLIENT" -> {
-                // WE CAN TUNE THE RESPONSE HERE. FOR NOW I WILL SIMPLY DO AN ACK WITH THE CHATSERVER info as - PID-IPADDRESS:PORTNUMBER
-                ChatServerRecord updatedRecord = this.server.getClientManager().sendHostAck(server.getConfig().getPID(), nioChannel);
-                if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
-                    System.out.println("Client directed to an active host.");
-                    long pid = this.server.getConfig().getPID();
-                    this.server.getPeerManager().broadcastChatServerRecord(pid, updatedRecord);
-                    this.server.getChatServerManager().broadcastChatServerRecord(pid, updatedRecord);
-                } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
+                this.server.getClientManager().handleClientConnection(channel, nioChannel, message);
             }
             case "CHATSERVER" -> {
                 ChatServerRecord record = this.server.getChatServerManager().registerServer(
