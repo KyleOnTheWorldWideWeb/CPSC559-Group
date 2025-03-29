@@ -99,14 +99,18 @@ public class ObjectTypes {
             case STRING -> String.class;
             case NONE -> Object.class;
 
-            // ACK types — these are strings unless noted otherwise
+            // ACK types — Payloads are all strings (unless otherwise noted)
             case AckObjectTypes.HOSTADDRESS,
                     AckObjectTypes.NOHOST,
                     AckObjectTypes.DEMOTED,
                     AckObjectTypes.OK -> String.class;
 
-            // If REGISTERED is used for PID assignments
-            case AckObjectTypes.REGISTERED -> Long.class;  // A "Registered" message is tied to a new PID for the new process.
+            /**
+             * REGISTERED is the ACK response given by the Primary AddressingServer when a process is successfully registered
+             * into the network - a unique process ID is generated, a record is created, stored and broadcasted to all other
+             * servers in the network, and finally, a response is sent to the newly registered process with it's PID as the payload.
+              */
+            case AckObjectTypes.REGISTERED -> Long.class;
 
             default -> Object.class; // fallback
         };
