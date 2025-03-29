@@ -37,6 +37,14 @@ public class MessageTypes {
     public static final String PING = "PING";
 
     /**
+     * Message type for instructing a remote process that has been flagged as failed
+     * to reinitialize (exit and restart the main event loop).
+     * <p>Failed processes are disconnected from the network automatically, but this provides another layer of protection,
+     * and provides the opportunity for re-integration in the network.</p>
+     */
+    public static final String REINITIALIZE = "REINITIALIZE";
+
+    /**
      * Used to notify the receiver about a failed process in the distributed network.
      * <p>
      * The object type must be {@code ObjectTypes.LONG} and the payload must be the PID of the

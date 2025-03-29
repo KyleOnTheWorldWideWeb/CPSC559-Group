@@ -1,14 +1,15 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.messaging.ServerFailureMessage;
+import io.github.cpsc559.team16.common.messaging.UpdateMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class BroadcastManager {
@@ -32,69 +33,163 @@ public class BroadcastManager {
         this.cleanupManager = cleanupManager;
     }
 
+
     /**
-     * Broadcasts a server failure notification to all connected peer channels and chat server channels.
+     * Broadcasts a single {@link AddrServerRecord} to all connected {@code ChatServer}s.
      * <p>
-     * This method creates a {@code ServerFailureMessage} indicating that a server process has failed.
-     * If the failed server's role is {@code Roles.CHATSERVER}, the failure message is created via
-     * {@code ServerFailureMessage.chatServerFailed(Long, String, String, Long)}; otherwise, it is created via
-     * {@code ServerFailureMessage.addrServerFailed(Long, String, String, Long)}.
+     * This method is used by the PRIMARY {@code AddressingServer} to inform chat servers
+     * of changes to the network topology, such as the registration or update of a replica.
+     * The update is packaged as an {@code UpdateMessage} with objectType {@code "AddrServerInfo"},
+     * and is sent over all currently active {@code NIOMessageChannel}s.
      * </p>
+     * <p>Updating processes throughout the distributed network is necessary to maintain consistency.</p>
+     *
+     * @param primaryPID the PID of the primary server issuing the update.
+     * @param record        the {@link AddrServerRecord} containing the update information.
+     */
+    public void broadcastAddrServerRecord(Long primaryPID, AddrServerRecord record) {
+        UpdateMessage<AddrServerRecord> forChatServer = UpdateMessage.asRecordPrimaryToCS(primaryPID, record);
+        broadcastServerRecord(forChatServer, chatServerChannels);
+        UpdateMessage<AddrServerRecord> forReplica = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
+        broadcastServerRecord(forReplica, peerChannels);
+    }
+
+    /**
+     * Broadcasts a single {@link ChatServerRecord} to all connected {@code ChatServer}s.
      * <p>
-     * The generated message is then serialized into JSON and sent to every channel found in the provided maps.
-     * If an error occurs during serialization, the error is logged and an empty list is returned.
-     * If an error occurs while sending to a channel, that channel is added to the list of failures.
+     * This method is used by the PRIMARY {@code AddressingServer} to inform chat servers
+     * about a new or updated {@code ChatServerRecord}. This ensures the distributed state
+     * remains consistent across all registered nodes.
      * </p>
      *
-     * @param senderPID         the process ID of the server sending the failure notification
-     * @param senderRole        the role of the sender (e.g., {@link Roles#PRIMARY} or {@link Roles#REPLICA})
-     * @param failedPID         the process ID of the failed server process
-     * @param failedServerRole  the role of the failed server process (e.g., {@link Roles#CHATSERVER} or an addressing server role)
-     * @param peerChannels      a map of persistent peer channels (from SocketChannel to NIOMessageChannel)
-     * @param chatServerChannels a map of persistent chat server channels (from SocketChannel to NIOMessageChannel)
-     * @return a list of {@link NIOMessageChannel} instances for which sending the message failed; an empty list if all sends succeed
+     * @param primaryPID the PID of the primary server issuing the update.
+     * @param record        the {@link AddrServerRecord} containing the update information.
      */
-    public void serverFailure(Long senderPID, String senderRole, Long failedPID, String failedServerRole,
-                                                        Map<SocketChannel, NIOMessageChannel> peerChannels,
-                                                        Map<SocketChannel, NIOMessageChannel> chatServerChannels) {
-        // Create the message with the proper {@code ObjectType} so the receiver knows which kind of record/connection to remove.
-        ServerFailureMessage<Long> message;
-        if (failedServerRole.equals(Roles.CHATSERVER)) {
-            message = ServerFailureMessage.chatServerFailed(senderPID, senderRole, failedServerRole, failedPID);
-        } else {    // It's an addressing server (REPLICA or PRIMARY)
-            message = ServerFailureMessage.addrServerFailed(senderPID, senderRole, failedServerRole, failedPID);
-        }
-        // Serialize the message and return if a failure occurs. This would only happen because of a
-        // logic error introduced by us (the programmers), so it shouldn't shut down the program, but we need to log it and fix it.
-        String jsonMessage;
+    public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
+        UpdateMessage<ChatServerRecord> forChatServer = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
+        broadcastServerRecord(forChatServer, chatServerChannels);
+        UpdateMessage<ChatServerRecord> forReplica = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
+        broadcastServerRecord(forReplica, peerChannels);
+    }
+
+    /**
+     * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
+     * <p>
+     * This method handles JSON serialization and transmission errors consistently,
+     * logging any failures without interrupting the loop.
+     * </p>
+     *
+     * @param message the update message to be broadcast.
+     * @param <T>     the type of record being broadcast (e.g., {@code AddrServerRecord}, {@code ChatServerRecord}).
+     */
+    public <T> void broadcastServerRecord(UpdateMessage<T> message, Map<SocketChannel, NIOMessageChannel> channelHashMap) {
         try {
-            jsonMessage = message.toJson();
+            String jsonMessage = message.toJson();
+            for (NIOMessageChannel nioChannel : channelHashMap.values()) {
+                try {
+                    nioChannel.sendMessage(jsonMessage);
+                } catch (IOException ioe) {
+                    System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+                    cleanupManager.cleanupPersistentConnectionNIO(nioChannel,true);
+                }
+            }
         } catch (JsonProcessingException e) {
-            System.err.printf(
-                    "Failed to serialize ServerFailureMessage<%s> for broadcast. Context: senderPID=%d, senderRole=%s, failedPID=%d, failedServerRole=%s. Exception: %s%n",
-                    message.getObjectType(), senderPID, senderRole, failedPID, failedServerRole, e.getMessage()
-            );
-            return;
-        }
-        // Send the message to each addressing server in the network. If a failure occurs, handle removing the process appropriately.
-        for (NIOMessageChannel nioChannel : peerChannels.values()) {
-            try {
-                nioChannel.sendMessage(jsonMessage);
-            } catch (IOException ioe) {
-                System.err.printf("Failed to send ServerFailureMessage<%s> on peer channel (remote PID: %s): %s%n",
-                        message.getObjectType(), nioChannel.getServerPID(), ioe.getMessage());
-                cleanupManager.cleanupPersistentConnection(nioChannel.getSocketChannel(), true);
-            }
-        }
-        // Send the message to each chat server in the network. If a failure occurs, handle removing the process appropriately.
-        for (NIOMessageChannel nioChannel : chatServerChannels.values()) {
-            try {
-                nioChannel.sendMessage(jsonMessage);
-            } catch (IOException ioe) {
-                System.err.printf("Failed to send ServerFailureMessage<%s> on chat server channel (remote PID: %s): %s%n",
-                        message.getObjectType(), nioChannel.getServerPID(), ioe.getMessage());
-                cleanupManager.cleanupPersistentConnection(nioChannel.getSocketChannel(), true);
-            }
+            System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
         }
     }
+
+
+    /**
+     * Sends all currently known {@code AddrServerRecord} entries from the primary
+     * to a newly connected replica.
+     * <p>
+     * This ensures that the new replica is fully synchronized with the current
+     * network topology known to the primary.
+     * </p>
+     *
+     * <strong>NOTE:</strong> We want this to throw an IOException - we do not want to clean up the channel in this class.
+     * This is because we are only sending data to one recipient. No actions involving this recipient should continue, thus
+     * an error is thrown and the calling code will be notified and have the option of handling it there, or passing it "up the chain".
+     *
+     * @param primaryPID the PID of the primary server sending the updates.
+     * @param nioChannel the channel over which to send the records.
+     */
+    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
+                                         Map<Long, AddrServerRecord> registry) throws IOException {
+        for (AddrServerRecord record : registry.values()) {
+            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
+            try {
+                nioChannel.sendMessage(message.toJson());
+            } catch (JsonProcessingException e) {
+                System.err.println("Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
+            } catch (IOException ioe) {
+                System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
+                throw ioe;
+            }
+        }
+        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
+    }
+
+    /**
+     * Sends all currently known {@code ChatServerRecord} entries in the network.
+     * <p>
+     * This is typicall used to ensure that a new replica is fully synchronized with all of the
+     * active ChatServer's known to the primary.
+     * </p>
+     *
+     * <strong>NOTE:</strong> We want this to throw an IOException - we do not want to clean up the channel in this class.
+     * This is because we are only sending data to one recipient. No actions involving this recipient should continue, thus
+     * an error is thrown and the calling code will be notified and have the option of handling it there, or passing it "up the chain".
+     *
+     * @param primaryPID  the PID of the primary server sending the updates.
+     * @param nioChannel  the channel over which to send the records.
+     * @param registry a {@code HashMap} containing all {@code ChatServerRecord} entries.
+     */
+    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
+                                         Map<Long, ChatServerRecord> registry) throws IOException {
+        for (ChatServerRecord record : registry.values()) {
+            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
+            try {
+                nioChannel.sendMessage(message.toJson());
+            } catch (JsonProcessingException e) {
+                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
+            } catch (IOException ioe) {
+                System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
+                throw ioe;
+            }
+        }
+        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
+    }
+
+
+    /**
+     * Sends all known records from the primary server to a newly connected replica.
+     * <p>
+     * This method consolidates the functionality of sending both Addressing Server records
+     * (AddrServerRecord) and Chat Server records (ChatServerRecord) to a single recipient.
+     * It sequentially invokes {@code sendAllAddrServerRecords} to send all Addressing Server records,
+     * followed by {@code sendAllChatServerRecords} to send all Chat Server records.
+     * </p>
+     * <p>
+     * <strong>NOTE:</strong> If an {@code IOException} occurs during the sending of any record,
+     * the exception is propagated to the caller. This ensures that any issues with the network channel
+     * are handled by the calling code, as no cleanup or recovery actions are performed within this method.
+     * </p>
+     *
+     * @param primaryPID         the PID of the primary server sending the records.
+     * @param nioChannel         the NIOMessageChannel over which the records are sent.
+     * @param chatServerRegistry a {@code Map} containing all active {@code ChatServerRecord} entries,
+     *                           keyed by their process IDs.
+     * @param addrServerRegistry a {@code Map} containing all active {@code AddrServerRecord} entries,
+     *                           keyed by their process IDs.
+     * @throws IOException if an error occurs while sending any of the records.
+     */
+    public void sendAllRecordsToProcess(Long primaryPID, NIOMessageChannel nioChannel,
+                                        Map<Long, ChatServerRecord> chatServerRegistry,
+                                        Map<Long, AddrServerRecord> addrServerRegistry ) throws IOException {
+        this.sendAllAddrServerRecords(primaryPID, nioChannel, addrServerRegistry);
+        this.sendAllChatServerRecords(primaryPID, nioChannel, chatServerRegistry);
+    }
+
+
 }

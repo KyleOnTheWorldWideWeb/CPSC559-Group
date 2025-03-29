@@ -16,11 +16,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatServerManager {
 
 
+
+
     /**
      * This Hashmap is used by each AddressingServer to keep {@code ChatServerRecord}'s
      * of all chat servers in the network. It is maintained by the ChatServerRegistry class.
      */
     private ChatServerRegistry registry;
+    public void debugPrintAllServers() {
+        this.registry.debugPrintAllServers();
+    }
 
     private final Map<SocketChannel, NIOMessageChannel> chatServerChannels;
 
@@ -106,7 +111,6 @@ public class ChatServerManager {
         }
         registry.removeRecordByKey(failedPID);
     }
-
 
 
     /**
