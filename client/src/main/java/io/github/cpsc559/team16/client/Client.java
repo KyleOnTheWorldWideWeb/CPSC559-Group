@@ -2,7 +2,6 @@ package io.github.cpsc559.team16.client;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.LinkedList;
@@ -66,6 +65,8 @@ public class Client {
 
     ObjectMapper objectMapper = new ObjectMapper();
 
+    ConnectionManager connectionManager;
+
     /**
      * Client app constructor. Handles the initial registration with the address server and setting up a connection to the chatServer.
      * 
@@ -73,14 +74,11 @@ public class Client {
      *          (would it make more sense to use INetAddresses if these are hardcoded anyway?)
      *  @param portnum port number of the address server 
      **/
-    public Client(String username, String serverName, int serverPort) {
-        
-        // sets up client data 
-        this.username = username; 
-        this.address = serverName;
-        this.addressPort = serverPort;
+    public Client(String serverName, int serverPort) {
+        this.connectionManager = new ConnectionManager(address, addressPort);
     }
 
+    
     public void run() {
 
         terminate = false;
@@ -91,8 +89,10 @@ public class Client {
             this.terminal = TerminalBuilder.builder().system(true).build();
             this.lineReader = LineReaderBuilder.builder().terminal(terminal).build();
 
-            // Establish connection and session
-            // login();
+            // Establish session with addressing server
+            login();
+
+            // Connect to chat server
             connect();
 
             // Create threads
@@ -107,7 +107,7 @@ public class Client {
             senderThread.start();
             receiverThread.start();
 
-            // Loop sending messaages
+            // Wait for threads to finish
             while (!terminate) {
                 Thread.sleep(1000); // So it doesn't blow up
             }
@@ -131,66 +131,74 @@ public class Client {
     }
 
     /**
-     * Performs handshake with assosiated chat server.
-     * 
-     * TODO: implement fully
-    */
+     * Prompts the user for their username and password, and attempts to log in to the address server.
+     */
     private void login() {
+
+        boolean loginSuccess = false;
+
+        while (!loginSuccess) {
+
+            // Get username from user input
+            System.out.print("Enter your username: ");
+            this.username = lineReader.readLine();
+
+            // Get password from user input
+            System.out.print("Enter your password: ");
+            String password = lineReader.readLine();
+
+            // Connect to the address server
+            loginSuccess = connectionManager.login(username, password);
+
+            if (!loginSuccess) {
+                System.out.println("Login failed. Please try again.");
+            } else {
+                System.out.println("Login successful.");
+            }
+
+        }
+
     }
 
     /**
      * Connects with address server, which then connects it to a chat server.
      * 
-     * TODO: make this actually talk to the addressing server to get the chat server
     */
-    private void connect() throws IOException{
+    private void connect() {
 
-        if (!terminate) {
-            try {
-                Socket addressSocket = new Socket(this.address, this.addressPort); // connect to the addressing server
-    
-                // GET CHATSERVER address and port:
-                // this will have to eventually be received from the addressing server, for now hardcoded
-                String chatServerAddress = "localhost";
-                int chatServerPort = 8080;
-                //////////
-    
-                // Close addressing server connection (we have received the chat server address and port)
-                addressSocket.close();
-                
-                // Connect to chatserver
-                chatServer = new Socket(chatServerAddress, chatServerPort); // connect to the chat server
+        try {
+
+            chatServer = connectionManager.connectToChatServer();
+
+            if (chatServer == null) {
+                throw new Exception("Chat server connection failed.");
+            } else {
+                in = new BufferedReader(new java.io.InputStreamReader(chatServer.getInputStream()));
                 out = new PrintWriter(chatServer.getOutputStream(), true);
-                in = new BufferedReader(new InputStreamReader(chatServer.getInputStream()));
                 isConnected = true;
+                reconnectTries = 0; // reset the reconnect tries
             }
-            catch(IOException e) {
-                String message =  "Error occured connecting to server from Client "+ username + "\n" + e.getMessage();
-                logger.warning(message);
+            
+        } catch (Exception e) {
+
+            e.printStackTrace();
+            logger.warning("Failed to connect to chat server.");
+
+            if (reconnectTries >= MAX_RECONNECT_TRIES) {
+                logger.warning("Max reconnect attempts reached. Shutting down.");
+                shutdown();
+            } else {
+                reconnectTries++;
+                connect();
             }
         }
+
 
     }
 
     /**
-     * Attempts to reconnect to the server network
-     * @throws InterruptedException 
+     * Shuts down all threads and closes the chat server connection.
      */
-    private void reconnect() {
-
-        isConnected = false;
-
-        while(reconnectTries < MAX_RECONNECT_TRIES){
-            try {
-                connect();
-            } catch (Exception e) {
-                // iterate the reconnect tries by 1
-                reconnectTries ++;  
-                // wait a bit before trying again 
-            }
-        }
-    }
-
     private void shutdownThreads() {
         if (senderThread != null) senderThread.interrupt();
         if (receiverThread != null) receiverThread.interrupt();
@@ -198,6 +206,9 @@ public class Client {
         if (outputThread != null) outputThread.interrupt();
     }
 
+    /**
+     * Shuts down the client application.
+     */
     public void shutdown() {
         terminate = true;
         shutdownThreads();
@@ -210,10 +221,12 @@ public class Client {
         }
     }
 
-    /*
+    /**
      * Creates a message object from the user input.
      * 
-     * TODO: nothing
+     * @param msgContents The contents of the message.
+     * @param receiver The receiver of the message.
+     * @return A ClientServerMessage object representing the message.
      */
     public ClientServerMessage createMessage(String msgContents, String receiver) {
         return new ClientServerMessage(username, receiver, msgContents, sendCounter++);
@@ -221,17 +234,21 @@ public class Client {
 
     /*
      * Sends a message to the server.
-     * Returns true if it was sent without causing an exception (not necessarily acked)
+     * 
+     * @param msg The message to be sent.
      */
     public void sendMessage(ClientServerMessage msg) {
         try {
             out.println(msg.toJson());
         } catch (Exception e) {
             messageQueue.add(msg); // put the message back onto the queue, it should be sent on the next round
-            reconnect();
+            connect();
         }
     }
 
+    /**
+     * This class is responsible for sending messages to the server.
+     */
     private class SenderThread extends Thread {
 
         @Override
@@ -261,7 +278,7 @@ public class Client {
     
 
     /*
-     * Receives messages from server and updates the chatlog.
+     * This class is responsible for receiving messages from the server.
      */
     private class ReceiverThread extends Thread {
 
@@ -276,7 +293,7 @@ public class Client {
                         // Get message and reconnect if socket closed
                         String serializedMsg = in.readLine();
                         if (serializedMsg == null) {
-                            reconnect();
+                            connect();
                             continue;
                         }
 
@@ -389,8 +406,6 @@ public class Client {
 
     /*
      * Main method for the client application.
-     * 
-     * TODO: test this, once everything else is implemented
      */
     public static void main(String[] args){
         // from command line get:
@@ -399,18 +414,15 @@ public class Client {
         //  - hardcoded username
         //  - whatever else we need help
 
-        // get command line args (help!)   
-        String username = "Chloe";
+        // get command line args (help!)  
         String STATIC_SERVER_ADDRESS = System.getenv().getOrDefault("ADDRESS_HOST", "0.0.0.0");
         
         int STATIC_PORT = 2424;
 
         // launch a client 
-        Client client = new Client(username, STATIC_SERVER_ADDRESS, STATIC_PORT);
+        Client client = new Client(STATIC_SERVER_ADDRESS, STATIC_PORT);
         
         client.run();
             
-        // :(
-    
         }
 }
