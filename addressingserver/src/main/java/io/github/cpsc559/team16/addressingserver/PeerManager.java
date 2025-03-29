@@ -31,11 +31,16 @@ public class PeerManager {
      */
     private final Map<SocketChannel, NIOMessageChannel> peerChannels;
 
+
+
     /**
      * The registry containing all known {@code AddrServerRecord} entries,
      * used to track state across the distributed network of AddressingServers.
      */
     private final AddrServerRegistry registry;
+    public void debugPrintAllServers() {
+        this.registry.debugPrintAllServers();
+    }
 
     /**
      * Constructs a {@code PeerManager} and binds it to a shared {@code AddrServerRegistry}.

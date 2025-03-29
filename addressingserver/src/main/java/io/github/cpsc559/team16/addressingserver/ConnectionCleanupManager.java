@@ -97,9 +97,11 @@ public class ConnectionCleanupManager {
                 if (chatServerManager.getChannels().containsKey(channel)) {
                     chatServerManager.removeRemoteProcess(channel);
                     broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.CHATSERVER);
+                    this.chatServerManager.debugPrintAllServers();
                 } else if (peerManager.getChannels().containsKey(channel)) {
                     broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.REPLICA);
                     peerManager.removeRemoteProcess(channel);
+                    this.peerManager.debugPrintAllServers();
                 }
             }
         }
@@ -132,10 +134,12 @@ public class ConnectionCleanupManager {
                 Long pid = ch.getServerPID();
                 if (chatServerManager.getChannels().containsKey(channel)) {
                     chatServerManager.removeRemoteProcess(channel);
+                    this.chatServerManager.debugPrintAllServers();
                     broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.CHATSERVER);
                 } else if (peerManager.getChannels().containsKey(channel)) {
                     broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.REPLICA);
                     peerManager.removeRemoteProcess(channel);
+                    this.peerManager.debugPrintAllServers();
                 }
             }
         }
