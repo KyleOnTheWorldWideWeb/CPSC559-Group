@@ -8,6 +8,9 @@ import java.nio.channels.SocketChannel;
 import io.github.cpsc559.team16.common.dto.ClientToken;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
 import io.github.cpsc559.team16.common.messaging.AckTypes;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
+import io.github.cpsc559.team16.common.messaging.MessageTypes;
 import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
@@ -114,35 +117,42 @@ public class ConnectionManager {
         // Send the token to the AddressingServer
         AckMessage response = getAddrServerResponse(RegisterMessage.clientConnect(cachedToken));
 
-        // Process the response from the AddressingServer
-        switch (response.getMsgType()) {
+        if (response.getMsgType().equals(MessageTypes.ACK)) {
 
-            case AckTypes.HOSTADDRESS -> {
-                String payload = response.safeCastPayload(String.class);
-                String[] parts = payload.split("-");
-                this.chatServerHost = parts[1].split(":")[0];
-                this.chatServerPort = Integer.parseInt(parts[1].split(":")[1]);
-                System.out.println("Connected to chat server: " + chatServerHost + ":" + chatServerPort);
+            // Process the response from the AddressingServer
+            switch (response.getMsgType()) {
 
-                // Attempt to connect to chat server and return the socket
-                try {
-                    return new Socket(chatServerHost, chatServerPort);
-                } catch (Exception e) {
-                    System.err.println("Failed to connect to chat server: " + e.getMessage());
-                    e.printStackTrace();
+                case AckTypes.HOSTADDRESS -> {
+                    String payload = response.safeCastPayload(String.class);
+                    String[] parts = payload.split("-");
+                    this.chatServerHost = parts[1].split(":")[0];
+                    this.chatServerPort = Integer.parseInt(parts[1].split(":")[1]);
+                    System.out.println("Connected to chat server: " + chatServerHost + ":" + chatServerPort);
+
+                    // Attempt to connect to chat server and return the socket
+                    try {
+                        return new Socket(chatServerHost, chatServerPort);
+                    } catch (Exception e) {
+                        System.err.println("Failed to connect to chat server: " + e.getMessage());
+                        e.printStackTrace();
+                        return null;
+                    }
+                }
+
+                case AckTypes.NOHOST -> {
+                    System.err.println("No host available.");
+                    return null;
+                }
+
+                default -> {
+                    System.err.println("Unexpected response type: " + response.getMsgType());
                     return null;
                 }
             }
-
-            case AckTypes.NOHOST -> {
-                System.err.println("No host available.");
-                return null;
-            }
-
-            default -> {
-                System.err.println("Unexpected response type: " + response.getMsgType());
-                return null;
-            }
+        } else {
+            // Handle unexpected response type
+            System.err.println("Unexpected response type: " + response.getMsgType());
+            return null;
         }
 
     }
@@ -173,17 +183,21 @@ public class ConnectionManager {
 
             System.out.println("Message from CLIENT sent to PRIMARY addressing server.");
 
-            // TODO: Handle the response from the AddressingServer
-            String receivedMessage = nioChannel.receiveMessage();
+            String serializedResponse = nioChannel.receiveMessage();
+            BaseAddrServerMessage response = deserializeMessage(serializedResponse);
 
-
-
-
+            if (response.getMsgType().equals(MessageTypes.ACK)) {
+                return (AckMessage) response;
+            } else {
+                System.err.println("Unexpected response type received from server: " + response.getMsgType());
+            }
+            
         } catch (IOException | InterruptedException e) {
-            System.err.println("Failed to register replica with primary: " + e.getMessage());
+            System.err.println("Failed to send message to addressing server: " + e.getMessage());
             e.printStackTrace();
-            // return Optional.empty();
         }
+        return null;
+
     }
     
 }
