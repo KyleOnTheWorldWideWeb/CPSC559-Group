@@ -62,12 +62,12 @@ public class ClientManager {
      * @return the updated ChatServerRecord if a host is available, or null if no eligible host was found.
      * @throws IOException if sending the message fails.
      */
-    public ChatServerRecord sendHostAck(long primaryPID, NIOMessageChannel nioChannel) throws IOException {
+    public ChatServerRecord sendHostAck(Long primaryPID, NIOMessageChannel nioChannel) throws IOException {
         Optional<ChatServerRecord> chatServerOpt = getActiveChatServerRecord();
         if (chatServerOpt.isPresent()) {
             ChatServerRecord updatedRecord = chatServerOpt.get();
-            // Construct ACK payload as "pid-hostAddress:clientPort"
-            String hostAddress = updatedRecord.getPID() + "-" + updatedRecord.getHostAddress() + ":" + updatedRecord.getClientPort();
+            // Construct ACK payload as "pid:hostAddress:clientPort"
+            String hostAddress = updatedRecord.getPID() + ":" + updatedRecord.getHostAddress() + ":" + updatedRecord.getClientPort();
             nioChannel.sendMessage(AckMessage.chatHostAddress(primaryPID, hostAddress).toJson());
             return updatedRecord; // This ChatServerRecord has a new client count -> we must broadcast it.
         } else {
