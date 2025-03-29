@@ -1,22 +1,30 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
-import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.AckTypes;
-import io.github.cpsc559.team16.common.messaging.Roles;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.Optional;
 
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ClientLoginAttempt;
+import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.AckTypes;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.Roles;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+
 public class ClientManager {
 
-    private ChatServerRegistry registry;
+    private final AddressingServer server;
 
-    public ClientManager(ChatServerRegistry registry) {
-        this.registry = registry;
+    private final ChatServerRegistry chatServerRegistry;
+
+    private final ClientRegistry clientRegistry;
+
+    public ClientManager(AddressingServer server) {
+        this.server = server;
+        this.chatServerRegistry = server.getChatServerRegistry();
+        this.clientRegistry = server.getClientRegistry();
     }
 
     /**
@@ -28,23 +36,23 @@ public class ClientManager {
      *         if no eligible server is found or if the failsafe check fails.
      */
     public Optional<ChatServerRecord> getActiveChatServerRecord() {
-        return registry.getRecords().values().stream()
-                .filter(server -> server.getStatus() == ChatServerRecord.ServerStatus.ACTIVE && !server.isFull())
+        return chatServerRegistry.getRecords().values().stream()
+                .filter(chatServer -> chatServer.getStatus() == ChatServerRecord.ServerStatus.ACTIVE && !chatServer.isFull())
                 .findFirst()
-                .flatMap(server -> {
-                    int previousCount = server.getClientCount();
+                .flatMap(chatServer -> {
+                    int previousCount = chatServer.getClientCount();
                     try {
                         // Attempt to add a client.
-                        server.addClient();
+                        chatServer.addClient();
                         // Failsafe: Ensure that clientCount was incremented by one.
-                        if (server.getClientCount() == previousCount + 1) {
-                            return Optional.of(server);
+                        if (chatServer.getClientCount() == previousCount + 1) {
+                            return Optional.of(chatServer);
                         } else {
-                            System.err.printf("Chat Server ID #%d: client count did not increment correctly.%n", server.getPID());
+                            System.err.printf("Chat Server ID #%d: client count did not increment correctly.%n", chatServer.getPID());
                             return Optional.empty();
                         }
                     } catch (ChatServerFullException e) {
-                        System.err.printf("Chat Server ID #%d is full after attempting to add a client.%n", server.getPID());
+                        System.err.printf("Chat Server ID #%d is full after attempting to add a client.%n", chatServer.getPID());
                         return Optional.empty();
                     }
                 });
@@ -75,6 +83,51 @@ public class ClientManager {
             nioChannel.sendMessage(new AckMessage(AckTypes.NOHOST, senderPID, Roles.PRIMARY, Roles.CLIENT, "No available host.").toJson());
             return null;
         }
+    }
+
+    /**
+     * Handles incoming connection from a client.
+     * <p>
+     * This method is invoked when a client sends a message to the AddressingServer.
+     * It processes the message and sends an appropriate response back to the client.
+     * </p>
+     *
+     * @param channel  The SocketChannel associated with the client connection.
+     * @param nioChannel The NIOMessageChannel used for sending messages.
+     * @param message  The incoming message from the client.
+     */
+    public void handleClientConnection(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) 
+            throws IOException {
+        // WE CAN TUNE THE RESPONSE HERE. FOR NOW I WILL SIMPLY DO AN ACK WITH THE CHATSERVER info as - PID-IPADDRESS:PORTNUMBER
+
+        ClientLoginAttempt clientLoginAttempt = message.safeCastPayload(ClientLoginAttempt.class);
+
+        String username = clientLoginAttempt.getUsername();
+        String password = clientLoginAttempt.getPassword();
+
+        // FIRST TIME USER, add client to registry
+        if (!clientRegistry.clientExists(username)) {
+            System.out.println("New client detected. Adding to registry.");
+            server.getClientRegistry().addClient(username, password);
+        }
+
+        // INCORRECT PASSWORD
+        if (!clientRegistry.validateClient(username, password)) {
+            System.out.println("Incorrect password for client: " + username);
+            nioChannel.sendMessage(new AckMessage(AckTypes.INCORRECT_PASSWORD, server.getConfig().getPID(), Roles.PRIMARY, Roles.CLIENT, "Incorrect password.").toJson());
+        }
+        
+        // CLIENT AUTHENTICATED
+        else {
+            ChatServerRecord updatedRecord = sendHostAck(server.getConfig().getPID(), nioChannel);
+            if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
+                System.out.println("Client directed to an active host.");
+                long pid = this.server.getConfig().getPID();
+                this.server.getPeerManager().broadcastChatServerRecord(pid, updatedRecord);
+                this.server.getChatServerManager().broadcastChatServerRecord(pid, updatedRecord);
+            } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
+        }
+
     }
 
 }
