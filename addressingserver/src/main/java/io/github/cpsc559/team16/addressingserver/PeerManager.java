@@ -1,17 +1,22 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.messaging.*;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ClientRecord;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
+import io.github.cpsc559.team16.common.messaging.UpdateMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
  * Manages peer registration, update propagation, and persistent communication
@@ -162,6 +167,22 @@ public class PeerManager {
      */
     public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
         UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToNetwork(primaryPID, record);
+        broadcastServerRecord(message);
+    }
+
+    /**
+     * Broadcasts a single {@link ClientRecord} to all connected peer replicas.
+     * <p>
+     * This method is used by the PRIMARY {@code AddressingServer} to notify all registered
+     * REPLICA servers about a new or updated {@code ClientRecord} - a necessary part of
+     * maintaining network consistency.
+     * </p>
+     *
+     * @param primaryPID the PID of the primary server issuing the update.
+     * @param record     the {@link ClientRecord} to broadcast.
+     */
+    public void broadcastClientRecord(Long primaryPID, ClientRecord record) {
+        UpdateMessage<ClientRecord> message = UpdateMessage.clientRecordPrimaryToNetwork(primaryPID, record);
         broadcastServerRecord(message);
     }
 

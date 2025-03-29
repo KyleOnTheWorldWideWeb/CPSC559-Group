@@ -44,6 +44,15 @@ public class ClientRegistry {
     }
 
     /**
+     * Adds a new client record to the registry.
+     *
+     * @param record The {@link ClientRecord} to add.
+     */
+    public void addClient(ClientRecord record) {
+        clientRecords.put(record.getUsername(), record);
+    }
+
+    /**
      * Checks if a client exists in the registry.
      *
      * @param username The username of the client.

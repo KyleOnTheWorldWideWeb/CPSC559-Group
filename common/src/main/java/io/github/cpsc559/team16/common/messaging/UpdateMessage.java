@@ -2,6 +2,7 @@ package io.github.cpsc559.team16.common.messaging;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ClientRecord;
 
 /**
  * Represents an "UPDATE" type message used for sending updates to Addressing Servers,
@@ -125,6 +126,26 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
      */
     public static UpdateMessage<ChatServerRecord> csRecordChatServerToPrimary(Long senderPID, ChatServerRecord record) {
         return new UpdateMessage<>(ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
+    }
+
+    /**
+     * Creates an {@code UpdateMessage} to send a {@link ClientRecord}
+     * from the PRIMARY AddressingServer to a REPLICA.
+     *
+     * <p>This message uses:
+     * <ul>
+     *     <li><strong>objectType:</strong> "ClientRecord"</li>
+     *     <li><strong>senderRole:</strong> "PRIMARY"</li>
+     *     <li><strong>targetRole:</strong> "REPLICA"</li>
+     * </ul>
+     * </p>
+     *
+     * @param senderPID The process ID of the PRIMARY server sending the update.
+     * @param record    The {@link AddrServerRecord} payload to include.
+     * @return An {@code UpdateMessage} with the provided record and fixed metadata.
+     */
+    public static UpdateMessage<ClientRecord> clientRecordPrimaryToNetwork(Long senderPID, ClientRecord record) {
+        return new UpdateMessage<>(ObjectTypes.CLIENT_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
     }
 
 

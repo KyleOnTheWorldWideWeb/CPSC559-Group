@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.ClientLoginAttempt;
+import io.github.cpsc559.team16.common.dto.ClientRecord;
 import io.github.cpsc559.team16.common.dto.ClientToken;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
@@ -179,10 +180,14 @@ public class ClientManager {
         // FIRST TIME USER, add client to registry
         if (!clientRegistry.clientExists(username)) {
             System.out.println("New client detected. Adding to registry.");
-            server.getClientRegistry().addClient(username, password);
 
-            this.server.getPeerManager().broadcastClientRegistryUpdate(clientRegistry);
-            this.server.getChatServerManager().broadcastClientRegistryUpdate(clientRegistry);
+            ClientRecord clientRecord = new ClientRecord(username, password);
+            this.clientRegistry.addClient(clientRecord);
+
+            long pid = this.server.getConfig().getPID();
+
+            // Tell all peers about new client
+            this.server.getPeerManager().broadcastClientRecord(pid, clientRecord);
         }
 
         // INCORRECT PASSWORD

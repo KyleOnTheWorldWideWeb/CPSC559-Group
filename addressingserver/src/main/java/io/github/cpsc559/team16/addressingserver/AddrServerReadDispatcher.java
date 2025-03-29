@@ -5,6 +5,7 @@ import java.nio.channels.SocketChannel;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ClientRecord;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
@@ -158,6 +159,10 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher {
                     case "ChatServerRecord" -> {
                         server.getChatServerManager().updateRecords(message.safeCastPayload(ChatServerRecord.class));
                         this.server.getChatServerRegistry().debugPrintAllServers();
+                    }
+                    case "ClientRecord" -> {
+                        ClientRecord record = message.safeCastPayload(ClientRecord.class);
+                        this.server.getClientRegistry().addClient(record);
                     }
                     // server.updateAddrServerInfo(channel, nioChannel, message.getPayload());
                 }
