@@ -34,12 +34,19 @@ public class AckTypes {
      */
     public static final String NOHOST = "NoHost";
     /**
+     * Used to send an acknowledgement to a Client that their login attempt was successful.
+     * <p>
+     * This acknowledgment is sent to a Client following their initial connection request to the AddressingServer.
+     * </p>
+     */
+    public static final String AUTH_SUCCESS = "AuthenticationSuccessful";
+    /**
      * Used to send an acknowledgement to a Client that their login attempt was unsuccessful.
      * <p>
      * This acknowledgment is sent to a Client following their initial connection request to the AddressingServer.
      * </p>
      */
-    public static final String INCORRECT_PASSWORD = "IncorrectPassword";
+    public static final String AUTH_FAILED = "AuthenticationFailed";
 
 
     public static final String DEMOTED = "Demoted";

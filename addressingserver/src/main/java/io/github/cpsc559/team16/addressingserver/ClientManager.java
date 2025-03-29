@@ -114,7 +114,7 @@ public class ClientManager {
         // INCORRECT PASSWORD
         if (!clientRegistry.validateClient(username, password)) {
             System.out.println("Incorrect password for client: " + username);
-            nioChannel.sendMessage(new AckMessage(AckTypes.INCORRECT_PASSWORD, server.getConfig().getPID(), Roles.PRIMARY, Roles.CLIENT, "Incorrect password.").toJson());
+            nioChannel.sendMessage(new AckMessage(AckTypes.AUTH_FAILED, server.getConfig().getPID(), Roles.PRIMARY, Roles.CLIENT, "Incorrect password.").toJson());
         }
         
         // CLIENT AUTHENTICATED
