@@ -410,9 +410,9 @@ public class Client {
         //  - whatever else we need help
 
         // get command line args (help!)  
-        String STATIC_SERVER_ADDRESS = System.getenv().getOrDefault("ADDRESS_HOST", "0.0.0.0");
+        String STATIC_SERVER_ADDRESS = System.getenv().getOrDefault("AS_HOST_ADDRESS", "0.0.0.0");
         
-        int STATIC_PORT = Integer.parseInt(System.getenv().getOrDefault("ADDRESS_HOST", "2424"));
+        int STATIC_PORT = Integer.parseInt(System.getenv().getOrDefault("AS_CLIENT_PORT", "2424"));
 
         // launch a client 
         Client client = new Client(STATIC_SERVER_ADDRESS, STATIC_PORT);

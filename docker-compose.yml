@@ -77,7 +77,8 @@ services:  # Defines the services (Docker containers) that will be run.
     environment:
       - CLIENT_PORT=3000
       - HOST_ADDRESS=client
-      - ADDRESS_HOST=172.20.0.2
+      - AS_HOST_ADDRESS=172.20.0.2
+      - AS_CLIENT_PORT=49800
     networks:
       - chat_network
     tty: true        # You need these two lines to make the client interactive
