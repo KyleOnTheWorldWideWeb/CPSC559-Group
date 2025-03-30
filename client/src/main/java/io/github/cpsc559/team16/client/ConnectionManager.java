@@ -167,8 +167,7 @@ public class ConnectionManager {
      * @return The response from the AddressingServer.
      */
     public AckMessage getAddrServerResponse(RegisterMessage message) {
-        try {
-            SocketChannel channel = SocketChannel.open();
+        try (SocketChannel channel = SocketChannel.open()) {
             channel.configureBlocking(true);
             channel.connect(new InetSocketAddress(addrServerHost, addrServerPort));
             while (!channel.finishConnect()) {
@@ -183,13 +182,22 @@ public class ConnectionManager {
 
             System.out.println("Message from CLIENT sent to PRIMARY addressing server.");
 
-            String serializedResponse = nioChannel.receiveMessage();
-            BaseAddrServerMessage response = deserializeMessage(serializedResponse);
+            String msgJson;
+            while ((msgJson = nioChannel.receiveMessage()) != null) {
 
-            if (response.getMsgType().equals(MessageTypes.ACK)) {
-                return (AckMessage) response;
-            } else {
-                System.err.println("Unexpected response type received from server: " + response.getMsgType());
+                BaseAddrServerMessage response = deserializeMessage(msgJson);
+
+                if (response != null) {
+    
+                    if (response.getMsgType().equals(MessageTypes.ACK)) {
+                        return (AckMessage) response;
+                    } else {
+                        System.err.println("Unexpected response type received from server: " + response.getMsgType());
+                    }
+                    break;
+                } else {
+                    System.err.println("Could not deserialize incoming message: " + msgJson);
+                }
             }
             
         } catch (IOException | InterruptedException e) {
