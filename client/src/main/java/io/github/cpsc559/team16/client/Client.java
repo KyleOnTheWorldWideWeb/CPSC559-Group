@@ -28,11 +28,6 @@ public class Client {
     private String username;
     private int sendCounter = 0; // Counter for messages sent (used to id messages)
 
-    // address server information
-    // in future iterations this will be fetched from a static URL
-    private String address;
-    private int addressPort;
-
     // handles reconnection
     private int reconnectTries = 0; // number of times the client has failed a reconnection
     private static final int MAX_RECONNECT_TRIES = 5; // the maximum number of times the client can attempt to reconnect before failing.
@@ -74,8 +69,8 @@ public class Client {
      *          (would it make more sense to use INetAddresses if these are hardcoded anyway?)
      *  @param portnum port number of the address server 
      **/
-    public Client(String serverName, int serverPort) {
-        this.connectionManager = new ConnectionManager(address, addressPort);
+    public Client(String serverAddress, int serverPort) {
+        this.connectionManager = new ConnectionManager(serverAddress, serverPort);
     }
 
     
@@ -417,7 +412,7 @@ public class Client {
         // get command line args (help!)  
         String STATIC_SERVER_ADDRESS = System.getenv().getOrDefault("ADDRESS_HOST", "0.0.0.0");
         
-        int STATIC_PORT = 2424;
+        int STATIC_PORT = Integer.parseInt(System.getenv().getOrDefault("ADDRESS_HOST", "2424"));
 
         // launch a client 
         Client client = new Client(STATIC_SERVER_ADDRESS, STATIC_PORT);
