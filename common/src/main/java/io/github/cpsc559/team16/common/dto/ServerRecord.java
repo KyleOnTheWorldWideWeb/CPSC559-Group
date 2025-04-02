@@ -22,6 +22,11 @@ public abstract class ServerRecord {
      */
     protected final int peerPort;
 
+    /**
+     * The status of this server.
+     */
+    protected boolean crashSuspicious;
+
     /*
      * NOTE for team-members: I chose to make ports dynamic as using static port numbers
      * would mean that only one process could run on each network address. The solution to this would
@@ -47,6 +52,10 @@ public abstract class ServerRecord {
         return this.clientPort;
     }
 
+    public boolean isCrashSuspicious() {
+        return this.crashSuspicious;
+    }
+
     /**
      * Constructs a new {@code ServerRecord} object with the specified parameters, a default
      *
@@ -60,6 +69,7 @@ public abstract class ServerRecord {
         this.hostAddress = hostAddress;
         this.peerPort = peerPort;
         this.clientPort = clientPort;
+        this.crashSuspicious = false;
     }
 
     // --- Setters ---
@@ -72,5 +82,9 @@ public abstract class ServerRecord {
         this.hostAddress = hostAddress;
 
 
+    }
+
+    public void setCrashSuspicious(boolean b) {
+        this.crashSuspicious = b;
     }
 }
