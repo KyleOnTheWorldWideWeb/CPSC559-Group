@@ -64,6 +64,9 @@ public class PingManager implements Runnable {
     /** Flag to terminate the ping manager */
     private boolean terminate;
 
+    /** Stores dynamically set timeouts for each peer */
+    private final HashMap<Long, Long> dynamicTimeouts = new HashMap<>();
+
     /**
      * Constructs a new {@link PingManager} instance.
      *
@@ -156,9 +159,18 @@ public class PingManager implements Runnable {
                             ByteBuffer buffer = ByteBuffer.allocate(1024);
                             int bytesRead = channel.read(buffer);
                             if (bytesRead > 0) {
-                                lastPingFromPID.put(channelPIDs.get(channel), new Date());
-                                String response = new String(buffer.array(), 0, bytesRead);
-                                System.out.println("Received response: " + response);
+                                long pid = channelPIDs.get(channel);
+                                Date now = new Date();
+                                Date lastPing = lastPingFromPID.get(pid);
+                                if (lastPing != null) {
+                                    long rtt = now.getTime() - lastPing.getTime();
+                                    long previousTimeout = dynamicTimeouts.getOrDefault(pid, 3000L);
+                                    double alpha = 0.2; // Smoothing factor for (EMA) estimated moving average (adjustable for stability)
+                                    long newTimeout = (long) ((alpha * (rtt * 2)) + ((1 - alpha) * previousTimeout));
+                                    newTimeout = Math.max(3000L, Math.min(newTimeout, 15000L)); // Bound within reasonable limits
+                                    dynamicTimeouts.put(pid, newTimeout);
+                                }
+                                lastPingFromPID.put(pid, now);
                             }
                         }
                     }
@@ -166,9 +178,15 @@ public class PingManager implements Runnable {
                     // Check for each PID if a ping was received within the timeout
                     server.getAddrServerRegistry().getRecords().values().forEach(peer -> {
                         Date lastPing = lastPingFromPID.get(peer.getPID());
+                        if (lastPing == null) {
+                            System.err.println("No last ping time found for PID: " + peer.getPID());
+                        }
+
                         Date now = new Date();
                         long diff = now.getTime() - lastPing.getTime();
-                        if (diff > pingTimeout) {
+                        long timeout = dynamicTimeouts.getOrDefault(peer.getPID(), 3000L);
+
+                        if (diff > timeout) {
 
                             // Tell peers (is this necessary?)
                             AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(peer.getPID());
