@@ -36,7 +36,7 @@ public class AddrServerRegistry {
      */
     public void putAddrServerRecord(Long id, AddrServerRecord record) {
         addrServerRecords.put(id, record);
-        //debugPrintAllServers();
+        debugPrintAllServers();
     }
 
     /**
@@ -47,19 +47,38 @@ public class AddrServerRegistry {
      */
     public void updateOrInsertRecord(AddrServerRecord record) {
         Long id = record.getPID();
+        if (id == null) {
+            System.err.println("AddrServerRecord has a null PID. Cannot update or insert record.");
+            return;
+        }
         AddrServerRecord existing = addrServerRecords.get(id);
-
         if (existing != null) {
             System.out.println("Updating existing AddrServerRecord for ID: " + id);
         } else {
             System.out.println("Inserting new AddrServerRecord for ID: " + id);
         }
         addrServerRecords.put(id, record);
-        //debugPrintAllServers();
+        debugPrintAllServers();
     }
 
-    public boolean deregisterServer(Long id) {
-        return addrServerRecords.remove(id) != null;
+
+    /**
+     * Removes an {@link AddrServerRecord} from the registry using the provided process ID (PID).
+     * <p>
+     * This method attempts to remove the record associated with the given {@code pid} from the internal
+     * {@code addrServerRecords} map. If a record is found and removed, a success message is printed.
+     * Otherwise, a warning is issued to indicate that no record existed for the specified PID.
+     * </p>
+     *
+     * @param pid the unique process ID of the AddressingServer to remove from the registry.
+     */
+    public void removeRecordByKey(Long pid) {
+        AddrServerRecord record = addrServerRecords.remove(pid);
+        if (record != null) {
+            System.out.printf("Successfully removed *AddrServerRecord* for Network Process with PID: %d - and Host Address: %s%n", pid, record.getHostAddress());
+        } else {
+            System.out.println("No AddrServerRecord found for PID: " + pid + " — nothing to remove.");
+        }
     }
 
 
@@ -84,9 +103,7 @@ public class AddrServerRegistry {
                 System.err.println("WARNING: A server with ID " + serverPID + " already existed. Overwriting existing entry.");
             } else {
                 System.out.println("\n**AddressingServer** successfully registered with ID: " + serverPID + "\n");
-                //debugPrintAllServers();
             }
-            //return serverPID;
         } catch (Exception e) {
             System.err.println("Error registering addressing server: " + e.getMessage());
             throw e;

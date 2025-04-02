@@ -3,12 +3,10 @@ package io.github.cpsc559.team16.addressingserver;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.AckTypes;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.util.Optional;
 
 public class ClientManager {
@@ -20,32 +18,22 @@ public class ClientManager {
     }
 
     /**
-     * Searches for an active
-     * {@link io.github.cpsc559.team16.common.dto.ChatServerRecord} that is not full
-     * (i.e. clientCount < maxClientCount). Once a candidate is found, it attempts
-     * to add a client and performs
-     * a failsafe check to ensure that the client count was incremented correctly.
+     * Searches for an active {@link ChatServerRecord} that is not full.
+     * If found, tries to add a client and returns the updated record.
      *
-     * @return an Optional containing the updated ChatServerRecord if successful, or
-     *         Optional.empty()
-     *         if no eligible server is found or if the failsafe check fails.
+     * @return Optional containing the updated ChatServerRecord, or empty if none
+     *         eligible.
      */
     public Optional<ChatServerRecord> getActiveChatServerRecord() {
         return registry.getRecords().values().stream()
                 .peek(server -> System.out.printf("Checking server PID %d — Status: %s, ClientCount: %d, isFull: %b%n",
-                        server.getPID(),
-                        server.getStatus(),
-                        server.getClientCount(),
-                        server.isFull()))
-
+                        server.getPID(), server.getStatus(), server.getClientCount(), server.isFull()))
                 .filter(server -> server.getStatus() == ChatServerRecord.ServerStatus.ACTIVE && !server.isFull())
                 .findFirst()
                 .flatMap(server -> {
                     int previousCount = server.getClientCount();
                     try {
-                        // Attempt to add a client.
                         server.addClient();
-                        // Failsafe: Ensure that clientCount was incremented by one.
                         if (server.getClientCount() == previousCount + 1) {
                             return Optional.of(server);
                         } else {
@@ -62,39 +50,24 @@ public class ClientManager {
     }
 
     /**
-     * Creates an ACK message to be sent to the client.
-     * It leverages {@code getActiveChatServerRecord()} to determine if there is an
-     * available active host.
-     * If an eligible host is found, it constructs an ACK message with the payload
-     * formatted as
-     * "pid-hostAddress:clientPort" and sends it via the provided NIOMessageChannel.
-     * It then returns the updated ChatServerRecord.
-     * If no eligible host is found, it sends an ACK indicating that no host is
-     * available and returns null.
+     * Sends an ACK message to the client with the available ChatServer info.
      *
-     * @param senderPID  the process ID of the sender (typically the
-     *                   AddressingServer).
-     * @param nioChannel the channel used for sending the message.
-     * @return the updated ChatServerRecord if a host is available, or null if no
-     *         eligible host was found.
-     * @throws IOException if sending the message fails.
+     * @param primaryPID the PID of the Addressing Server
+     * @param nioChannel the channel to send the ACK on
+     * @return ChatServerRecord if a host is available, null otherwise
+     * @throws IOException if message sending fails
      */
-    public ChatServerRecord sendHostAck(long senderPID, NIOMessageChannel nioChannel) throws IOException {
+    public ChatServerRecord sendHostAck(Long primaryPID, NIOMessageChannel nioChannel) throws IOException {
         Optional<ChatServerRecord> chatServerOpt = getActiveChatServerRecord();
         if (chatServerOpt.isPresent()) {
             ChatServerRecord updatedRecord = chatServerOpt.get();
-            // Construct ACK payload as "pid-hostAddress:clientPort"
-            String payload = updatedRecord.getPID() + ":" + updatedRecord.getHostAddress() + ":"
+            String hostAddress = updatedRecord.getPID() + ":" + updatedRecord.getHostAddress() + ":"
                     + updatedRecord.getClientPort();
-            nioChannel.sendMessage(
-                    new AckMessage(AckTypes.HOSTADDRESS, senderPID, Roles.PRIMARY, Roles.CLIENT, payload).toJson());
+            nioChannel.sendMessage(AckMessage.chatHostAddress(primaryPID, hostAddress).toJson());
             return updatedRecord;
         } else {
-            nioChannel.sendMessage(
-                    new AckMessage(AckTypes.NOHOST, senderPID, Roles.PRIMARY, Roles.CLIENT, "No available host.")
-                            .toJson());
+            nioChannel.sendMessage(AckMessage.noChatHost(primaryPID).toJson());
             return null;
         }
     }
-
 }

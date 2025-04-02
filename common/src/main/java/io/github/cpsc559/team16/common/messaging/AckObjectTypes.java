@@ -11,7 +11,7 @@ package io.github.cpsc559.team16.common.messaging;
  {@link BaseAddrServerMessage}.
  * </p>
  */
-public class AckTypes {
+public class AckObjectTypes {
     /**
      * Used to send an acknowledgement to a ChatServer or AddressingServer process that
      * it has been registered in the distributed network.
@@ -35,5 +35,7 @@ public class AckTypes {
     public static final String NOHOST = "NoHost";
 
     public static final String DEMOTED = "Demoted";
+
+    public static final String OK = "Ok";
 
 }

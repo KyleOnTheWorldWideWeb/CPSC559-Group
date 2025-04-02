@@ -1,11 +1,12 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
-import java.net.InetAddress;
-import java.nio.channels.*;
-import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
+import java.net.InetAddress;
+import java.nio.channels.SocketChannel; // Used for conditionals that don't rely on non-null checks
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
@@ -61,12 +62,64 @@ public class AddressingServer {
     }
 
     /**
+     * The process responsible for initiating elections and handling election messages from
+     * {@code AddressingServer} peers.
+     */
+    private final LeaderElectionManager leaderElectionManager;
+
+    public LeaderElectionManager getLeaderElectionManager() {
+        return leaderElectionManager;
+    }
+
+    /**
+     * The process responsible for handling ping messages and managing the ping timeout.
+     */
+    private final PingManager pingManager;
+
+    public PingManager getPingManager() {
+        return pingManager;
+    }
+
+
+    /**
      * The process responsible for managing interactions between the
      * {@code AddressingServer} and {@code ChatServer}'s
      */
     private final ClientManager clientManager;
 
     public ClientManager getClientManager() { return clientManager;}
+
+    /**
+     * The BroadcastManager is responsible for sending messages to all active channels.
+     * It works directly with the live channel maps retrieved from PeerManager and ChatServerManager,
+     * ensuring that any changes in those maps (such as channel additions or removals) are immediately visible.
+     */
+    private final BroadcastManager broadcastManager;
+
+    /**
+     * Retrieves the BroadcastManager instance for this AddressingServer.
+     *
+     * @return the BroadcastManager used to broadcast messages across channels.
+     */
+    public BroadcastManager getBroadcastManager() {
+        return broadcastManager;
+    }
+
+    /**
+     * The ConnectionCleanupManager centralizes the logic for cleaning up and closing failed connections.
+     * It holds references to both PeerManager and ChatServerManager so that any channel failures can be
+     * promptly removed from the live channel maps and properly closed.
+     */
+    private final ConnectionCleanupManager cleanupManager;
+
+    /**
+     * Retrieves the ConnectionCleanupManager instance for this AddressingServer.
+     *
+     * @return the ConnectionCleanupManager used for cleaning up failed connections.
+     */
+    public ConnectionCleanupManager getCleanupManager() {
+        return cleanupManager;
+    }
 
 
     /**
@@ -108,14 +161,18 @@ public class AddressingServer {
         this.config = new AddrServerConfig();
         this.addrServerRegistry = new AddrServerRegistry();
         this.peerManager = new PeerManager(addrServerRegistry);
+        this.leaderElectionManager = new LeaderElectionManager(this);
+        this.pingManager = new PingManager(this);
         this.chatServerRegistry = new ChatServerRegistry();
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
-        clientManager = new ClientManager(chatServerRegistry);
+        this.clientManager = new ClientManager(chatServerRegistry);
+        this.cleanupManager = new ConnectionCleanupManager(peerManager, chatServerManager);
         try {
-            this.networkManager = new AddrServerNetworkManager(peerManager, chatServerManager, this.config);
+            this.networkManager = new AddrServerNetworkManager(cleanupManager, this.config);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
+        this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
         this.pidCounter = 0L;
     }
 
@@ -207,7 +264,10 @@ public class AddressingServer {
     public void start() throws IOException {
         networkManager.openListenerChannels(config.getClientPort(),
                 config.getReplicaPort(), config.getChatServerPort());
+
         networkManager.startEventLoop(new AddrServerReadDispatcher(this));
+
+        pingManager.shutdown();
     }
 
 
@@ -221,12 +281,8 @@ public class AddressingServer {
         } catch (Exception e) {
             System.err.println(e.getMessage());
         }
-        System.out.printf("Addressing Server process\n\t-Main function executing..... PID: %d%n", ProcessUtils.getPid());
-
         AddressingServer server = new AddressingServer();
-
         String serverRole = System.getenv("AS_ROLE");
-
         if (serverRole != null) {
             if (serverRole.equals("PRIMARY")) {
                 System.out.println("AS_ROLE is set to: " + serverRole);
@@ -236,6 +292,10 @@ public class AddressingServer {
                 System.out.println("AS_ROLE is set to: " + serverRole);
                 // TODO - retrieve the address of the primary addressing server from the Domain A record
                 server.registerReplicaAddrServer();
+                // TODO - A thread(s) must be spun up for this method call.
+                //  Since this invocation causes an infinite loop, the main thread will get hung up.
+                //  And the Replica won't enter the main event loop and function as intended.
+                //server.getPingManager().run();
             }
         }
         try {

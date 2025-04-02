@@ -46,7 +46,7 @@ import java.util.Map;
  */
 
 public class HeartbeatMonitor implements Runnable {
-    private static final long IDLE_TIMEOUT = 5_000; // 5 seconds
+    private static final long IDLE_TIMEOUT = 8_000; // 8 seconds
     private static final int MAX_MISSED = 3;
 
     private final Map<Integer, ConnectionContext> peerMap;
@@ -55,8 +55,10 @@ public class HeartbeatMonitor implements Runnable {
         this.peerMap = peerMap;
     }
 
+    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "1"));
+
     private static void debug(int level, String message) {
-        if (level <= ChatServer.DEBUG_LEVEL) {
+        if (level <= DEBUG_LEVEL) {
             String prefix = switch (level) {
                 case 1 -> "[BASIC] ";
                 case 2 -> "[NORMAL] ";
@@ -114,7 +116,7 @@ public class HeartbeatMonitor implements Runnable {
             }
 
             try {
-                Thread.sleep(2_000); // check every 2 seconds
+                Thread.sleep(5_000); // check every 5 seconds
             } catch (InterruptedException e) {
                 debug(1, "HeartbeatMonitor interrupted.");
                 return;

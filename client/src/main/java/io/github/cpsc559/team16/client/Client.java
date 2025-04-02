@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.AckTypes;
+import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
 import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
@@ -442,7 +442,7 @@ public class Client {
             // Extract the payload. It should be a String in the format
             // "pid:hostAddress:clientPort"
 
-            if (ackMessage.getObjectType().equals(AckTypes.HOSTADDRESS)) {
+            if (ackMessage.getObjectType().equals(AckObjectTypes.HOSTADDRESS)) {
                 String payload = (String) ackMessage.getPayload();
                 if (payload == null || !payload.contains(":")) {
                     throw new IOException("Invalid payload from Addressing Server: " + payload);

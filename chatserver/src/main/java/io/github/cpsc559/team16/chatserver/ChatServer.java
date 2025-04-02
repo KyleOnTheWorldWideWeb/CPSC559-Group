@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -64,7 +66,7 @@ public class ChatServer {
      * }</pre>
      * </p>
      */
-    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "5"));
+    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "2"));
 
     // Debug level constants
 
@@ -466,7 +468,8 @@ public class ChatServer {
         try {
             ServerServerMessage request = new ServerServerMessage(
                     String.valueOf(ID),
-                    "PeerServers",
+                    String.valueOf(
+                            ctx.peerID),
                     "REQUEST_CHATLOG",
                     "");
 
@@ -987,8 +990,12 @@ public class ChatServer {
             connectedPeers.remove(ctx.peerID);
 
         }
-
-        debug(DEBUG_NORMAL, "Closing connection: " + socketChannel.getRemoteAddress());
+        try {
+            SocketAddress remoteAddr = socketChannel.getRemoteAddress();
+            debug(DEBUG_NORMAL, "Closing connection to " + remoteAddr);
+        } catch (IOException e) {
+            debug(DEBUG_NORMAL, "Channel was already closed or not available during cleanup.");
+        }
         key.cancel();
         if (socketChannel.isOpen())
             socketChannel.close();
