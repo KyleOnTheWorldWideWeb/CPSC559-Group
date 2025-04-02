@@ -34,7 +34,7 @@ public class LeaderElectionManager {
     private final PeerManager peerManager;
 
     /** Stores the current leader's PID */
-    private Long leaderPID;
+    private Long leaderPID = null;
 
     /** Flag indicating whether an election is currently running */
     private boolean running;
@@ -58,6 +58,10 @@ public class LeaderElectionManager {
      * @return The leader's PID.
      */
     public long getLeaderPID() {
+        if (leaderPID == null) {
+            initiateElection();
+        }
+
         return leaderPID;
     }
 
@@ -80,15 +84,6 @@ public class LeaderElectionManager {
         this.config = server.getConfig();
         this.peerManager = server.getPeerManager();
         this.running = false;
-
-        // Initialize leaderPID to the highest PID among self and peers
-        leaderPID = config.getPID();
-        for (NIOMessageChannel peerChannel : getPeerChannels()) {
-            Long peerPID = peerChannel.getServerPID();
-            if (peerPID > leaderPID) {
-                leaderPID = peerPID;
-            }
-        }
     }
 
     /**
