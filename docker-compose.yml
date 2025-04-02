@@ -89,8 +89,8 @@ services:  # Defines the services (Docker containers) that will be run.
     networks:
       chat_network:
         ipv4_address: 172.20.0.10
-    volumes:
-      - ./chatlogs:/app/src/main/java/com/Logs
+    # volumes:
+    #   - ./chatlogs:/app/src/main/java/com/Logs
 
   chatserver2:
     image: chatserver:latest
@@ -108,8 +108,8 @@ services:  # Defines the services (Docker containers) that will be run.
     networks:
       chat_network:
         ipv4_address: 172.20.0.11
-    volumes:
-      - ./chatlogs:/app/src/main/java/com/Logs
+    # volumes:
+    #   - ./chatlogs:/app/src/main/java/com/Logs
 
   client:
     image: client:latest
