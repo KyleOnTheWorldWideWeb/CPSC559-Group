@@ -80,4 +80,15 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
     }
 
 
+    /**
+     * Factory method for registering a Client with the Primary AddressingServer.
+     *
+     * @return A {@code RegisterMessage} containing a {@code String} payload for registering the client.
+     */
+    public static RegisterMessage<String> fromClient() {
+        return new RegisterMessage<>(null, Roles.CLIENT, Roles.PRIMARY, null);
+    }
+
+
+
 }
