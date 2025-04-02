@@ -169,14 +169,22 @@ public class PingManager implements Runnable {
                         Date now = new Date();
                         long diff = now.getTime() - lastPing.getTime();
                         if (diff > pingTimeout) {
+
+                            // Tell peers (is this necessary?)
+                            AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(peer.getPID());
+                            if (record != null) {
+                                record.setCrashSuspicious(true);
+                                server.getPeerManager().broadcastAddrServerRecord(peer.getPID(), record);
+                            }
+
+                            // Deregister from own registry
+                            server.getAddrServerRegistry().removeRecordByKey(peer.getPID()); // Deregister the server
                             
                             // If the primary server has failed, initiate an election
                             if (peer.getRole() == ServerRole.PRIMARY) {
                                 System.out.println("Primary server has failed. Initiating leader election...");
                                 leaderElectionManager.initiateElection();
                             }
-
-                            // Handle other cases here...
                         }
                     });
 
