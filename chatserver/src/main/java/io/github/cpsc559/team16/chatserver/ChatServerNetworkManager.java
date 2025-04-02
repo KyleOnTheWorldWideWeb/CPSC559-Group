@@ -1,44 +1,425 @@
 package io.github.cpsc559.team16.chatserver;
 
+// For thread management
+import java.nio.ByteBuffer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+
+import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+import io.github.cpsc559.team16.common.messaging.*;
 import io.github.cpsc559.team16.common.utilities.NetworkManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.*;
+import java.util.Iterator;
+
+import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
 
 /**
- * Implementation of {@link NetworkManager} for the Chat Server.
- * This handles incoming client connections and communication with other chat servers.
+ * Manages the network interactions for the AddressingServer.
+ * <p>
+ * This class handles accepting incoming connections, registering them for non-blocking I/O,
+ * and dispatching read events. It utilizes a {@code PersistentConnectionManager} to track
+ * and manage persistent connections for chat servers and replicas.
+ * </p>
  */
 public class ChatServerNetworkManager implements NetworkManager {
+
+    /**
+     * The ServerSocketChannel that listens for incoming connection requests from chat servers.
+     * When a connection is accepted, a new data channel is created for communicating with that chat server.
+     */
+    private ServerSocketChannel chatServerListenerChannel;
+
+    /**
+     * The ServerSocketChannel that listens for incoming connection requests from clients.
+     * When a connection is accepted, a new data channel is created for communicating with that client.
+     * Clients connect to this channel to be assigned to an active chat server.
+     */
+    //private ServerSocketChannel clientListenerChannel;
+
+    /**
+     * The ServerSocketChannel that listens for incoming connection requests from replica servers.
+     * This channel is used for establishing (but not maintaining) peer-to-peer communication between
+     * the primary addressing server and its backup replicas.
+     */
+    private ServerSocketChannel peerListenerChannel;
+
+    /**
+     * The ServerSocketChannel that listens for incoming TCP health check requests.
+     * <p>
+     * This channel responds to external health probes by sending a lightweight response,
+     * indicating the server is alive and accepting connections. It is not registered
+     * as a persistent channel and is closed immediately after replying.
+     * </p>
+     */
+    private ServerSocketChannel healthCheckListenerChannel;
+
+    /**
+     * The Selector used for multiplexing non-blocking I/O operations on the registered channels.
+     * This allows the AddressingServer to monitor multiple channels using a single thread.
+     */
     private final Selector selector;
 
-    public ChatServerNetworkManager() throws IOException {
+    /**
+     * Manages all peer-to-peer communication and synchronization tasks between this
+     * {@code AddressingServer} and its peers.
+     * <p>
+     * The {@code PeerManager} handles replica registration, state broadcasting, and
+     * persistent connection tracking for other {@code AddressingServer} processes in the network.
+     * It maintains a map of {@link SocketChannel} to {@link NIOMessageChannel} for message exchange.
+     * </p>
+     */
+    private final PeerManager peerManager;
+
+    /**
+     * Handles all communication, registration, and record synchronization
+     * between this {@code AddressingServer} and the network of {@code ChatServer}s.
+     * <p>
+     * The {@code ChatServerManager} maintains persistent socket connections to registered chat servers,
+     * pushes network updates to them, and manages updates to the shared {@link ChatServerRegistry}.
+     * </p>
+     */
+    private final ChatServerManager chatServerManager;
+
+    /**
+     * A fixed-size thread pool used to offload network I/O processing from the main selector loop.
+     * <p>
+     * This {@code ExecutorService} executes read and dispatch tasks asynchronously to prevent
+     * the main event loop from blocking during expensive operations such as deserialization,
+     * registration, or broadcast updates (multi-message streams).
+     * </p>
+     * <p>
+     * The pool size is typically based on the number of available CPU cores on the host system,
+     * but can be adjusted for high-throughput scenarios.
+     * </p>
+     */
+    private final ExecutorService executorService;
+
+    /**
+     * Constructs the network manager for the AddressingServer.
+     *
+     * @throws IOException If the selector fails to initialize.
+     */
+    public AddrServerNetworkManager(PeerManager peerManager, ChatServerManager csManager) throws IOException {
+        this.peerManager = peerManager;
+        this.chatServerManager = csManager;
         this.selector = Selector.open();
+        /*
+         Creates a pool with a fixed number of threads - usually one per CPU core. This will allow us to benefit from
+         some level of asynchronous message handling - preventing the main event-loop from blocking during events that
+         necessitate many I/O operations. Using a thread pool will allow us to avoid expensive thread creation/destruction,
+         while also limiting idle threads due to the constant network traffic the {@code AddressingSerer}'s will experience.
+         */
+        this.executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        // Can try and increase the pool to see if network I/O demands it.
+        //this.executorService = Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors());
     }
 
+    /**
+     * Opens and binds a ServerSocketChannel to the specified port.
+     * <p>
+     * This method is used to create a listener channel that monitors incoming
+     * connection requests on a given port. The channel is set to non-blocking mode,
+     * allowing it to be used with a Selector for persistent asynchronous I/O operations.
+     * </p>
+     *
+     * @param port The port number to bind the channel to.
+     * @return The opened ServerSocketChannel.
+     * @throws IOException If an error occurs while opening or binding the channel.
+     */
+    @Override
+    public ServerSocketChannel openListenerChannel(int port) throws IOException {
+        try {
+            ServerSocketChannel channel = ServerSocketChannel.open();
+            channel.configureBlocking(false);
+            channel.socket().bind(new InetSocketAddress(port));
+            channel.register(selector, SelectionKey.OP_ACCEPT);
+            System.out.println("Listener channel opened on port " + port);
+            return channel;
+        } catch (IOException e) {
+            System.err.println("Failed to open listener channel on port " + port + ": " + e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Opens all listener channels required for normal operation and health monitoring.
+     * <p>
+     * This method binds and registers non-blocking {@code ServerSocketChannel}s
+     * for:
+     * <ul>
+     *     <li>Client connections (used to assign ChatServers)</li>
+     *     <li>Replica (peer) connections</li>
+     *     <li>ChatServer registration</li>
+     *     <li>Health check requests (used for Docker healthchecks) on port 5050</li>
+     * </ul>
+     * Each channel is registered with the internal {@code Selector} for accept events.
+     * </p>
+     *
+     * @param clientPort      The port used for incoming client connections.
+     * @param peerPort        The port used for replica-to-primary communication.
+     * @param chatServerPort  The port used for ChatServer registration.
+     */
+    public void openListenerChannels(int clientPort, int peerPort, int chatServerPort) {
+        try {
+            openListenerChannel(clientPort);
+            this.peerListenerChannel = openListenerChannel(peerPort);
+            this.chatServerListenerChannel = openListenerChannel(chatServerPort);
+            this.healthCheckListenerChannel = openListenerChannel(5050); // static port for health checks
+        } catch (IOException e) {
+            System.err.println("Failed to open a listener channel.");
+            // TODO - Could add failure handling here, or just exit the process and spin up a new container.
+        }
+    }
+
+    /**
+     * Registers a {@link SocketChannel} with the internal {@code Selector} to listen for read events.
+     * <p>
+     * This method is used for persistent peer-to-peer or server-to-server connections, allowing
+     * the selector to monitor the channel for non-blocking reads via {@code SelectionKey.OP_READ}.
+     * The channel is also set to non-blocking mode.
+     * </p>
+     *
+     * @param channel The {@code SocketChannel} to register for persistent read monitoring.
+     * @throws IOException If an error occurs during configuration or registration.
+     */
+    @Override
+    public void openPersistentChannel(SocketChannel channel) throws IOException {
+        try {
+            channel.configureBlocking(false);
+            channel.register(selector, SelectionKey.OP_READ);
+            System.out.println("Registered persistent channel: " + channel.getRemoteAddress());
+        } catch (IOException e) {
+            System.err.println("Failed to register persistent channel: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Determines whether the specified {@link SocketChannel} is associated with a persistent server-to-server connection.
+     * <p>
+     * Persistent connections are long-lived channels used for internal communication between
+     * {@code AddressingServer}s (peers) and {@code ChatServer}s. These are stored and tracked
+     * using their respective manager classes.
+     * </p>
+     *
+     * @param channel the {@code SocketChannel} to inspect.
+     * @return {@code true} if the channel is known to be persistent (i.e., belongs to a peer or chat server), {@code false} otherwise.
+     */
+    private boolean isPersistentConnection(SocketChannel channel) {
+        return peerManager.getPeerChannels().containsKey(channel)
+                || chatServerManager.getChannels().containsKey(channel);
+    }
+
+    /**
+     * Retrieves the {@link NIOMessageChannel} wrapper for a known persistent connection.
+     * <p>
+     * This method searches the internal maps of both the {@code PeerManager} and {@code ChatServerManager}
+     * to find the {@code NIOMessageChannel} corresponding to the provided {@link SocketChannel}.
+     * </p>
+     * <p>
+     * If the channel is not found in either manager, the method returns {@code null}.
+     * </p>
+     *
+     * @param channel the {@code SocketChannel} to look up.
+     * @return the associated {@code NIOMessageChannel}, or {@code null} if not found.
+     */
+    private NIOMessageChannel getKnownPersistentChannel(SocketChannel channel) {
+        NIOMessageChannel ch = peerManager.getPeerChannels().get(channel);
+        if (ch != null) return ch;
+        return chatServerManager.getChannels().get(channel); // Will return null if it doesn't exist (which is what we want)
+    }
+
+    /**
+     * Cleans up a persistent connection and deregisters it from the internal selector.
+     * <p>
+     * This method is triggered when a persistent connection is closed or encounters an unrecoverable I/O error.
+     * It performs the following steps:
+     * <ul>
+     *     <li>Logs the reason for cleanup (remote disconnect or local I/O failure).</li>
+     *     <li>Removes the connection from either the {@code PeerManager} or {@code ChatServerManager}.</li>
+     *     <li>Cancels the selection key and closes the channel gracefully.</li>
+     * </ul>
+     * </p>
+     *
+     * @param channel the {@code SocketChannel} being cleaned up.
+     * @param key the {@code SelectionKey} associated with the channel, used for deregistration.
+     * @param cce {@code true} if the cleanup is due to a remote disconnect (i.e., {@link ConnectionClosedException}),
+     *            {@code false} if due to a local I/O failure.
+     */
+    private void cleanupPersistentConnection(SocketChannel channel, SelectionKey key, Boolean cce) {
+        System.err.printf("Channel cleanup triggered for -> %s - due to -> (%s)\n",
+                channel,
+                cce ? "remote process disconnection." : "I/O failure."
+        );
+        if (cce) {
+            NIOMessageChannel ch = getKnownPersistentChannel(channel);
+            if (ch != null) {
+                Long pid = ch.getServerPID();
+                peerManager.removeChannel(channel);
+                chatServerManager.removeChannel(channel);
+                System.out.println("Removing closed peer (Server ID: " + pid + ")");
+            }
+        }
+        key.cancel();
+        try {
+            channel.close();
+        } catch (IOException ignored) {}  // if the channel is already closed, we don't need to do anything.
+    }
+
+    /**
+     * Retrieves the internal {@link Selector} used for multiplexing non-blocking I/O operations.
+     * <p>
+     * The {@code Selector} enables the {@code AddressingServer} to monitor multiple registered
+     * {@link SocketChannel}s and {@link ServerSocketChannel}s for events such as connection
+     * requests or available data. This method provides access to the selector for components
+     * that need to register new channels or monitor channel readiness (e.g., read or accept).
+     * </p>
+     *
+     * @return the internal {@code Selector} used by this {@code AddrServerNetworkManager}.
+     */
     @Override
     public Selector getSelector() {
         return selector;
     }
 
+    /**
+     * Begins the main event loop for the {@code AddressingServer} process by
+     * listening for incoming connections on the ports defined in its instance of the
+     * {@code AddrServerConfig} class -
+     * <ul>
+     *     <li>{@code config.clientPort}</li>
+     *     <li>{@code config.replicaPort}</li>
+     *     <li>{@code config.chatServerPort}</li>
+     * </ul>
+     * <p>
+     * This method blocks until an event occurs on a registered channel (i.e., a connection request
+     * is received). When an event is detected, it retrieves the corresponding SelectionKey,
+     * processes the event, and removes the key(event) from the selector to prevent re-processing.
+     * </p>
+     *
+     * @throws IOException If an I/O error occurs while selecting or processing events.
+     */
     @Override
-    public ServerSocketChannel openListenerChannel(int port) throws IOException {
-        ServerSocketChannel channel = ServerSocketChannel.open();
-        channel.configureBlocking(false);
-        channel.socket().bind(new InetSocketAddress(port));
-        channel.register(selector, SelectionKey.OP_ACCEPT);
-        return channel;
-    }
-
-    @Override
-    public void openPersistentChannel(SocketChannel channel) throws IOException {
-        channel.register(selector, SelectionKey.OP_READ);
-    }
-
-    @Override
-    public void startEventLoop(ReadDispatcher dispatcher2) throws IOException {
+    public void startEventLoop(ReadDispatcher readDispatcher) throws IOException {
+        while (true) {
+            // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
+            selector.select();
 
 
+            // Iterate through all keys (channels) that are "ready" for an I/O operation.
+            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
 
+            while (keys.hasNext()) {
+                SelectionKey key = keys.next();
+                keys.remove();
+
+                if (!key.isValid()) {  // Skip current loop iteration if the key is invalid
+                    continue;
+                }
+                /*
+                 * Establishing a new connection. `isAcceptable` returns true if a ServerSocketChannel registered
+                 * with `selector` is ready to accept (detected) a new connection.
+                 */
+                if (key.isAcceptable()) {
+                    ServerSocketChannel listenerSC = (ServerSocketChannel) key.channel();
+                    SocketChannel channel = listenerSC.accept();
+
+                    if (channel != null) { // Register the channel with the selector and set it to read.
+                        openPersistentChannel(channel);
+                    }
+
+                    if (listenerSC.equals(healthCheckListenerChannel)) {
+                        try {
+                            String response = "alive\n";
+                            ByteBuffer buffer = ByteBuffer.wrap(response.getBytes());
+                            while (buffer.hasRemaining()) {
+                                channel.write(buffer);
+                            }
+                            channel.close(); // one-shot response
+                        } catch (IOException e) {
+                            System.err.println("Failed to respond to health check ping: " + e.getMessage());
+                        }
+                    }
+                    // Check to see if the connection came through the ChatServer or PeerServer port. If they did,
+                    // store these connections as persistent channels for network I/O in our respective managers.
+                    else if (listenerSC.equals(chatServerListenerChannel)) {
+                        chatServerManager.getChannels().put(channel, new NIOMessageChannel(channel));
+                    } else if (listenerSC.equals(peerListenerChannel)) {
+                        peerManager.getPeerChannels().put(channel, new NIOMessageChannel(channel));
+                    }
+                    // We don't store persistent channels for clients.
+                }
+                /*
+                 * Handling read events for registered channels.
+                 * Only keys tied to channels registered with OP_READ will trigger `isReadable()`.
+                 */
+                if (key.isReadable()) {
+                    SocketChannel channel = (SocketChannel) key.channel();
+
+                    // Retrieve existing NIOMessageChannel for persistent connections, or create a new one for clients
+                    //NIOMessageChannel persistentNioChannel = null;
+                    final NIOMessageChannel persistentNioChannel = getKnownPersistentChannel(channel);
+
+                    if (persistentNioChannel == null) {
+                        final NIOMessageChannel tempNioChannel = new NIOMessageChannel(channel);
+
+                        executorService.submit(() -> {
+                            try {
+                                // Dispatch the message
+                                readDispatcher.dispatch(channel, tempNioChannel);
+                                // Ensure the SocketChannel isn't a persistent connection that needs to be removed from the HashMaps
+                                if (!isPersistentConnection(channel)) {
+                                    channel.close();
+                                    key.cancel();
+                                }
+                            } catch (IOException e) {
+                                System.err.println("Error processing client request: " + e.getMessage());
+                                try {
+                                    channel.close();
+                                } catch (IOException ignored) {} // if the channel is already closed, we don't need to do anything.
+                                key.cancel();
+                            }
+                        });
+                    }
+                    // Handle persistent connection reads (Chat Servers & Replicas)
+                    else {
+                        // Dispatch message for processing. This will throw errors if the connection is closed or I/O operations fail.
+                        // Handle persistent connections asynchronously
+                        executorService.submit(() -> {
+                            try {
+                                readDispatcher.dispatch(channel, persistentNioChannel);
+                            } catch (ConnectionClosedException cce) {
+                                cleanupPersistentConnection(channel, key, true);
+                            } catch (IOException ioe) {
+                                cleanupPersistentConnection(channel, key, false);
+                            }
+                        });
+                    }
+
+//                        }
+//                    } catch (ConnectionClosedException cce) {
+//                        NIOMessageChannel ch = getKnownPersistentChannel(channel);
+//                        if (ch != null) {
+//                            Long pid = ch.getServerPID();
+//                            peerManager.removeChannel(channel);
+//                            chatServerManager.removeChannel(channel);
+//                            System.out.println("Removing closed peer (Server ID: " + pid + "): " + cce.getMessage());
+//                        }
+//                        key.cancel();
+//                        channel.close();
+//                    } catch (IOException e) {
+//                        System.err.println("Error reading from channel: " + e.getMessage());
+//                        key.cancel();
+//                        try {
+//                            channel.close();
+//                        } catch (IOException ignored) {}
+//                    }
+                }
+            }
+        }
     }
 }

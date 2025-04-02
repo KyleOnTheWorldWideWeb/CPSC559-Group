@@ -10,14 +10,25 @@ COPY . .
 # Build the project
 RUN gradle buildAddressingServer --no-daemon
 
-# Runtime stage
+# Installation stage
 FROM eclipse-temurin:21-jdk
+
+# Install Keepalived
+RUN apt-get update && \
+    apt-get install -y keepalived curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app/
 
-# Copy the built jar from the build stage
+# Copy the built jar
 COPY --from=build /app/addressingserver/build/libs/addressingserver.jar /app/addressingserver.jar
 
-# Define the default program
-CMD ["java", "-jar", "addressingserver.jar"]
+# Copy health check script and make it executable
+COPY healthcheck.sh /usr/local/bin/healthcheck.sh
+COPY check_addressing_server.sh /usr/local/bin/check_addressing_server.sh
+RUN chmod +x /usr/local/bin/check_addressing_server.sh /usr/local/bin/healthcheck.sh
+
+# Start Keepalived and the application
+CMD keepalived --dont-fork --log-console & java -jar addressingserver.jar

@@ -1,4 +1,10 @@
-package io.github.cpsc559.team16.addressingserver;
+package io.github.cpsc559.team16.chatserver;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.messaging.*;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -7,25 +13,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
-import io.github.cpsc559.team16.common.messaging.UpdateMessage;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
 /**
  * Manages peer registration, update propagation, and persistent communication
- * between the primary AddressingServer and its replicas.
+ * between all the chat servers. 
+ *  - Handles:
+ *      - Chat Server leader elections 
+ *      - sending and recieving of chatlog updates between chat servers.
  * <p>
  * This class maintains a set of persistent {@code SocketChannel} connections
- * to replicas and supports synchronization by pushing updates to them.
+ * to the other chatservers and supports synchronization by pushing updates to them.
  * </p>
  */
-public class PeerManager {
+public class ChatPeerManager {
 
     /**
      * A thread-safe mapping of persistent peer connections.

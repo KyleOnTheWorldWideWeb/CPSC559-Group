@@ -1,8 +1,13 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
-import java.nio.channels.*;
-import java.util.Optional; // Used for conditionals that don't rely on non-null checks
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress; // Used for conditionals that don't rely on non-null checks
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.nio.channels.SocketChannel;
+import java.util.Enumeration;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
@@ -81,7 +86,29 @@ public class AddressingServer {
      *
      * @param currentNetworkMaxPID the highest known PID from all registered processes,
      *                             used to initialize the counter for new PID assignment.
-     */
+     */    private String getContainerIpAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                // Filter out loopback and inactive interfaces
+                if (iface.isLoopback() || !iface.isUp())
+                    continue;
+
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr instanceof Inet4Address) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            System.err.println("Failed to get container IP: " + e.getMessage());
+        }
+        return "127.0.0.1";
+    }  
+    private String serverIP;   
     public void setPidCounter(Long currentNetworkMaxPID) {
         this.pidCounter = currentNetworkMaxPID;
     }
