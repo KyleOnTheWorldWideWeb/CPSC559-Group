@@ -7,7 +7,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import org.json.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Manages an append-only chat log for storing {@link ClientServerMessage}
@@ -24,7 +23,7 @@ public class ChatLog {
     private final String indexFile;
     private final Map<String, MessageMetadata> messageIndex;
     private final Set<String> messageHashes; // Set to track unique message hashes
-    private final ObjectMapper objectMapper;
+    private final TreeMap<Long, List<String>> timestampIndex; // <- new TreeMap
 
     /**
      * Constructs a {@code ChatLog} instance and loads the existing index file.
@@ -37,7 +36,7 @@ public class ChatLog {
         this.indexFile = indexFile;
         this.messageIndex = new HashMap<>();
         this.messageHashes = new HashSet<>();
-        this.objectMapper = new ObjectMapper();
+        this.timestampIndex = new TreeMap<>(); // <- initialize TreeMap
         ensureLogFileExists();
         loadIndexFile();
     }
@@ -54,29 +53,36 @@ public class ChatLog {
      */
     public void appendMessage(ClientServerMessage message) {
         try {
-            String messageHash = computeSHA256(message.toString());
 
-            // Check if message already exists (duplicate check)
-            if (messageHashes.contains(messageHash)) {
-                // System.out.println("Duplicate message detected. Skipping addition.");
+            String messageId = message.getMessageId();
+            if (messageId == null || messageId.isEmpty()) {
+                System.err.println("Message ID is null or empty — cannot append.");
                 return;
             }
 
+            String messageJson = message.toJson();
+            String messageHash = computeSHA256(messageJson);
+
+            // Check if message already exists (duplicate check)
+            if (messageHashes.contains(messageHash))
+                return;
+
             try (RandomAccessFile logFileWriter = new RandomAccessFile(logFile, "rw")) {
-                logFileWriter.seek(logFileWriter.length()); // Move to the end of the file
-
-                String messageId = UUID.randomUUID().toString();
                 long position = logFileWriter.length();
-                long timestamp = System.currentTimeMillis();
+                long timestamp = message.getTimeSent().getTime(); // Use original message timestamp
 
-                String messageJson = objectMapper.writeValueAsString(message);
+                logFileWriter.seek(position);
                 logFileWriter.write((messageJson + "\n").getBytes(StandardCharsets.UTF_8));
 
-                // Update index
+                // Add to index and hash set
                 messageIndex.put(messageId, new MessageMetadata(position, timestamp, messageHash));
                 messageHashes.add(messageHash);
+
+                timestampIndex.computeIfAbsent(timestamp, k -> new ArrayList<>()).add(messageId);
+
                 updateIndexFile();
             }
+
         } catch (IOException e) {
             System.err.println("Error writing to chat log: " + e.getMessage());
         }
@@ -92,19 +98,27 @@ public class ChatLog {
      */
     public void displayMessagesInOrder() {
         try (RandomAccessFile logReader = new RandomAccessFile(logFile, "r")) {
-            messageIndex.entrySet().stream()
-                    .sorted(Comparator.comparingLong(e -> e.getValue().timestamp)) // Sort messages by timestamp
-                    .forEach(entry -> {
-                        try {
-                            logReader.seek(entry.getValue().position);
-                            String messageJson = logReader.readLine();
-                            ClientServerMessage message = objectMapper.readValue(messageJson,
-                                    ClientServerMessage.class);
-                            System.out.println(message);
-                        } catch (IOException e) {
-                            System.err.println("Error reading message: " + e.getMessage());
-                        }
-                    });
+            for (Map.Entry<Long, List<String>> entry : timestampIndex.entrySet()) {
+                for (String messageId : entry.getValue()) {
+                    MessageMetadata metadata = messageIndex.get(messageId);
+                    try {
+                        logReader.seek(metadata.position);
+                        String messageJson = logReader.readLine();
+
+                        if (messageJson == null || messageJson.isBlank())
+                            continue;
+
+                        ClientServerMessage message = BaseMessage.fromJson(messageJson, ClientServerMessage.class);
+                        System.out.println("Message ID: " + messageId);
+                        System.out.println("Timestamp : " + metadata.timestamp);
+                        System.out.println("Contents  : " + message.toJson());
+                        System.out.println("=".repeat(50));
+
+                    } catch (IOException e) {
+                        System.err.println("Failed to read message ID " + messageId + ": " + e.getMessage());
+                    }
+                }
+            }
         } catch (IOException e) {
             System.err.println("Error opening log file: " + e.getMessage());
         }
@@ -128,10 +142,13 @@ public class ChatLog {
 
             for (String key : indexJson.keySet()) {
                 JSONObject metadata = indexJson.getJSONObject(key);
+                long position = metadata.getLong("position");
+                long timestamp = metadata.getLong("timestamp");
                 String messageHash = metadata.getString("hash");
-                messageIndex.put(key,
-                        new MessageMetadata(metadata.getLong("position"), metadata.getLong("timestamp"), messageHash));
-                messageHashes.add(messageHash); // Store existing hashes
+
+                messageIndex.put(key, new MessageMetadata(position, timestamp, messageHash));
+                messageHashes.add(messageHash);
+                timestampIndex.computeIfAbsent(timestamp, k -> new ArrayList<>()).add(key);
             }
         } catch (IOException | JSONException e) {
             System.err.println("Error loading index file. Resetting index: " + e.getMessage());
@@ -253,22 +270,23 @@ public class ChatLog {
         try (RandomAccessFile logReader = new RandomAccessFile(logFile, "r")) {
             Map<String, MessageMetadata> rebuiltIndex = new HashMap<>();
             Set<String> rebuiltHashes = new HashSet<>();
+            TreeMap<Long, List<String>> rebuiltTimeMap = new TreeMap<>();
 
             while (logReader.getFilePointer() < logReader.length()) {
                 long entryPosition = logReader.getFilePointer();
                 String messageJson = logReader.readLine();
 
                 // Deserialize JSON to ClientServerMessage
-                ClientServerMessage message = objectMapper.readValue(messageJson, ClientServerMessage.class);
+                ClientServerMessage message = BaseMessage.fromJson(messageJson, ClientServerMessage.class);
                 String messageHash = computeSHA256(message.toString());
+                String messageId = message.getMessageId();
+                long timestamp = message.getTimeSent().getTime();
 
                 // Ensure index consistency
                 if (!rebuiltHashes.contains(messageHash)) {
-                    String messageId = UUID.randomUUID().toString();
-                    long timestamp = System.currentTimeMillis();
-
                     rebuiltIndex.put(messageId, new MessageMetadata(entryPosition, timestamp, messageHash));
                     rebuiltHashes.add(messageHash);
+                    rebuiltTimeMap.computeIfAbsent(timestamp, k -> new ArrayList<>()).add(messageId);
                 }
             }
 
@@ -277,6 +295,8 @@ public class ChatLog {
             messageIndex.putAll(rebuiltIndex);
             messageHashes.clear();
             messageHashes.addAll(rebuiltHashes);
+            timestampIndex.clear();
+            timestampIndex.putAll(rebuiltTimeMap);
 
             updateIndexFile();
             System.out.println("Existing log loaded successfully and verified.");
@@ -292,23 +312,55 @@ public class ChatLog {
     private void ensureLogFileExists() {
         try {
             File file = new File(logFile);
-
-            // Ensure parent directories exist only if they are not null
             File parentDir = file.getParentFile();
-            if (parentDir != null) {
+            if (parentDir != null)
                 parentDir.mkdirs();
-            }
-            // Ensure parent directories exist
-            file.getParentFile().mkdirs();
             if (!file.exists()) {
-                boolean created = file.createNewFile();
-                if (created) {
+                if (file.createNewFile()) {
                     System.out.println("Created new chat log file: " + logFile);
                 }
             }
         } catch (IOException e) {
             System.err.println("Failed to create chat log file: " + e.getMessage());
         }
+    }
+
+    public String getLastMessagesAsString() {
+        return getLastMessagesAsString(50);
+    }
+
+    public String getLastMessagesAsString(int count) {
+        StringBuilder sb = new StringBuilder();
+
+        try (RandomAccessFile logReader = new RandomAccessFile(logFile, "r")) {
+            // Flatten the TreeMap into a list of message IDs
+            List<String> allMessageIds = new ArrayList<>();
+            for (List<String> ids : timestampIndex.values()) {
+                allMessageIds.addAll(ids);
+            }
+
+            // Get the last `count` message IDs
+            int start = Math.max(0, allMessageIds.size() - count);
+            List<String> targetMessageIds = allMessageIds.subList(start, allMessageIds.size());
+
+            for (String messageId : targetMessageIds) {
+                MessageMetadata metadata = messageIndex.get(messageId);
+                if (metadata == null)
+                    continue;
+
+                logReader.seek(metadata.position);
+                String messageJson = logReader.readLine();
+                if (messageJson == null || messageJson.isBlank())
+                    continue;
+
+                sb.append(messageJson).append("\n");
+            }
+
+        } catch (IOException e) {
+            System.err.println("Error reading recent messages: " + e.getMessage());
+        }
+
+        return sb.toString();
     }
 
 }

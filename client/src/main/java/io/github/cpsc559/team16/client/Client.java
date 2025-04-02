@@ -782,6 +782,7 @@ public class Client {
     public void sendMessage(ClientServerMessage msg) {
         try {
             debug(DEBUG_LOW_LEVEL, "Sending message: " + msg.toJson());
+            System.out.println("Sent" + msg.toJson());
             out.println(msg.toJson());
         } catch (Exception e) {
             debug(DEBUG_NORMAL, "Error sending message: " + e.getMessage());
@@ -950,6 +951,11 @@ public class Client {
      * @see displayLog
      */
     private class ReceiverThread extends Thread {
+        boolean historyReceived = false;
+        boolean waitingForHistory = false;
+
+        Queue<ClientServerMessage> bufferedMessages = new LinkedList<>();
+
         private volatile boolean isRegistered = false;
         private final Set<String> displayedMessageIds = Collections.synchronizedSet(new HashSet<>());
 
@@ -973,7 +979,48 @@ public class Client {
                             if (!processedMessageIds.add(msg.getMessageId())) {
                                 continue;
                             }
+                            if (waitingForHistory) {
+                                // Handle message history response
+                                if (msg.getCommand().equals("HISTORY_RESPONSE")) {
+                                    debug(DEBUG_DETAILED, "Processing HISTORY_RESPONSE");
+                                    String[] lines = msg.getContent().split("\n");
+                                    for (String line : lines) {
+                                        if (line.isBlank())
+                                            continue;
+                                        try {
+                                            ClientServerMessage historicMsg = BaseMessage.fromJson(line,
+                                                    ClientServerMessage.class);
+                                            if (!processedMessageIds.add(historicMsg.getMessageId()))
+                                                continue;
+                                            msgLog.add(historicMsg);
+                                            displayLog.add(historicMsg);
+                                        } catch (Exception ex) {
+                                            debug(DEBUG_NORMAL,
+                                                    "Failed to parse message from history: " + ex.getMessage());
+                                        }
+                                    }
+                                    historyReceived = true;
+                                    waitingForHistory = false;
 
+                                    // Replay buffered real-time messages
+                                    for (ClientServerMessage buffered : bufferedMessages) {
+                                        if (!processedMessageIds.add(buffered.getMessageId()))
+                                            continue;
+                                        msgLog.add(buffered);
+                                        displayLog.add(buffered);
+                                    }
+                                    bufferedMessages.clear();
+                                    continue;
+                                }
+
+                                // If history not yet received, buffer messages
+                                if (!historyReceived) {
+                                    debug(DEBUG_DETAILED,
+                                            "Buffering message while waiting for history: " + msg.getMessageId());
+                                    bufferedMessages.add(msg);
+                                    continue;
+                                }
+                            }
                             if (msg.getCommand().equals("REGISTER")) {
                                 debug(DEBUG_BASIC, "Successfully registered with username: " + msg.getSender());
                                 awaitingAck
@@ -982,6 +1029,7 @@ public class Client {
                                 // Only add registration success message if not already registered
                                 if (!isRegistered) {
                                     isRegistered = true;
+
                                     // Add a success message to both logs
                                     ClientServerMessage successMsg = new ClientServerMessage("System", "all", -1,
                                             "Successfully registered with username: " + msg.getSender());
@@ -991,6 +1039,14 @@ public class Client {
                                         displayLog.add(successMsg);
                                         displayedMessageIds.add(successMsg.getMessageId());
                                     }
+
+                                    ClientServerMessage historyRequest = new ClientServerMessage(username, "server", -1,
+                                            "10");
+                                    historyRequest.setCommand("HISTORY");
+                                    sendMessage(historyRequest);
+                                    debug(DEBUG_DETAILED, "Requested message history after registration");
+
+                                    waitingForHistory = true;
                                 }
                             } else if (msg.getSender().equals(username)) {
                                 debug(DEBUG_DETAILED, "Message acknowledged by server");
@@ -1286,163 +1342,110 @@ public class Client {
      * @see terminal
      * @see inputLine
      */
+    /**
+     * A thread that renders the chat interface in the terminal.
+     */
     private class OutputThread extends Thread {
         private final LineReader lineReader;
-        private int lastDisplaySize = 0; // Last size of the display log (for comparison)
-        private int lastAwaitingSize = 0; // Last size of the awaiting messages (for comparison)
-        private boolean needsRedraw = true; // Flag to track if the display needs to be redrawn
-        private int messageAreaStartLine = 4; // The starting line for the message area in the terminal
-        private int inputLine = 0; // The line where the input field is displayed in the terminal
-        private static final int MAX_MESSAGES = 100; // Maximum number of messages to display at once
-        private static final int MESSAGE_INPUT_SPACING = 3; // Number of lines of spacing before the input field
+        private int lastDisplaySize = 0; // Track how many messages we've displayed
+        private int lastAwaitingSize = 0; // Track how many messages are awaiting ACK
+        private boolean needsRedraw = true; // Force a redraw if needed
 
-        /**
-         * Constructs an OutputThread instance for handling terminal display updates.
-         * 
-         * @param lineReader The JLine LineReader instance used for handling user input
-         *                   and terminal line reading.
-         */
+        private static final int MAX_MESSAGES = 100; // Show up to this many recent messages
+
         public OutputThread(LineReader lineReader) {
             this.lineReader = lineReader;
-            updateTerminalDimensions(); // Initialize terminal dimensions
         }
 
         /**
-         * Updates the terminal dimensions and recalculates the input line position.
-         * This method ensures the input line is correctly positioned at the bottom of
-         * the terminal.
-         */
-        private void updateTerminalDimensions() {
-            try {
-                inputLine = terminal.getHeight() - 1; // Set the input line to the last row of the terminal
-            } catch (Exception e) {
-                // If terminal operations fail during shutdown, use a default value
-                inputLine = 24; // Default terminal height
-            }
-        }
-
-        /**
-         * Sets up the initial display with a title, status, and separator lines.
-         * This method is called when the application starts to initialize the terminal
-         * view.
-         */
-        private void setupDisplay() {
-            try {
-                synchronized (System.out) {
-                    System.out.print("\033[H\033[2J"); // Clear the terminal screen
-                    System.out.println("=== Chat Client ===");
-                    System.out.println("Status: Connected");
-                    System.out.println("-------------------");
-                    System.out.println("-------------------");
-                    System.out.println();
-                    System.out.print("> ");
-                    System.out.flush(); // Flush the output to ensure it displays immediately
-                }
-            } catch (Exception e) {
-                // Ignore terminal errors during shutdown
-            }
-        }
-
-        /**
-         * Renders the terminal display, including the message area and the input field.
-         * This method is responsible for updating the message area, showing pending
-         * messages,
-         * and ensuring the input buffer is visible at the bottom of the terminal.
+         * Re-draws the entire terminal screen from top to bottom, but only if
+         * something has changed (new messages, etc.) or if we explicitly force a
+         * redraw.
          */
         private void render() {
-            try {
-                synchronized (System.out) {
-                    int currentDisplaySize = displayLog.size(); // Get the current size of the displayed messages
-                    int currentAwaitingSize = awaitingAck.size(); // Get the current size of the pending messages
-                    boolean sizeChanged = currentDisplaySize != lastDisplaySize
-                            || currentAwaitingSize != lastAwaitingSize;
+            synchronized (System.out) {
+                // 1) Check if anything has changed
+                int currentDisplaySize = displayLog.size();
+                int currentAwaitingSize = awaitingAck.size();
+                boolean sizeChanged = (currentDisplaySize != lastDisplaySize
+                        || currentAwaitingSize != lastAwaitingSize);
 
-                    if (needsRedraw || sizeChanged) {
-                        // Move to start of message area
-                        System.out.printf("\033[%d;0H", messageAreaStartLine);
-                        System.out.print("\033[J");
-
-                        // Get the most recent messages
-                        List<ClientServerMessage> recentMessages;
-                        synchronized (displayLog) {
-                            recentMessages = displayLog.stream()
-                                    .skip(Math.max(0, displayLog.size() - MAX_MESSAGES)) // Display the most recent
-                                                                                         // messages
-                                    .toList();
-                        }
-
-                        // Display messages
-                        for (ClientServerMessage msg : recentMessages) {
-                            if (msg.getCommand().equals("INFO")) {
-                                System.out.println(msg.getContent()); // System messages are displayed without sender
-                                                                      // (server) info
-                            } else {
-                                String timeStr = msg.getTimeSent().toString().split(" ")[3]; // Extract timestamp
-                                System.out.printf("[%s] %s: %s%n", timeStr, msg.getSender(), msg.getContent());
-                            }
-                        }
-
-                        // Display pending messages (messages awaiting acknowledgment)
-                        for (ClientServerMessage msg : awaitingAck) {
-                            if (!msg.getCommand().equals("REGISTER")) { // Skip registration messages
-                                String timeStr = msg.getTimeSent().toString().split(" ")[3]; // Extract timestamp
-                                System.out.printf("[%s] %s: %s [sending...]%n", timeStr, msg.getSender(),
-                                        msg.getContent());
-                            }
-                        }
-
-                        // Add spacing before input
-                        for (int i = 0; i < MESSAGE_INPUT_SPACING; i++) {
-                            System.out.println();
-                        }
-
-                        lastDisplaySize = currentDisplaySize;
-                        lastAwaitingSize = currentAwaitingSize;
-                        needsRedraw = false;
-                    }
-
-                    // Update input line
-                    System.out.printf("\033[%d;0H", inputLine);
-                    String currentInput = lineReader.getBuffer().toString();
-                    System.out.print("> " + currentInput);
-                    System.out.flush();
+                // If nothing has changed and we don't need a forced redraw, skip.
+                if (!sizeChanged && !needsRedraw) {
+                    return;
                 }
-            } catch (Exception e) {
-                // Ignore terminal errors during shutdown
+
+                // 2) Clear the screen from the top
+                // \033[H moves cursor to top-left
+                // \033[2J clears entire screen
+                System.out.print("\033[H\033[2J");
+                System.out.flush();
+
+                // 3) Print header / status
+                System.out.println("=== Chat Client ===");
+                System.out.println("Status: " + (isConnected ? "Connected" : "Disconnected"));
+                System.out.println("-------------------");
+
+                // 4) Print the most recent chat messages
+                List<ClientServerMessage> recentMessages;
+                synchronized (displayLog) {
+                    recentMessages = displayLog.stream()
+                            .skip(Math.max(0, displayLog.size() - MAX_MESSAGES))
+                            .toList();
+                }
+                for (ClientServerMessage msg : recentMessages) {
+                    if ("INFO".equals(msg.getCommand())) {
+                        // System (info) messages don't show sender
+                        System.out.println(msg.getContent());
+                    } else {
+                        String timeStr = msg.getTimeSent().toString().split(" ")[3]; // e.g. "HH:MM:SS"
+                        System.out.printf("[%s] %s: %s%n", timeStr, msg.getSender(), msg.getContent());
+                    }
+                }
+
+                // 5) Print messages still awaiting an ACK with a special suffix
+                for (ClientServerMessage msg : awaitingAck) {
+                    // Skip REGISTER duplicates
+                    if (!"REGISTER".equals(msg.getCommand())) {
+                        String timeStr = msg.getTimeSent().toString().split(" ")[3];
+                        System.out.printf("[%s] %s: %s [sending...]%n", timeStr, msg.getSender(), msg.getContent());
+                    }
+                }
+
+                // 6) A blank line before the input prompt
+                System.out.println();
+
+                // 7) Print the input line (what the user has typed so far)
+                String currentInput = lineReader.getBuffer().toString();
+                System.out.print("> " + currentInput);
+                System.out.flush();
+
+                // Update counters
+                lastDisplaySize = currentDisplaySize;
+                lastAwaitingSize = currentAwaitingSize;
+                needsRedraw = false;
             }
         }
 
         /**
-         * The main method for the OutputThread, which continuously updates the terminal
-         * display.
-         * This method is called in a loop, updating the display at a rate of every
-         * 20ms,
-         * and checking if the terminal size has changed.
-         * <p>
-         * The method will continuously render the terminal display and handle any
-         * interruptions or exceptions.
-         * </p>
+         * Main loop: periodically render if there have been changes.
          */
         @Override
         public void run() {
             try {
-                setupDisplay(); // Set up the initial display
                 while (!terminate) {
                     try {
-                        if (terminal.getHeight() != inputLine + 1) { // Check if the terminal size has changed
-                            updateTerminalDimensions(); // Update terminal dimensions
-                            needsRedraw = true; // Mark the display as needing a redraw
-                        }
-                        render(); // Update the display
-                        Thread.sleep(20); // Wait for 20ms before the next update
+                        // Sleep a short time to avoid spamming the screen
+                        Thread.sleep(100);
+                        // Then render if needed
+                        render();
                     } catch (InterruptedException e) {
                         if (!terminate) {
                             debug(DEBUG_NORMAL, "Output thread interrupted");
                         }
                         break;
                     } catch (Exception e) {
-                        // If terminal operations fail, continue with default values
-                        continue;
+                        // Minor errors can be ignored; just continue
                     }
                 }
             } catch (Exception e) {

@@ -208,6 +208,32 @@ class ClientHandler implements ConnectionHandler {
             }
         }
 
+        if ("HISTORY".equalsIgnoreCase(msg.getCommand())) {
+            int amount = 20; // default value
+            try {
+                amount = Integer.parseInt(msg.getContent().trim());
+            } catch (NumberFormatException ignored) {
+                // keep default
+            }
+
+            ChatLog chatlog = ChatServer.getChatLog();
+            String messageHistory = chatlog.getLastMessagesAsString(amount);
+
+            ClientServerMessage historyResponse = new ClientServerMessage("server", msg.getSender(), -1,
+                    messageHistory);
+            historyResponse.setCommand("HISTORY_RESPONSE");
+
+            try {
+                WriteUtils.enqueueResponse(ctx, key, historyResponse.toJson() + "\n");
+                key.selector().wakeup();
+                debug(DEBUG_NORMAL, "[HISTORY] Sent " + amount + " messages to " + msg.getSender());
+            } catch (IOException e) {
+                System.err.println("Failed to send HISTORY_RESPONSE: " + e.getMessage());
+            }
+
+            return;
+        }
+
         if (ctx.type == ChatServer.ConnectionType.CLIENT && ctx.username == null) {
             try {
                 sendError("server", "ERROR: Must register username first.\n", ctx, key);
