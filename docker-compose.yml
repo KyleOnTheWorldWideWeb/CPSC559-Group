@@ -111,21 +111,54 @@ services:  # Defines the services (Docker containers) that will be run.
     # volumes:
     #   - ./chatlogs:/app/src/main/java/com/Logs
 
-  client:
+  # client:
+  #   image: client:latest
+  #   container_name: client
+  #   profiles: ["client", "main-single"]
+  #   build:
+  #     dockerfile: Dockerfile.client
+  #   ports: ["3000:3000",]
+  #   environment:
+  #     - CLIENT_PORT=3000
+  #     - HOST_ADDRESS=client
+  #     - ADDRESS_HOST=172.20.0.2
+  #   networks:
+  #     - chat_network
+  #   tty: true        # You need these two lines to make the client interactive
+  #   stdin_open: true # Non-optional for interactive shell input
+  client1:
     image: client:latest
-    container_name: client
-    profiles: ["client", "main-single"]
+    container_name: client1
+    profiles: ["client1", "clients"]
     build:
       dockerfile: Dockerfile.client
-    ports: ["3000:3000",]
+    ports: ["3001:3000"]
     environment:
       - CLIENT_PORT=3000
-      - HOST_ADDRESS=client
+      - HOST_ADDRESS=client1
       - ADDRESS_HOST=172.20.0.2
     networks:
-      - chat_network
-    tty: true        # You need these two lines to make the client interactive
-    stdin_open: true # Non-optional for interactive shell input
+      chat_network:
+        ipv4_address: 172.20.0.20
+    tty: true
+    stdin_open: true
+
+  client2:
+    image: client:latest
+    container_name: client2
+    profiles: ["client2", "clients"]
+    build:
+      dockerfile: Dockerfile.client
+    ports: ["3002:3000"]
+    environment:
+      - CLIENT_PORT=3000
+      - HOST_ADDRESS=client2
+      - ADDRESS_HOST=172.20.0.2
+    networks:
+      chat_network:
+        ipv4_address: 172.20.0.21
+    tty: true
+    stdin_open: true
 
 networks:
   chat_network:

@@ -72,7 +72,7 @@ public class Client {
      * 4 - Low-level operations: byte-level I/O, parsing
      * 5 - Extreme detail: everything, for deep debugging
      */
-    private static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "0"));
+    private static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "5"));
 
     // Debug level constants
     private static final int DEBUG_NONE = 0; // No debug output (production mode)
