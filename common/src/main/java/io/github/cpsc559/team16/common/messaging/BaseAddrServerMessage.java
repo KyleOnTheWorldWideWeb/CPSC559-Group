@@ -148,6 +148,7 @@ public class BaseAddrServerMessage<T> {
         this.payload = payload;
     }
 
+    public long getMessageID() { return messageID; }
     public String getMsgType() { return msgType; }
     public String getObjectType() { return objectType; }
     public long getSenderPID() { return senderPID; }

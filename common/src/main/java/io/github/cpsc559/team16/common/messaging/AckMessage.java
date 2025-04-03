@@ -31,8 +31,22 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
      * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
     public AckMessage(String objectType, long senderPID, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.ACK, objectType, senderPID, senderRole, targetRole, payload, );
+        super(0, MessageTypes.ACK, objectType, senderPID, senderRole, targetRole, payload);
     }
+
+    /**
+     * Constructs a new acknowledgment message.
+     *
+     * @param objectType Describes what action is being acknowledged (e.g., "Registration", "Update").
+     * @param senderPID The ID of the process sending the acknowledgment.
+     * @param senderRole The role of the sender (e.g., PRIMARY, REPLICA, CHATSERVER).
+     * @param targetRole The role of the process being acknowledged (e.g., CHATSERVER, REPLICA).
+     * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
+     */
+    public AckMessage(long messageID, String objectType, long senderPID, String senderRole, String targetRole, T payload) {
+        super(messageID, MessageTypes.ACK, objectType, senderPID, senderRole, targetRole, payload);
+    }
+
 
     /**
      * Creates a simple "OK" acknowledgment.
@@ -105,6 +119,10 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
      */
     public static AckMessage<Long> chatServerRegistered(long senderPID, Long payload) {
         return new AckMessage<>(AckObjectTypes.REGISTERED, senderPID, Roles.PRIMARY, Roles.CHATSERVER, payload);
+    }
+
+    public static AckMessage<Boolean> replicated(long messagedID, long senderPID, Boolean eventReplicated) {
+        return new AckMessage<>(messagedID, AckObjectTypes.REPLICATED, senderPID, Roles.REPLICA, Roles.PRIMARY, eventReplicated);
     }
 
 }

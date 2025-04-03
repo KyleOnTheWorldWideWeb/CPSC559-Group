@@ -1,38 +1,46 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.dto.ServerRecord;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.messaging.MessageTypes;
-import io.github.cpsc559.team16.common.messaging.ObjectTypes;
-import io.github.cpsc559.team16.common.messaging.UpdateMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
-public class PendingMessage<T> {
+public class PendingEvent<T> {
     public final BaseAddrServerMessage<T> message;
-    public final Set<Long> pendingReplicaPIDs = new CopyOnWriteArraySet<>();
+    public final Set<Long> pendingReplicaPIDs;
     public final NIOMessageChannel requestChannel;
     private final BroadcastManager broadcastManager;
     private final CompletionCallback onComplete;
 
+    //  TODO - idea! add flag to PendingEvent and set it for any event that is a "retry". If that goes stale, deny the request
+    private final int iterationNumber;
+
+    private final long creationTime; // Timestamp of creation
+
     // Constructor without broadcast manager
-    public PendingMessage(BaseAddrServerMessage<T> message, Set<Long> replicaPIDs, NIOMessageChannel requestChannel,  CompletionCallback onComplete) {
-        this(message, replicaPIDs, requestChannel, null, onComplete);
+    public PendingEvent(BaseAddrServerMessage<T> message, Set<Long> replicaPIDs,
+                        NIOMessageChannel requestChannel, CompletionCallback onComplete) {
+        this.message = message;
+        this.pendingReplicaPIDs = new CopyOnWriteArraySet<>(replicaPIDs);
+        this.requestChannel = requestChannel;
+        this.broadcastManager = null;
+        this.onComplete = onComplete;
+        this.creationTime = System.currentTimeMillis(); // Capture time of creation
+        this.iterationNumber = 0;
     }
 
     // Overloaded constructor with broadcast manager
-    public PendingMessage(BaseAddrServerMessage<T> message, Set<Long> replicaPIDs,
-                          NIOMessageChannel requestChannel, BroadcastManager broadcastManager, CompletionCallback onComplete) {
+    public PendingEvent(BaseAddrServerMessage<T> message, Set<Long> replicaPIDs,
+                        NIOMessageChannel requestChannel, BroadcastManager broadcastManager, short iterationNumber, CompletionCallback onComplete) {
         this.message = message;
-        this.pendingReplicaPIDs.addAll(replicaPIDs);
+        this.pendingReplicaPIDs = new CopyOnWriteArraySet<>(replicaPIDs);
         this.requestChannel = requestChannel;
         this.broadcastManager = broadcastManager;
         this.onComplete = onComplete;
+        this.creationTime = System.currentTimeMillis(); // Capture time of creation
+        this.iterationNumber = iterationNumber;
     }
 
     public void respondToRequester() throws IOException {
@@ -40,10 +48,18 @@ public class PendingMessage<T> {
             // If the broadcastManager was passed in, it's because we want to broadcast
             String json = message.toJson();
             requestChannel.sendMessage(json);
+            /*
+             * This triggers an event that we declared earlier: consisting of any actions that needed to happen
+             * after replicas synchronized their states so that a response could be given to the requester.
+             */
+            if (onComplete != null) {
+                onComplete.run();
+            }
+
         } catch (JsonProcessingException j) {
-            System.err.println("Failed to serialize PendingMessage: " + this.message);
+            System.err.println("Failed to serialize PendingEvent: " + this.message);
         } catch (IOException e) {
-            System.err.println("Failed to respond to requester for message: " + e.getMessage());
+            System.err.println("Failed to respond to requester with PID: " + requestChannel.getServerPID());
             throw e;
         }
     }
@@ -81,6 +97,10 @@ public class PendingMessage<T> {
 
     public NIOMessageChannel getRequestChannel() {
         return requestChannel;
+    }
+
+    public long getCreationTime() {
+        return creationTime;
     }
 
     public void removePendingReplica(Long replicaPID) {

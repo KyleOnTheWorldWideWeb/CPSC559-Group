@@ -314,6 +314,16 @@ public class AddrServerNetworkManager {
      */
     public void startEventLoop(AddrServerReadDispatcher readDispatcher) throws IOException {
         while (true) {
+
+            // TODO - Check for stale events and act accordingly
+            //  idea! add flag to PendingEvent and set it for any event that is a "retry". If that goes stale, deny the request
+            //long now = System.currentTimeMillis();
+            //for (PendingEvent pending : pendingEvents.values()) {
+            //    if ((now - pending.getCreationTime()) > TIMEOUT_THRESHOLD_MS) {
+            //        // Consider retry or mark as failed
+            //    }
+
+
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();
 

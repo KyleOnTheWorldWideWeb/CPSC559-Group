@@ -122,9 +122,29 @@ public class AddressingServer {
         return cleanupManager;
     }
 
+    /**
+     * The {@code MessageIDGenerator} instance used by this server to produce globally unique message IDs.
+     * <p>
+     * This generator ensures that every message requiring acknowledgment or ordering has a distinct identifier,
+     * which is critical for maintaining consistency guarantees (e.g., in replication or event tracking).
+     * </p>
+     * <p>
+     * The generator is initialized once per process and typically updated with the server's assigned PID
+     * after registration, ensuring message IDs are globally unique across all AddressingServer processes.
+     * </p>
+     */
     private final MessageIDGenerator genMID;
 
-    public MessageIDGenerator getMessageGenerator() {
+    /**
+     * Returns the {@link MessageIDGenerator} associated with this server.
+     * <p>
+     * This allows access to generate unique message IDs when constructing messages that
+     * require tracking across replicas or clients.
+     * </p>
+     *
+     * @return the server's {@code MessageIDGenerator} instance.
+     */
+    public MessageIDGenerator getMessageIDGenerator() {
         return this.genMID;
     }
 

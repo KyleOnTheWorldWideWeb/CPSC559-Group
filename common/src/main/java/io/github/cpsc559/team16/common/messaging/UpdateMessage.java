@@ -31,7 +31,34 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
      * }
      * </pre>
      *
-     * @param messageID  The unique ID for this update message.
+     * @param objectType The type of data contained in the payload.
+     * @param senderPID  The process ID of the sender.
+     * @param senderRole The role of the sender (PRIMARY, REPLICA, CHATSERVER).
+     * @param targetRole The intended recipient's role.
+     * @param payload    The actual data being sent.
+     */
+    public UpdateMessage(String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
+        super(0, MessageTypes.UPDATE, objectType, senderPID, senderRole, targetRole, payload);
+    }
+
+    /**
+     * Constructs an "UPDATE" message.
+     * <p>
+     * An example of a {@code ChatServer} sending a notification to a REPLICA that a failure of the primary
+     * {@code AddressingServer} has occurred is given below:
+     * </p>
+     * <pre>
+     * {
+     *   "msgType": "UPDATE",
+     *   "objectType": "Failure",
+     *   "senderPID": 72,
+     *   "senderRole": "CHATSERVER",
+     *   "targetRole": "REPLICA",
+     *   "payload": { `Long failedServerPID` }
+     * }
+     * </pre>
+     *
+     * @param messageID   A globally unique identifier for the message. Use {@link MessageIDGenerator} for generation.
      * @param objectType The type of data contained in the payload.
      * @param senderPID  The process ID of the sender.
      * @param senderRole The role of the sender (PRIMARY, REPLICA, CHATSERVER).
@@ -41,6 +68,7 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
     public UpdateMessage(long messageID, String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
         super(messageID, MessageTypes.UPDATE, objectType, senderPID, senderRole, targetRole, payload);
     }
+
 
     /**
      * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
@@ -52,10 +80,26 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
 
     /**
      * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
+     * from the PRIMARY AddressingServer to a REPLICA.
+     */
+    public static UpdateMessage<AddrServerRecord> asRecordPrimaryToReplica(Long senderPID, AddrServerRecord record) {
+        return new UpdateMessage<>(0, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
+    }
+
+    /**
+     * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
      * from the PRIMARY AddressingServer to a ChatServer.
      */
     public static UpdateMessage<AddrServerRecord> asRecordPrimaryToCS(long messageID, Long senderPID, AddrServerRecord record) {
         return new UpdateMessage<>(messageID, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
+    }
+
+    /**
+     * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
+     * from the PRIMARY AddressingServer to a ChatServer.
+     */
+    public static UpdateMessage<AddrServerRecord> asRecordPrimaryToCS(Long senderPID, AddrServerRecord record) {
+        return new UpdateMessage<>(0, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
     }
 
     /**
@@ -67,6 +111,14 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
     }
 
     /**
+     * For use by {@code AddressingServer} REPLICAs during failover of the Primary AddressingServer.
+     * Sends an {@code UpdateMessage} with an {@link AddrServerRecord} from one REPLICA to another.
+     */
+    public static UpdateMessage<AddrServerRecord> asRecordReplicaToReplica(Long senderPID, AddrServerRecord record) {
+        return new UpdateMessage<>(0, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.REPLICA, Roles.REPLICA, record);
+    }
+
+    /**
      * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a ChatServer.
      */
     public static UpdateMessage<ChatServerRecord> csRecordPrimaryToCS(long messageID, Long senderPID, ChatServerRecord record) {
@@ -74,10 +126,24 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
     }
 
     /**
+     * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a ChatServer.
+     */
+    public static UpdateMessage<ChatServerRecord> csRecordPrimaryToCS(Long senderPID, ChatServerRecord record) {
+        return new UpdateMessage<>(0, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
+    }
+
+    /**
      * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a REPLICA.
      */
     public static UpdateMessage<ChatServerRecord> csRecordPrimaryToReplica(long messageID, Long senderPID, ChatServerRecord record) {
         return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
+    }
+
+    /**
+     * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a REPLICA.
+     */
+    public static UpdateMessage<ChatServerRecord> csRecordPrimaryToReplica(Long senderPID, ChatServerRecord record) {
+        return new UpdateMessage<>(0, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
 
     /**

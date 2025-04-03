@@ -10,6 +10,7 @@ import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+import java.util.Collection;
 import java.util.Map;
 
 public class BroadcastManager {
@@ -88,6 +89,8 @@ public class BroadcastManager {
         broadcastServerRecord(forReplica, peerChannels);
     }
 
+
+
     /**
      * Broadcasts a single {@link ChatServerRecord} to all connected {@code ChatServer}s.
      * <p>
@@ -107,6 +110,22 @@ public class BroadcastManager {
     }
 
     /**
+     * Broadcasts a single {@link ChatServerRecord} to all connected {@code ChatServer}s.
+     * <p>
+     * This method is used by the PRIMARY {@code AddressingServer} to inform chat servers
+     * about a new or updated {@code ChatServerRecord}. This ensures the distributed state
+     * remains consistent across all registered nodes.
+     * </p>
+     *
+     * @param primaryPID the PID of the primary server issuing the update.
+     * @param record        the {@link AddrServerRecord} containing the update information.
+     */
+    public void broadcastCSRecordToReplicas(long messageID, Long primaryPID, ChatServerRecord record) {
+        broadcastServerRecord(UpdateMessage.csRecordPrimaryToReplica(messageID, primaryPID, record), peerChannels);
+    }
+
+
+    /**
      * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
      * <p>
      * This method handles JSON serialization and transmission errors consistently,
@@ -121,6 +140,8 @@ public class BroadcastManager {
             String jsonMessage = message.toJson();
             for (NIOMessageChannel nioChannel : channelHashMap.values()) {
                 try {
+                    // Only new connections have a PID set to zero. ALL registered connections have the PID of the remote process.
+                    if (nioChannel.getServerPID() == 0) continue;
                     nioChannel.sendMessage(jsonMessage);
                 } catch (IOException ioe) {
                     System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
@@ -131,6 +152,46 @@ public class BroadcastManager {
             System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
         }
     }
+
+    /**
+     * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
+     * <p>
+     * This method handles JSON serialization and transmission errors consistently,
+     * logging any failures without interrupting the loop.
+     * </p>
+     *
+     * @param message the update message to be broadcast.
+     * @param <T>     the type of record being broadcast (e.g., {@code AddrServerRecord}, {@code ChatServerRecord}).
+     */
+    public <T> void broadcastServerRecord(UpdateMessage<T> message, Collection<NIOMessageChannel> channels) {
+        try {
+            String jsonMessage = message.toJson();
+            for (NIOMessageChannel nioChannel : channels) {
+                try {
+                    nioChannel.sendMessage(jsonMessage);
+                } catch (IOException ioe) {
+                    System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+                    cleanupManager.cleanupPersistentConnectionNIO(nioChannel,true);
+                }
+            }
+        } catch (JsonProcessingException e) {
+            System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Broadcasts a single {@link AddrServerRecord} to all registered {@code AddressingServer} REPLICA's.
+
+     * <p>Updating processes throughout the distributed network is necessary to maintain consistency.</p>
+     *
+     * @param primaryPID the PID of the primary server issuing the update.
+     * @param record        the {@link AddrServerRecord} containing the update information.
+     */
+    public void broadcastASRecordToReplicas(long messageID, Long primaryPID, AddrServerRecord record,
+                                            Collection<NIOMessageChannel> connectedChannels) {
+        broadcastServerRecord(UpdateMessage.asRecordPrimaryToReplica(messageID, primaryPID, record), connectedChannels);
+    }
+
 
     /**
      *
