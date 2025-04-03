@@ -15,16 +15,17 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 
@@ -75,12 +76,12 @@ public class Client {
     private static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "0"));
 
     // Debug level constants
-    private static final int DEBUG_NONE = 0; // No debug output (production mode)
-    private static final int DEBUG_BASIC = 1; // Basic info: startup, shutdown, major events
-    private static final int DEBUG_NORMAL = 2; // Normal operation details: connections, requests
-    private static final int DEBUG_DETAILED = 3; // Detailed flow: entering methods, decision points
-    private static final int DEBUG_LOW_LEVEL = 4; // Low-level operations: byte-level I/O, parsing
-    private static final int DEBUG_EXTREME = 5; // Extreme detail: everything, for deep debugging
+    protected static final int DEBUG_NONE = 0; // No debug output (production mode)
+    protected static final int DEBUG_BASIC = 1; // Basic info: startup, shutdown, major events
+    protected static final int DEBUG_NORMAL = 2; // Normal operation details: connections, requests
+    protected static final int DEBUG_DETAILED = 3; // Detailed flow: entering methods, decision points
+    protected static final int DEBUG_LOW_LEVEL = 4; // Low-level operations: byte-level I/O, parsing
+    protected static final int DEBUG_EXTREME = 5; // Extreme detail: everything, for deep debugging
 
     /**
      * Logs a debug message if the current debug level is sufficient.
@@ -88,7 +89,7 @@ public class Client {
      * @param level   The debug level of the message (0-5)
      * @param message The message to log
      */
-    private static void debug(int level, String message) {
+    protected static void debug(int level, String message) {
         if (level <= DEBUG_LEVEL) {
             String prefix = switch (level) {
                 case 1 -> "[BASIC] ";
@@ -251,14 +252,14 @@ public class Client {
      * A flag that indicates whether the client should shut down.
      * Set to true when the client is being terminated.
      */
-    private boolean terminate = false;
+    protected boolean terminate = false;
 
     /**
      * A flag that indicates the connection state of the client.
      * It is set to true when the client is successfully connected to the chat
      * server.
      */
-    private boolean isConnected = false;
+    protected boolean isConnected = false;
 
     // UI components
     /**
@@ -492,7 +493,7 @@ public class Client {
      *                     the chat server, or during the message exchange.
      */
     @SuppressWarnings("resource")
-    private void connect() throws IOException {
+    protected  void connect() throws IOException {
         if (!terminate) {
             try {
                 debug(DEBUG_NORMAL, "trying to connect to server");
@@ -1238,9 +1239,8 @@ public class Client {
                         break;
                     }
                 } catch (UserInterruptException e) {
-                    if (!terminate) {
-                        debug(DEBUG_NORMAL, "Input interrupted");
-                    }
+                    debug(DEBUG_NORMAL, "Input interrupted");
+                    shutdown();
                     break;
                 } catch (Exception e) {
                     debug(DEBUG_NORMAL, "Input thread error: " + e.getMessage());
@@ -1498,38 +1498,49 @@ public class Client {
      */
     public static void main(String[] args) {
         debug(DEBUG_BASIC, "Starting client application");
-
-        // Initialize terminal for username input
-        Terminal terminal = null;
-        LineReader lineReader = null;
-        String username = "Anonymous"; // Default username
-        try {
-            terminal = TerminalBuilder.builder().system(true).build();
-            lineReader = LineReaderBuilder.builder().terminal(terminal).build();
-
-            // Prompt the user for a username
-            System.out.print("Enter your username: ");
-            username = lineReader.readLine().trim();
-
-            // If no username is provided, fall back to "Anonymous"
-            if (username.isEmpty()) {
-                username = "Anonymous";
-            }
-            // Clear the terminal after username input
-            terminal.writer().print("\033[H\033[2J");
-            terminal.writer().flush();
-        } catch (Exception e) {
-            debug(DEBUG_BASIC, "Error reading username, using default: Anonymous");
-        }
         // Read the server configuration from environment variables
         String serverAddress = System.getenv().getOrDefault("ADDRESS_HOST", "localhost");
         int serverPort = Integer.parseInt(System.getenv().getOrDefault("SERVER_PORT", "49800"));
+        String username = System.getenv().getOrDefault("USERNAME", "TestClient");
+        boolean isTestMode = Boolean.parseBoolean(System.getenv().getOrDefault("TEST_MODE", "false"));
+        
 
-        debug(DEBUG_NORMAL, String.format("Client configuration - Username: %s, Server: %s:%d",
-                username, serverAddress, serverPort));
+        if (isTestMode) {
+            debug(DEBUG_NORMAL, String.format("Client configuration - Username: %s, Server: %s:%d, Test Mode: %b",
+                username, serverAddress, serverPort, isTestMode));
+            // Run the TestClient
+            TestClient testClient = new TestClient(username, serverAddress, serverPort);
+            testClient.run();
+        } else {
+      
+            // Initialize terminal for username input
+            Terminal terminal = null;
+            LineReader lineReader = null;
+            try {
+                terminal = TerminalBuilder.builder().system(true).build();
+                lineReader = LineReaderBuilder.builder().terminal(terminal).build();
 
-        // Instantiate and run the client with the provided configuration
-        Client client = new Client(username, serverAddress, serverPort, terminal, lineReader);
-        client.run();
+                // Prompt the user for a username
+                System.out.print("Enter your username: ");
+                username = lineReader.readLine().trim();
+
+                // If no username is provided, fall back to "Anonymous"
+                if (username.isEmpty()) {
+                    username = "Anonymous";
+                }
+                // Clear the terminal after username input
+                terminal.writer().print("\033[H\033[2J");
+                terminal.writer().flush();
+            } catch (Exception e) {
+                debug(DEBUG_BASIC, "Error reading username, using default: Anonymous");
+            }
+
+            debug(DEBUG_NORMAL, String.format("Client configuration - Username: %s, Server: %s:%d",
+                    username, serverAddress, serverPort));
+
+            // Instantiate and run the client with the provided configuration
+            Client client = new Client(username, serverAddress, serverPort, terminal, lineReader);
+            client.run();
+        }
     }
 }
