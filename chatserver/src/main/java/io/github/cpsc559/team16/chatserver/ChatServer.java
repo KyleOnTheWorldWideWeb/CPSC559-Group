@@ -6,7 +6,6 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -16,24 +15,24 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
-import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.utilities.VectorTimestamp;
 
 /**
  * The main ChatServer class implements a non-blocking I/O chat server that:
@@ -48,7 +47,10 @@ import io.github.cpsc559.team16.common.dto.ChatServerRecord;
  */
 // @SuppressWarnings("unused")
 public class ChatServer {
-
+    private static final VectorTimestamp vectorTimestamp = new VectorTimestamp();
+    public static synchronized  VectorTimestamp getVectorTimestamp() {
+        return vectorTimestamp;
+    }
     /**
      * The current debug level for controlling verbosity of server logs.
      * <p>

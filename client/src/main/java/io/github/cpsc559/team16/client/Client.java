@@ -28,6 +28,7 @@ import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
 import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
+import io.github.cpsc559.team16.common.utilities.VectorTimestamp;
 
 /**
  * A client implementation for an IRC-style chat application.
@@ -61,6 +62,7 @@ import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
  */
 // @SuppressWarnings("unused")
 public class Client {
+    private final VectorTimestamp vectorTimestamp = new VectorTimestamp();
 
     /**
      * Debug level configuration from environment variable.
@@ -493,35 +495,36 @@ public class Client {
      *                     the chat server, or during the message exchange.
      */
     @SuppressWarnings("resource")
-    protected  void connect() throws IOException {
+    protected void connect() throws IOException {
         if (!terminate) {
             try {
-                debug(DEBUG_NORMAL, "trying to connect to server");
-
+                debug(DEBUG_NORMAL, "Trying to connect to server");
+    
                 // Establish server connection
                 String[] substrings = null;
                 while (substrings == null) {
                     substrings = registerWithAddressingServer();
                     Thread.sleep(1000); // pause 1s before retrying
-                    // System.out.println("read");
                 }
                 Long serverPid = Long.parseLong(substrings[0]);
                 String chatServerAddress = substrings[1];
                 int chatServerPort = Integer.parseInt(substrings[2]);
-
+    
                 // Step 2: Connect to chat server
                 debug(DEBUG_NORMAL, "Connecting to chat server at " + chatServerAddress + ":" + chatServerPort);
                 chatServer = new Socket(chatServerAddress, chatServerPort);
                 out = new PrintWriter(chatServer.getOutputStream(), true); // autoFlush = true
                 in = new BufferedReader(new InputStreamReader(chatServer.getInputStream()));
                 isConnected = true;
-
-                ClientServerMessage registration = new ClientServerMessage(username, "server", -1, "");
+    
+                // Initialize vector timestamp with the client's unique ID
+                vectorTimestamp.increment(username.hashCode());
+    
+                ClientServerMessage registration = new ClientServerMessage(username, "server", -1, "", vectorTimestamp);
                 registration.setCommand("REGISTER");
                 out.println(registration.toJson());
-
+    
                 debug(DEBUG_BASIC, "Successfully connected to chat server");
-                // System.out.println("CONNECTED");
             } catch (IOException e) {
                 debug(DEBUG_BASIC, "Connection error: " + e.getMessage());
                 throw e;
@@ -782,6 +785,10 @@ public class Client {
      */
     public void sendMessage(ClientServerMessage msg) {
         try {
+            synchronized (messageLock) {
+                vectorTimestamp.increment(username.hashCode()); // Increment local clock
+                msg.setVectorTimestamp(vectorTimestamp); // Attach vector timestamp
+            }
             debug(DEBUG_LOW_LEVEL, "Sending message: " + msg.toJson());
             System.out.println("Sent" + msg.toJson());
             out.println(msg.toJson());
@@ -976,6 +983,12 @@ public class Client {
                         ClientServerMessage msg = BaseMessage.fromJson(serializedMsg, ClientServerMessage.class);
 
                         synchronized (messageLock) {
+                            if (msg.getVectorTimestamp() == null) {
+                                debug(DEBUG_DETAILED, "Message does not contain a vector timestamp. Assigning default timestamp.");
+                                msg.setVectorTimestamp(vectorTimestamp); // Assign default timestamp
+                            }
+                            vectorTimestamp.update(msg.getVectorTimestamp());
+                            vectorTimestamp.increment(username.hashCode());
                             // Skip if we've already processed this message
                             if (!processedMessageIds.add(msg.getMessageId())) {
                                 continue;
@@ -1003,13 +1016,21 @@ public class Client {
                                     historyReceived = true;
                                     waitingForHistory = false;
 
-                                    // Replay buffered real-time messages
                                     for (ClientServerMessage buffered : bufferedMessages) {
                                         if (!processedMessageIds.add(buffered.getMessageId()))
                                             continue;
+                                        
+                                        // Process vector timestamps the same way as other messages
+                                        if (buffered.getVectorTimestamp() == null) {
+                                            buffered.setVectorTimestamp(vectorTimestamp);
+                                        }
+                                        vectorTimestamp.update(buffered.getVectorTimestamp());
+                                        vectorTimestamp.increment(username.hashCode());
+                                        
                                         msgLog.add(buffered);
                                         displayLog.add(buffered);
                                     }
+                                    
                                     bufferedMessages.clear();
                                     continue;
                                 }
@@ -1035,6 +1056,7 @@ public class Client {
                                     ClientServerMessage successMsg = new ClientServerMessage("System", "all", -1,
                                             "Successfully registered with username: " + msg.getSender());
                                     successMsg.setCommand("INFO");
+                                    successMsg.setVectorTimestamp(vectorTimestamp);
                                     msgLog.add(successMsg);
                                     if (!displayedMessageIds.contains(successMsg.getMessageId())) {
                                         displayLog.add(successMsg);
@@ -1044,6 +1066,7 @@ public class Client {
                                     ClientServerMessage historyRequest = new ClientServerMessage(username, "server", -1,
                                             "10");
                                     historyRequest.setCommand("HISTORY");
+                                    successMsg.setVectorTimestamp(vectorTimestamp);
                                     sendMessage(historyRequest);
                                     debug(DEBUG_DETAILED, "Requested message history after registration");
 

@@ -1,6 +1,7 @@
-package io.github.cpsc559.team16.common.utilities;
+package io.github.cpsc559.team16.common.utilities; 
 
 public class ServerServerMessage extends BaseMessage {
+    private VectorTimestamp vectorTimestamp = new VectorTimestamp();
     private String content;
     private String command;
 
@@ -10,11 +11,19 @@ public class ServerServerMessage extends BaseMessage {
 
     public ServerServerMessage(String sender, String receiver,
             String command,
-            String payload) {
+            String payload,
+            VectorTimestamp vectorTimestamp) {
         super(sender, receiver);
         this.command = command;
-
         this.content = payload;
+        this.vectorTimestamp = vectorTimestamp;
+    }
+    public VectorTimestamp getVectorTimestamp() {
+        return vectorTimestamp;
+    }
+
+    public void setVectorTimestamp(VectorTimestamp vectorTimestamp) {
+        this.vectorTimestamp = vectorTimestamp;
     }
 
     public String getContent() {
@@ -40,6 +49,7 @@ public class ServerServerMessage extends BaseMessage {
                 ", receiver='" + getReceiver() + '\'' +
                 ", timeSent=" + getTimeSent() +
                 ", content='" + content + '\'' +
+                ", Timestamp='" + getVectorTimestamp() + '\'' +
                 '}';
     }
 }

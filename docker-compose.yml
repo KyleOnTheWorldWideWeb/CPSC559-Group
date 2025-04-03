@@ -75,20 +75,20 @@ services:  # Defines the services (Docker containers) that will be run.
 
   chatserver1:
     image: chatserver:latest
-    container_name: chatserver1
     profiles: ["chatserver1", "chatservers"]
     build:
       dockerfile: Dockerfile.chatserver
-    ports: ["2424:2424", "2425:2425"]
+    # ports: ["2424:2424", "2425:2425"]
     environment:
       - CS_PORT=2424
       - CS_PEER_PORT=2425
       - CS_ADDRSERVER_PORT=49802
       - ADDRESS_SERVER_IP=172.20.0.2
       - HOST_ADDRESS=172.20.0.10
+    deploy:
+      replicas: 2
     networks:
-      chat_network:
-        ipv4_address: 172.20.0.10
+    - chat_network
     # volumes:
     #   - ./chatlogs:/app/src/main/java/com/Logs
 
@@ -110,6 +110,7 @@ services:  # Defines the services (Docker containers) that will be run.
         ipv4_address: 172.20.0.11
     # volumes:
     #   - ./chatlogs:/app/src/main/java/com/Logs
+
 
   # client:
   #   image: client:latest

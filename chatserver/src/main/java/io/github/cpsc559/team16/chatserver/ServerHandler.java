@@ -236,7 +236,13 @@ class ServerHandler implements ConnectionHandler {
                     msg.getSender(),
                     msg.getReceiver(),
                     msg.getTimeSent()));
-
+            // Update vector timestamp from peer message
+            synchronized (ChatServer.getVectorTimestamp()) {
+                if (msg.getVectorTimestamp() != null) {
+                    ChatServer.getVectorTimestamp().update(msg.getVectorTimestamp());
+                }
+                ChatServer.getVectorTimestamp().increment(ChatServer.getID());
+            }
             ServerServerMessage reply;
 
             try {
@@ -256,6 +262,7 @@ class ServerHandler implements ConnectionHandler {
                     }
 
                     reply = getChatLogContents(msg.getSender());
+                    reply.setVectorTimestamp(ChatServer.getVectorTimestamp());
                     printPrettyJson(reply.toJson());
                     WriteUtils.enqueueResponse(ctx, key, reply.toJson() + "\n");
                     key.selector().wakeup(); // ensure selector wakes to handle OP_WRITE
@@ -278,7 +285,7 @@ class ServerHandler implements ConnectionHandler {
                             String.valueOf(ChatServer.getID()),
                             msg.getSender(),
                             "PONG",
-                            "");
+                            "", ChatServer.getVectorTimestamp());
                     WriteUtils.enqueueResponse(ctx, key, pong.toJson() + "\n");
                     key.selector().wakeup();
                     return;

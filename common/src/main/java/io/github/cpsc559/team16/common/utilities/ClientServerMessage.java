@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.common.utilities;
 
 public class ClientServerMessage extends BaseMessage {
+    private VectorTimestamp vectorTimestamp;
     private int id;
     private String content;
     private String command;
@@ -10,12 +11,26 @@ public class ClientServerMessage extends BaseMessage {
         this.content = "";
         this.command = "CHAT";
     }
-
     public ClientServerMessage(String sender, String receiver, int id, String content) {
         super(sender, receiver);
         this.id = id;
         this.content = (content != null) ? content : "";
         this.command = "CHAT";
+    }
+
+    public ClientServerMessage(String sender, String receiver, int id, String content,VectorTimestamp vectorTimestamp) {
+        super(sender, receiver);
+        this.id = id;
+        this.content = (content != null) ? content : "";
+        this.command = "CHAT";
+        this.vectorTimestamp = vectorTimestamp;
+    }
+    public VectorTimestamp getVectorTimestamp() {
+        return vectorTimestamp;
+    }
+
+    public void setVectorTimestamp(VectorTimestamp vectorTimestamp) {
+        this.vectorTimestamp = vectorTimestamp;
     }
 
     public int getId() {

@@ -11,9 +11,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
+import io.github.cpsc559.team16.common.utilities.VectorTimestamp;
 
 /**
  * Handles all incoming messages from client connections.
@@ -291,23 +293,28 @@ class ClientHandler implements ConnectionHandler {
      * @param selector the server's selector holding all connected channels
      */
 
-    public static void sendToAllClients(ClientServerMessage msg, Selector selector) {
-        for (SelectionKey key : selector.keys()) {
-            if (!key.isValid() || !(key.channel() instanceof SocketChannel))
-                continue;
+public static void sendToAllClients(ClientServerMessage msg, Selector selector) {
+    VectorTimestamp vectorTimestamp = ChatServer.getVectorTimestamp();
+    vectorTimestamp.increment(ChatServer.getID()); // Increment the global vector timestamp
 
-            ConnectionContext ctx = (ConnectionContext) key.attachment();
-            if (ctx.type == ChatServer.ConnectionType.CLIENT) {
-                try {
-                    WriteUtils.enqueueResponse(ctx, key, msg.toJson() + "\n");
-                    selector.wakeup();
-                    debug(DEBUG_LOW_LEVEL, "Sent message to client: " + ctx.username);
-                } catch (Exception e) {
-                    System.err.println("Failed to send to client: " + e.getMessage());
-                }
+    for (SelectionKey key : selector.keys()) {
+        if (!key.isValid() || !(key.channel() instanceof SocketChannel))
+            continue;
+
+        ConnectionContext ctx = (ConnectionContext) key.attachment();
+        if (ctx.type == ChatServer.ConnectionType.CLIENT) {
+            try {
+                // Include the updated vector timestamp in the message
+                msg.setVectorTimestamp(vectorTimestamp);
+                WriteUtils.enqueueResponse(ctx, key, msg.toJson() + "\n");
+                selector.wakeup();
+                debug(DEBUG_LOW_LEVEL, "Sent message to client: " + ctx.username + " with vector timestamp: " + vectorTimestamp);
+            } catch (Exception e) {
+                System.err.println("Failed to send to client: " + e.getMessage());
             }
         }
     }
+}
 
     /**
      * Removes a username from the set of registered clients when they disconnect.
@@ -392,21 +399,40 @@ class ClientHandler implements ConnectionHandler {
      * @param n   the number of closest peers to send the message to
      */
     public static void gossipToClosestPeers(ClientServerMessage msg, int n) {
+        // Increment ONCE for the gossip event
+        synchronized (ChatServer.getVectorTimestamp()) {
+            VectorTimestamp vectorTimestamp = ChatServer.getVectorTimestamp();
+            
+            // If original message has timestamp, update our clock first
+            if (msg.getVectorTimestamp() != null) {
+                vectorTimestamp.update(msg.getVectorTimestamp());
+            }
+            
+            // Single increment for the gossip event
+            vectorTimestamp.increment(ChatServer.getID());
+            
+            // Create a copy of the timestamp for the message
+            VectorTimestamp msgTimestamp = new VectorTimestamp();
+            msgTimestamp.update(vectorTimestamp);
+            msg.setVectorTimestamp(msgTimestamp);
+        }
+    
         Selector selector = ChatServer.getSelector();
         Map<Integer, ConnectionContext> peers = ChatServer.getConnectedPeers();
         List<Integer> targets = getValidatedClosestPeers(n);
-
+    
         debug(DEBUG_NORMAL, "[GOSSIP] Attempting to gossip to " + targets.size() + " closest peers.");
         int sent = 0;
-
+    
         for (int pid : targets) {
             ConnectionContext ctx = peers.get(pid);
             if (ctx == null || ctx.type != ChatServer.ConnectionType.SERVER)
                 continue;
-
+    
             for (SelectionKey key : selector.keys()) {
                 if (key.attachment() == ctx && key.channel().isOpen()) {
                     try {
+                        // Include the updated vector timestamp in the message
                         WriteUtils.enqueueResponse(ctx, key, msg.toJson() + "\n");
                         selector.wakeup();
                         debug(DEBUG_LOW_LEVEL, "[GOSSIP] Sent message to peer PID=" + pid);
@@ -418,7 +444,7 @@ class ClientHandler implements ConnectionHandler {
                 }
             }
         }
-
+    
         debug(DEBUG_BASIC, "[GOSSIP] Sent to " + sent + " peers out of " + n + " requested.");
     }
 
