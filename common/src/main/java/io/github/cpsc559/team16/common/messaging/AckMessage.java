@@ -31,7 +31,7 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
      * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
     public AckMessage(String objectType, long senderPID, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.ACK, objectType, senderPID, senderRole, targetRole, payload);
+        super(MessageTypes.ACK, objectType, senderPID, senderRole, targetRole, payload, );
     }
 
     /**

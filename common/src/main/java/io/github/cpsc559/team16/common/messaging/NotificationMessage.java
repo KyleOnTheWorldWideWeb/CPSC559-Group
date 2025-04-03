@@ -36,7 +36,7 @@ public class NotificationMessage<T> extends BaseAddrServerMessage<T> {
      * @param payload The data being sent in the payload.
      */
     private NotificationMessage(String objectType, long senderPID, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.NOTIFICATION, objectType, senderPID, senderRole, targetRole, payload);
+        super(MessageTypes.NOTIFICATION, objectType, senderPID, senderRole, targetRole, payload, );
     }
 
 

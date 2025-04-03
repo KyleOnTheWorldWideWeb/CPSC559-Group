@@ -99,6 +99,18 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher  
         }
     }
 
+
+    // Example: In handleAck (or a new case for replication acknowledgments), delegate to replicationManager.
+    private void handleReplicationAck(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> ackMessage) {
+        // Assume ackMessage contains a unique event ID and the sender's PID.
+        Long eventId = ackMessage.safeCastPayload(Long.class); // adjust extraction as needed
+        Long replicaPID = ackMessage.getSenderPID();
+        NIOMessageChannel senderChannel = peerManager.processAck(eventId, replicaPID);
+        if (senderChannel != null) {
+            this.server.getCleanupManager().cleanupPersistentConnection(senderChannel.getSocketChannel(), true);
+        }
+    }
+
     /**
      * <NOTE> Can probably remove the channel parameters, but I'm keeping them for now in case an ACK needs to trigger an action.</NOTE>
      */
@@ -110,6 +122,7 @@ public class AddrServerReadDispatcher implements NetworkManager.ReadDispatcher  
                 // A Registration ACK is always sent with the pid as a string for the process as the payload.
                 Long assignedPID = ackMessage.safeCastPayload(Long.class);
                 server.getConfig().setPID(assignedPID);
+                server.getMessageGenerator().setPID(assignedPID);
                 // This nioChannel was used to send the REGISTER message that triggered this ACK.
                 // We didn't know the PRIMARY AddressingServer PID when making that initial connection -> Set it now
                 nioChannel.setServerPID(ackMessage.getSenderPID());

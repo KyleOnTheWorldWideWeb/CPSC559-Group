@@ -46,7 +46,7 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      * </p>
      */
     private RegisterMessage(String objectType, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.REGISTER, objectType, DEFAULT_PID, senderRole, targetRole, payload);
+        super(0, MessageTypes.REGISTER, objectType, DEFAULT_PID, senderRole, targetRole, payload);
     }
 
     /**

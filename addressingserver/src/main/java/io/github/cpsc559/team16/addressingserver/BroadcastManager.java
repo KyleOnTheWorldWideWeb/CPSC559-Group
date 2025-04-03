@@ -45,6 +45,40 @@ public class BroadcastManager {
      * <p>Updating processes throughout the distributed network is necessary to maintain consistency.</p>
      *
      * @param primaryPID the PID of the primary server issuing the update.
+     * @param record     the {@link AddrServerRecord} to broadcast.
+     */
+    public void broadcastAddrServerRecordToCS(Long primaryPID, AddrServerRecord record) {
+        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToCS(primaryPID, record);
+        broadcastServerRecord(message, this.chatServerChannels);
+    }
+
+    /**
+     * Broadcasts a single {@link ChatServerRecord} to all connected {@code ChatServer}s.
+     * <p>
+     * This method is used by the PRIMARY {@code AddressingServer} to inform chat servers
+     * about a new or updated {@code ChatServerRecord}. This ensures the distributed state
+     * remains consistent across all registered nodes.
+     * </p>
+     *
+     * @param primaryPID the PID of the primary server issuing the update.
+     * @param record     the {@link ChatServerRecord} to broadcast.
+     */
+    public void broadcastChatServerRecordToCS(Long primaryPID, ChatServerRecord record) {
+        UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
+        broadcastServerRecord(message, this.chatServerChannels);
+    }
+
+    /**
+     * Broadcasts a single {@link AddrServerRecord} to all connected {@code ChatServer}s.
+     * <p>
+     * This method is used by the PRIMARY {@code AddressingServer} to inform chat servers
+     * of changes to the network topology, such as the registration or update of a replica.
+     * The update is packaged as an {@code UpdateMessage} with objectType {@code "AddrServerInfo"},
+     * and is sent over all currently active {@code NIOMessageChannel}s.
+     * </p>
+     * <p>Updating processes throughout the distributed network is necessary to maintain consistency.</p>
+     *
+     * @param primaryPID the PID of the primary server issuing the update.
      * @param record        the {@link AddrServerRecord} containing the update information.
      */
     public void broadcastAddrServerRecord(Long primaryPID, AddrServerRecord record) {
@@ -96,6 +130,14 @@ public class BroadcastManager {
         } catch (JsonProcessingException e) {
             System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
         }
+    }
+
+    /**
+     *
+     * @param message The server record that needs to be sent to all of the chat servers.
+     */
+    public <T> void broadcastServerRecordToChatServers(UpdateMessage<T> message) {
+        this.broadcastServerRecord(message, this.chatServerChannels);
     }
 
 

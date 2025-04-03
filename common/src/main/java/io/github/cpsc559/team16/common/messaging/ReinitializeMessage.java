@@ -22,7 +22,7 @@ public class ReinitializeMessage extends BaseAddrServerMessage<Long> {
      * @param failsafePID The process ID of the target process (failsafe check).
      */
     private ReinitializeMessage(long senderPID, String senderRole, String targetRole, long failsafePID) {
-        super(MessageTypes.REINITIALIZE, OBJECT_TYPE, senderPID, senderRole, targetRole, failsafePID);
+        super(0, MessageTypes.REINITIALIZE, OBJECT_TYPE, senderPID, senderRole, targetRole, failsafePID);
     }
 
     /**

@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.messaging.MessageIDGenerator;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
@@ -121,6 +122,11 @@ public class AddressingServer {
         return cleanupManager;
     }
 
+    private final MessageIDGenerator genMID;
+
+    public MessageIDGenerator getMessageGenerator() {
+        return this.genMID;
+    }
 
     /**
      * The number of servers that have been registered cummulatively since network initialization - i.e. PID's are not recycled or reassigned.
@@ -174,6 +180,7 @@ public class AddressingServer {
         }
         this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
         this.pidCounter = 0L;
+        this.genMID = new MessageIDGenerator();
     }
 
     /**
@@ -190,6 +197,7 @@ public class AddressingServer {
     public void registerPrimaryAddrServer() {
         Long pid = generatePID();
         config.setPID(pid); // Assign a process id to the primary
+        genMID.setPID(pid); // Set the PID in the message ID generator (it needs this to generate unique network message ID's)
         System.out.println("PRIMARY AddressingServer .env host address: " + config.getHostAddress());
         try {
             System.out.println("PRIMARY AddressingServer runtime host address: " + InetAddress.getLocalHost().getHostAddress());

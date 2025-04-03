@@ -12,7 +12,7 @@ public class ServerFailureMessage<T> extends BaseAddrServerMessage<T> {
      * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
     public ServerFailureMessage(String objectType, long senderPID, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.SERVERFAILURE, objectType, senderPID, senderRole, targetRole, payload);
+        super(MessageTypes.SERVERFAILURE, objectType, senderPID, senderRole, targetRole, payload, );
     }
 
     /**

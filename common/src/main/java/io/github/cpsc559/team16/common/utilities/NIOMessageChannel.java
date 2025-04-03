@@ -162,6 +162,11 @@ public class NIOMessageChannel {
      * <p>
      * This method accumulates data until a full message (ending in `\n`) is received.
      * </p>
+     * <p>If data exists on the channel, it will continue looping until
+     * it exhausts that data, or retrieves a message whichever comes first.
+     * A message here meaning: a sequence of characters ending with a newline `\n` character.
+     * <strong>NOTE:</strong>If you read from an empty channel (before the message arrives) it will just return null.
+     * This does not operate in a "blocking" manner like regular Sockets</p>
      *
      * @return The received message as a string, or {@code null} if no complete message is available.
      * @throws IOException If an I/O error occurs.

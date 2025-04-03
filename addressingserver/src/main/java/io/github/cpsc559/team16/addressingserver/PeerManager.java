@@ -12,7 +12,9 @@ import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Manages peer registration, update propagation, and persistent communication
@@ -30,6 +32,9 @@ public class PeerManager {
      * and wrapped in an {@code NIOMessageChannel} for structured messaging.
      */
     private final Map<SocketChannel, NIOMessageChannel> peerChannels;
+
+    // A map of event IDs to PendingEvent objects.
+    private final ConcurrentMap<Long, PendingMessage<?>> pendingMessages = new ConcurrentHashMap<>();
 
 
 
@@ -323,9 +328,6 @@ public class PeerManager {
     }
 
 
-
-
-
     /**
      * Broadcasts a message to all peer replicas in the {@code peerChannels}.
      * <p>
@@ -400,6 +402,53 @@ public class PeerManager {
         }
     }
 
+
+
+    // Add a "pending event" to the concurrent hashmap
+    public void addPendingMessage(Long messageID, PendingMessage message) {
+        pendingMessages.put(messageID, message);
+    }
+
+
+    /**
+     * Processes an acknowledgment from a replica for a previously broadcasted message.
+     *
+     * <p>This method tracks the receipt of an acknowledgment for a given message ID and replica PID.
+     * Once all expected replicas have acknowledged the message, it attempts to respond to the original
+     * requester via the stored {@link NIOMessageChannel}. If this final response fails due to an
+     * {@link IOException}, the channel used to communicate with the requester is returned so it can be
+     * cleaned up by the caller (e.g., closed or deregistered).
+     *
+     * @param messageID the ID of the message that was acknowledged
+     * @param replicaPID the process ID of the replica that sent the acknowledgment
+     * @return the {@link NIOMessageChannel} of the original requester if responding failed,
+     *         or {@code null} if no cleanup is needed
+     * @throws IOException if responding to the original requester throws an {@link IOException}
+     */
+    public NIOMessageChannel processAck(Long messageID, Long replicaPID) {
+        PendingMessage<?> message = pendingMessages.get(messageID);
+        if (message != null) {
+            message.removePendingReplica(replicaPID);
+            if (message.isComplete()) {
+                pendingMessages.remove(messageID);
+                try {
+                    message.respondToRequester();
+                } catch (IOException e) {
+                    return message.getRequestChannel(); // return the channel to the caller for cleanup
+                }
+            }
+        }
+        return null; // no cleanup needed
+    }
+
+
+
+    /**
+     * This is a hell of an obtuse way of finding out an addressing servers role, but if you need it,
+     * here you go.
+     * @param pid The process id of the addressing server you want to know the role of.
+     * @return An {@code ServerRole} String - REPLICA or PRIMARY
+     */
     public String getServerRole(Long pid) {
         return this.registry.getRecords().get(pid).getRole().toString();
     }
@@ -410,6 +459,28 @@ public class PeerManager {
         }
         return 0L;
     }
+
+    /**
+     * Returns a set of all connected peer process IDs, excluding the given calling process ID.
+     * <p>
+     * This method is useful when the caller wants to get all *other* peer PIDs in the network,
+     * for example when broadcasting to all replicas except itself.
+     * </p>
+     *
+     * @param callingPID the PID of the current process making the request (to be excluded).
+     * @return a {@code Set<Long>} containing the PIDs of all connected peers except the caller.
+     */
+    public Set<Long> getAllPeerPIDs(Long callingPID) {
+        Set<Long> peerPIDs = ConcurrentHashMap.newKeySet();
+        for (NIOMessageChannel channel : peerChannels.values()) {
+            Long pid = channel.getServerPID();
+            if (pid != null && !pid.equals(callingPID)) {
+                peerPIDs.add(pid);
+            }
+        }
+        return peerPIDs;
+    }
+
 
     /**
      * Updates or inserts a record into the shared AddrServer registry.
