@@ -5,110 +5,178 @@ import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
-public class PendingEvent<T> {
-    public final BaseAddrServerMessage<T> message;
-    public final Set<Long> pendingReplicaPIDs;
-    public final NIOMessageChannel requestChannel;
-    private final BroadcastManager broadcastManager;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+/**
+ * A {@code PendingEvent} represents a coordination checkpoint in the {@code AddressingServer} system.
+ * <p>
+ * It is used to track the delivery of a message requiring acknowledgment (ACK) from multiple recipients,
+ * and to delay a response to the original requester until all acknowledgments are received.
+ * </p>
+ *
+ * <p>
+ * The same message is typically broadcast to all recipients, and this event stores their associated
+ * {@link NIOMessageChannel} instances to allow for retry operations. The event can be retried a fixed
+ * number of times if acknowledgments are not received.
+ * </p>
+ *
+ * <p>
+ * Once all recipients have acknowledged the update, the {@link #respondToRequester()} method is called
+ * to deliver a deferred response message to the originator of the request and execute any registered
+ * {@link CompletionCallback}.
+ * </p>
+ */
+public class PendingEvent {
+
+    /** The message to send back to the original requester after all ACKs have been received. */
+    private final BaseAddrServerMessage<?> deferredResponseMessage;
+
+    /** The broadcast message that all recipients must acknowledge. */
+    private BaseAddrServerMessage<?> messageRequiringACK;
+
+
+    /** Map of remaining recipients expected to send an ACK, keyed by their PID. */
+    private Map<Long, NIOMessageChannel> pendingRecipients = new ConcurrentHashMap<>();
+
+    /** The original requester’s communication channel. */
+    private final NIOMessageChannel requestChannel;
+
+    /** The action to take once all ACKs have been received and a response has been sent. */
     private final CompletionCallback onComplete;
 
-    //  TODO - idea! add flag to PendingEvent and set it for any event that is a "retry". If that goes stale, deny the request
-    private final int iterationNumber;
+    /** The number of times this event has attempted delivery. */
+    private int numberOfIterations = 0;
 
-    private final long creationTime; // Timestamp of creation
+    /** The maximum number of times the message should be resent if ACKs are not received. */
+    private final int maxIterations;
 
-    // Constructor without broadcast manager
-    public PendingEvent(BaseAddrServerMessage<T> message, Set<Long> replicaPIDs,
-                        NIOMessageChannel requestChannel, CompletionCallback onComplete) {
-        this.message = message;
-        this.pendingReplicaPIDs = new CopyOnWriteArraySet<>(replicaPIDs);
+    /** The time this {@code PendingEvent} was created (used for timeout tracking). */
+    private final long creationTime;
+
+    /**
+     * Constructs a {@code PendingEvent} with a full set of parameters, including the original broadcast message.
+     *
+     * @param deferredResponseMessage the response to send once all ACKs are received
+     * @param recipients              the initial map of expected recipient PIDs to their channels
+     * @param messageRequiringACK     the message sent to all recipients
+     * @param requestChannel          the channel to reply to once the event is complete
+     * @param onComplete              an optional callback to invoke after response is sent
+     * @param maxIterations           the maximum number of retry attempts before failure
+     */
+    public PendingEvent(BaseAddrServerMessage<?> deferredResponseMessage,
+                        Map<Long, NIOMessageChannel> recipients,
+                        BaseAddrServerMessage<?> messageRequiringACK,
+                        NIOMessageChannel requestChannel,
+                        CompletionCallback onComplete,
+                        int maxIterations) {
+        this.deferredResponseMessage = deferredResponseMessage;
+        this.pendingRecipients = recipients;
+        this.messageRequiringACK = messageRequiringACK;
         this.requestChannel = requestChannel;
-        this.broadcastManager = null;
         this.onComplete = onComplete;
-        this.creationTime = System.currentTimeMillis(); // Capture time of creation
-        this.iterationNumber = 0;
+        this.creationTime = System.currentTimeMillis();
+        this.maxIterations = maxIterations;
     }
 
-    // Overloaded constructor with broadcast manager
-    public PendingEvent(BaseAddrServerMessage<T> message, Set<Long> replicaPIDs,
-                        NIOMessageChannel requestChannel, BroadcastManager broadcastManager, short iterationNumber, CompletionCallback onComplete) {
-        this.message = message;
-        this.pendingReplicaPIDs = new CopyOnWriteArraySet<>(replicaPIDs);
+    /**
+     * Constructs a {@code PendingEvent} without requiring a broadcast message.
+     *
+     * @param deferredResponseMessage the response to send once all ACKs are received
+     * @param recipients              the initial map of expected recipient PIDs to their channels
+     * @param maxIterations           the maximum number of retry attempts before failure
+     * @param requestChannel          the channel to reply to once the event is complete
+     * @param onComplete              an optional callback to invoke after response is sent
+     */
+    public PendingEvent(BaseAddrServerMessage<?> deferredResponseMessage,
+                        Map<Long, NIOMessageChannel> recipients,
+                        int maxIterations,
+                        NIOMessageChannel requestChannel,
+                        CompletionCallback onComplete) {
+        this.deferredResponseMessage = deferredResponseMessage;
+        this.pendingRecipients = recipients;
         this.requestChannel = requestChannel;
-        this.broadcastManager = broadcastManager;
         this.onComplete = onComplete;
-        this.creationTime = System.currentTimeMillis(); // Capture time of creation
-        this.iterationNumber = iterationNumber;
+        this.creationTime = System.currentTimeMillis();
+        this.maxIterations = maxIterations;
     }
 
+    /**
+     * Sends the final deferred response message to the requester and runs any follow-up actions.
+     *
+     * @throws IOException if sending the message fails
+     */
     public void respondToRequester() throws IOException {
         try {
-            // If the broadcastManager was passed in, it's because we want to broadcast
-            String json = message.toJson();
+            String json = deferredResponseMessage.toJson();
             requestChannel.sendMessage(json);
-            /*
-             * This triggers an event that we declared earlier: consisting of any actions that needed to happen
-             * after replicas synchronized their states so that a response could be given to the requester.
-             */
             if (onComplete != null) {
                 onComplete.run();
             }
-
         } catch (JsonProcessingException j) {
-            System.err.println("Failed to serialize PendingEvent: " + this.message);
+            System.err.println("Failed to serialize PendingEvent: " + this.deferredResponseMessage);
         } catch (IOException e) {
             System.err.println("Failed to respond to requester with PID: " + requestChannel.getServerPID());
             throw e;
         }
     }
-//
-//    private void broadcast() {
-//        if (broadcastManager == null) return;
-//
-//        switch (message.getObjectType()) {
-//            case ObjectTypes.CHAT_SERVER_RECORD -> {
-//                if (message instanceof UpdateMessage<?> updateMsg &&
-//                        message.getPayload() instanceof ChatServerRecord) {
-//                    @SuppressWarnings("unchecked")
-//                    UpdateMessage<ChatServerRecord> casted = (UpdateMessage<ChatServerRecord>) updateMsg;
-//                    broadcastManager.broadcastServerRecordToChatServers(casted);
-//                }
-//            }
-//            case ObjectTypes.ADDR_SERVER_RECORD -> {
-//                if (message instanceof UpdateMessage<?> updateMsg &&
-//                        message.getPayload() instanceof AddrServerRecord) {
-//                    @SuppressWarnings("unchecked")
-//                    UpdateMessage<AddrServerRecord> casted = (UpdateMessage<AddrServerRecord>) updateMsg;
-//                    broadcastManager.broadcastServerRecordToChatServers(casted);
-//                }
-//            }
-//            default -> System.err.println("Unrecognized message object type: " + message.getObjectType());
-//        }
-//    }
-//
-//
-//    private boolean shouldBroadcast() {
-//        // Add your logic here for whether this message type warrants a broadcast
-//        return message.getMsgType() == MessageTypes.UPDATE &&
-//                message.getObjectType().equals("ChatServerRecord");
-//    }
 
+    /** @return the channel used to reply to the original request initiator */
     public NIOMessageChannel getRequestChannel() {
         return requestChannel;
     }
 
+    /** @return the creation timestamp (ms since epoch) of this event */
     public long getCreationTime() {
         return creationTime;
     }
 
-    public void removePendingReplica(Long replicaPID) {
-        pendingReplicaPIDs.remove(replicaPID);
+    /**
+     * Updates the broadcast message being tracked for ACKs (useful in retry scenarios).
+     *
+     * @param msg the message to be sent again to non-responsive recipients
+     */
+    public void setMessageRequiringACK(BaseAddrServerMessage<?> msg) {
+        this.messageRequiringACK = msg;
     }
 
+    /** @return the current retry attempt count for this event */
+    public int getIterationNumber() {
+        return numberOfIterations;
+    }
+
+    /**
+     * Removes a recipient from the pending list once its ACK has been received.
+     *
+     * @param pid the PID of the recipient to remove
+     */
+    public void removePendingRecipient(Long pid) {
+        pendingRecipients.remove(pid);
+    }
+
+    /**
+     * Checks whether all expected recipients have acknowledged the broadcast.
+     *
+     * @return {@code true} if all recipients have ACKed, {@code false} otherwise
+     */
     public boolean isComplete() {
-        return pendingReplicaPIDs.isEmpty();
+        return pendingRecipients.isEmpty();
+    }
+
+    public Map<Long, NIOMessageChannel> getPendingRecipients() {
+        return pendingRecipients;
+    }
+
+    /**
+     * Increments the retry counter and checks whether another attempt should be made.
+     *
+     * @return {@code true} if the event is still within the retry limit, {@code false} if retries are exhausted
+     */
+    public boolean incrementNumIterations() {
+        return (++this.numberOfIterations <= maxIterations);
+    }
+
+    public void removeRecipientChannel(Long pid) {
+        this.pendingRecipients.remove(pid);
     }
 }
 

@@ -3,6 +3,8 @@ package io.github.cpsc559.team16.addressingserver;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
@@ -12,7 +14,6 @@ import io.github.cpsc559.team16.common.messaging.*;
 
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-import io.github.cpsc559.team16.common.utilities.NetworkManager;
 
 /**
  * Handles read events from registered {@code SocketChannel}'s and routes them based on the server's role.
@@ -170,7 +171,7 @@ public class AddrServerReadDispatcher {
                 if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
                     System.out.println("Client directed to an active host.");
                     Long pid = this.getPID();
-                    this.broadcastManager.broadcastChatServerRecord(pid, updatedRecord); // Broadcast the updated (client count) record to all servers.
+                    this.broadcastManager.broadcastChatServerRecordToCS(pid, updatedRecord); // Broadcast the updated (client count) record to all servers.
                     this.server.getChatServerRegistry().debugPrintServer(updatedRecord);
                 } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
             }
@@ -186,7 +187,7 @@ public class AddrServerReadDispatcher {
                         this.server.generatePID(), pid,
                         registerMessage.safeCastPayload(ChatServerRecord.class)
                 );
-                this.broadcastManager.broadcastChatServerRecord(pid, record); // Broadcast the record to all servers.
+                this.broadcastManager.broadcastChatServerRecordToCS(pid, record); // Broadcast the record to all servers.
                 this.server.getChatServerRegistry().debugPrintAllServers();
             }
             case Roles.REPLICA -> {
@@ -195,54 +196,30 @@ public class AddrServerReadDispatcher {
                 Long primaryPID = this.getPID();
                 Long newPID = this.server.generatePID();
                 // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
-                AddrServerRecord record = this.peerManager.updatePeerRecord(
-                        channel,
-                        registerMessage.safeCastPayload(AddrServerRecord.class),
-                        newPID
-                );
-
+                AddrServerRecord record = this.peerManager.updateServerRecord(channel, registerMessage.safeCastPayload(AddrServerRecord.class), newPID);
                 // Guard clause - if no peers exist, we don't need to synchronize state with anyone but ourselves and any Chat Servers.
                 if (server.getAddrServerRegistry().getRecords().size() == 1) { // If there is only 1 record, then this registration is the FIRST request.
-                        System.out.println("Registering the first replica ever!");
-                        this.registerFirstReplica(primaryPID, newPID, channel, nioChannel, record);
+                        System.out.println("No active Addressing Server Replica's exist on the network - registering the first.");
+                        this.server.registerFirstReplicaServer(primaryPID, newPID, channel, nioChannel, record);
                         return;
                 } // Else there is at least one connected peer who IS registered.
 
-                // Get the a list of all NIOMessage channels for registered peers (non-zero PID)
-                Collection<NIOMessageChannel> registeredReplicaChannels = peerManager.getChannels().values()
-                        .stream()
-                        .filter(ch -> ch.getServerPID() != null && ch.getServerPID() != 0)
-                        .toList();
-                // Set the PID for the request channel to avoid errors when closing connections.
-                // Set the NIOChannel PID before continuing any of the response to the request
+                // Get the list of all NIOMessage channels for registered peers (non-zero PID)
+                Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
+
+                // Set the NIOChannel PID before continuing any of the response to the request (to avoid errors when closing connections).
                 nioChannel.setServerPID(newPID);
                 // DEBUG
                 System.out.println("At least one registered replica exists.");
 
                 // Create unique message ID that will be used to track ACK messages as well as the pending event.
                 long messageID = genMID.nextID();
-                // TODO - Create method in peerManager that handles all of this and returns the pending event
-                //  That way I can just declare the Completion callback declarations here without all the other crap
-                PendingEvent<Long> pendingEvent = new PendingEvent<>(
-                        AckMessage.replicaRegistered(primaryPID, newPID),
-                        this.server.getAddrServerRegistry().getAllReplicaPIDs(),
-                        nioChannel,
-                        () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
-                            // All replicas have successfully replicated the update. Update state locally and continue with response.
-                            this.peerManager.registerPeer(channel, nioChannel, record);
-                            this.server.getAddrServerRegistry().debugPrintAllServers();
-                            // An ACK containing the PID for the newly registered replica will already have been sent by the pendingEvent (see above).
-                            // Once all ACKs received, send all the server records to the new replica
-                            this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
-                                    server.getChatServerRegistry().getRecords(),
-                                    server.getAddrServerRegistry().getRecords());
-                            this.broadcastManager.broadcastAddrServerRecordToCS(primaryPID, record);
-                        }
-                );
+                PendingEvent pendingEvent = server.createReplicaRegistrationEvent(primaryPID, newPID, channel, nioChannel,
+                        record, replicaChannelMap);
                 // Add this to the list of pending events. The message ID used for replication messages is the key.
                 this.peerManager.addPendingEvent(messageID, pendingEvent);
                 // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.
-                broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, registeredReplicaChannels);
+                broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, pendingEvent);
             }
             default -> throw new IllegalArgumentException("Unrecognized sender role for REGISTER: " + registerMessage.getSenderRole());
         }
@@ -257,7 +234,7 @@ public class AddrServerReadDispatcher {
                         Long csPid = updateMessage.getSenderPID();
                         try {
                             ChatServerRecord updatedRecord = this.server.getChatServerRegistry().updateClientCount(newClientCount, csPid);
-                            broadcastManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
+                            broadcastManager.broadcastChatServerRecordToCS(this.getPID(), updatedRecord);
 //                            peerManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
 //                            chatServerManager.broadcastChatServerRecord(this.getPID(), updatedRecord);
                         } catch (NullPointerException e) {
@@ -398,19 +375,5 @@ public class AddrServerReadDispatcher {
     }
 
 
-
-    private void registerFirstReplica(long primaryPID, long newPID, SocketChannel channel, NIOMessageChannel nioChannel, AddrServerRecord record) {
-        try {
-            this.peerManager.registerPeerSendACK(channel, nioChannel, primaryPID, newPID, record);
-            this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
-                    server.getChatServerRegistry().getRecords(),
-                    server.getAddrServerRegistry().getRecords());
-            this.broadcastManager.broadcastAddrServerRecordToCS(primaryPID, record);
-            this.server.getAddrServerRegistry().debugPrintAllServers();
-        } catch (IOException ioe) {
-            System.err.printf("IOException triggered while registering PID: %d - triggering connection cleanup.%n", newPID);
-            cleanupManager.cleanupPersistentConnection(channel, true);
-        }
-    }
 
 }

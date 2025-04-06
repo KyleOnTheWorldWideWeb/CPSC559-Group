@@ -13,7 +13,6 @@ import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -34,9 +33,83 @@ public class PeerManager {
      */
     private final Map<SocketChannel, NIOMessageChannel> peerChannels;
 
-    // A map of event IDs to PendingEvent objects.
-    private final ConcurrentMap<Long, PendingEvent<?>> pendingEvents = new ConcurrentHashMap<>();
+    /**
+     * Returns a HashMap of SocketChannel and NIOChannel for all the
+     * current addressing server connections.
+     *
+     * @return a map of {@code SocketChannel} to {@code NIOMessageChannel} for peer tracking.
+     */
+    public Map<SocketChannel, NIOMessageChannel> getChannels() {
+        return this.peerChannels;
+    }
 
+    /**
+     * Returns all connected replica channels that have been assigned a non-zero PID.
+     *
+     * @return a collection of active {@link NIOMessageChannel}s linked to registered replicas.
+     */
+    public Collection<NIOMessageChannel> getRegisteredNIOChannels() {
+        return peerChannels.values()
+                .stream()
+                .filter(ch -> ch.getServerPID() != null && ch.getServerPID() != 0)
+                .toList();
+    }
+
+    /**
+     * Returns a concurrent map of all connected replica channels that have been assigned a non-zero PID.
+     * <p>
+     * The map is keyed by the replica's PID, with values being their corresponding {@link NIOMessageChannel}.
+     * Unregistered channels (PID == 0 or null) are excluded.
+     * </p>
+     *
+     * @return a {@link ConcurrentHashMap} of replica PIDs to active {@link NIOMessageChannel}s.
+     */
+    public ConcurrentHashMap<Long, NIOMessageChannel> getRegisteredReplicaChannelMap() {
+        ConcurrentHashMap<Long, NIOMessageChannel> registered = new ConcurrentHashMap<>();
+        for (NIOMessageChannel ch : peerChannels.values()) {
+            Long pid = ch.getServerPID();
+            if (pid != null && pid != 0) {
+                registered.put(pid, ch);
+            }
+        }
+        return registered;
+    }
+
+
+
+    /**
+     * Checks whether a replica with the specified {@code pid} is currently registered and connected.
+     * <p>
+     * This method iterates through all active {@link NIOMessageChannel}s in the peer channel map
+     * and returns {@code true} if any connected replica reports a non-null, matching PID.
+     * </p>
+     *
+     * @param pid the process ID to check for an existing registered replica connection
+     * @return {@code true} if a connected replica with the specified PID is found; {@code false} otherwise
+     */
+    public Boolean isRegistered (Long pid) {
+        for (NIOMessageChannel channel: peerChannels.values()) {
+            Long nioPID = channel.getServerPID();
+            if (nioPID != null) {
+                if (channel.getServerPID().equals(pid)) return true;
+            }
+        }
+        return false;
+    }
+
+
+    /**
+     * A thread-safe map of message or event IDs to their corresponding {@link PendingEvent} instances.
+     * <p>
+     * Each entry represents an ongoing network event (e.g., a registration or broadcast operation)
+     * that requires acknowledgments from one or more remote processes before completion.
+     * </p><p>
+     * This structure allows the system to track which events are still waiting for ACKs, trigger
+     * associated actions once all responses have been received, and perform retries or timeouts
+     * if necessary. Keys must be unique and are typically generated using the {@link MessageIDGenerator}.
+     * </p>
+     */
+    private final ConcurrentMap<Long, PendingEvent> pendingEvents = new ConcurrentHashMap<>();
 
 
     /**
@@ -195,8 +268,22 @@ public class PeerManager {
         return record;
     }
 
-    public AddrServerRecord updatePeerRecord (SocketChannel socketChannel,
-                                              AddrServerRecord record, Long peerPID) throws IOException {
+    /**
+     * Updates the provided {@link AddrServerRecord} with runtime information from the given socket connection and PID.
+     * <p>
+     * This method is typically called during replica registration to ensure that the record accurately reflects
+     * the replica's actual host address and assigned PID. The host address is extracted directly from the
+     * {@link SocketChannel}'s remote address to avoid relying on potentially incorrect values sent by the remote process.
+     * </p>
+     *
+     * @param socketChannel the channel representing the remote replica's connection
+     * @param record        the {@link AddrServerRecord} instance provided by the replica
+     * @param peerPID       the process ID assigned to the replica by the primary
+     * @return the updated {@link AddrServerRecord} with corrected host address and assigned PID
+     * @throws IOException if the remote address cannot be resolved from the socket
+     */
+    public AddrServerRecord updateServerRecord(SocketChannel socketChannel,
+                                               AddrServerRecord record, Long peerPID) throws IOException {
         // Retrieve the remote process Host Address.
         InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
         String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
@@ -473,17 +560,17 @@ public class PeerManager {
      * cleaned up by the caller (e.g., closed or deregistered).
      *
      * @param messageID the ID of the message that was acknowledged
-     * @param replicaPID the process ID of the replica that sent the acknowledgment
+     * @param recipientPID the process ID of the replica that sent the acknowledgment
      * @return the {@link NIOMessageChannel} of the original requester if responding failed,
      *         or {@code null} if no cleanup is needed
      * @throws IOException if responding to the original requester throws an {@link IOException}
      */
-    public NIOMessageChannel processAck(Long messageID, Long replicaPID) {
-        PendingEvent<?> message = pendingEvents.get(messageID);
+    public NIOMessageChannel processAck(Long messageID, Long recipientPID) {
+        PendingEvent message = pendingEvents.get(messageID);
         if (message != null) {
             // DEBUG
-            System.out.println("ACK received from replica with PID: " + replicaPID);
-            message.removePendingReplica(replicaPID);
+            System.out.println("ACK received from network process with PID: " + recipientPID);
+            message.removePendingRecipient(recipientPID);
             if (message.isComplete()) {
                 pendingEvents.remove(messageID);
                 try {
@@ -549,12 +636,7 @@ public class PeerManager {
 //        return peerPIDs;
 //    }
 
-    public Collection<NIOMessageChannel> getRegisteredNIOChannels() {
-        return peerChannels.values()
-                .stream()
-                .filter(ch -> ch.getServerPID() != null && ch.getServerPID() != 0)
-                .toList();
-    }
+
 
 
 
@@ -572,24 +654,8 @@ public class PeerManager {
     }
 
 
-    public Boolean isRegistered (Long pid) {
-        for (NIOMessageChannel channel: peerChannels.values()) {
-            Long nioPID = channel.getServerPID();
-            if (nioPID != null) {
-                if (channel.getServerPID().equals(pid)) return true;
-            }
-        }
-        return false;
-    }
 
-    /**
-     * Returns a HashMap of SocketChannel and NIOChannel for all the
-     * current addressing server connections.
-     *
-     * @return a map of {@code SocketChannel} to {@code NIOMessageChannel} for peer tracking.
-     */
-    public Map<SocketChannel, NIOMessageChannel> getChannels() {
-        return this.peerChannels;
-    }
+
+
 
 }
