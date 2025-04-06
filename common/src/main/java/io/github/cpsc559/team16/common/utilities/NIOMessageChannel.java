@@ -41,14 +41,13 @@ public class NIOMessageChannel {
      */
     private final SocketChannel channel;
 
-    public Long getServerPID() {
-        return serverPID;
-    }
+
 
     /**
      * The unique identifier of the server associated with this channel.
      */
     private Long serverPID;
+
 
     /**
      * A {@link ByteBuffer} used as an intermediate storage buffer for network data.
@@ -78,11 +77,11 @@ public class NIOMessageChannel {
     public NIOMessageChannel(SocketChannel channel) {
         this.channel = channel;
         this.streamBuffer = ByteBuffer.allocate(1024);  // Adjustable buffer size
+
+        //this.serverPID = 0L;    // All network PID start at 1 - this replaces a null value to avoid null pointer exceptions
     }
 
-    public void setServerPID(Long pid) {
-        this.serverPID = pid;
-    }
+
 
     /**
      * Retrieves the {@code SocketChannel} being managed by this instance of
@@ -193,8 +192,6 @@ public class NIOMessageChannel {
     }
 
 
-
-
     /**
      * Closes the {@code SocketChannel} being managed by this instance of
      * {@link NIOMessageChannel}, terminating the persistent I/O connection
@@ -208,10 +205,18 @@ public class NIOMessageChannel {
      * {@code NIOMessageChannel} instance should be discarded to avoid unintended use
      * of a closed channel.
      * </p>
-     * @throws IOException If an error occurs while closing the channel.
      */
-    public void close() throws IOException {
-        channel.close();
+    public void closeSocketChannel() {
+        try {
+            channel.close();
+        } catch (IOException ignore) { } // Our goal is to close the channel. If there is an error -> it's closed.
+    }
+
+    public Long getServerPID() {
+        return serverPID;
+    }
+    public void setServerPID(Long pid) {
+        this.serverPID = pid;
     }
 
 }

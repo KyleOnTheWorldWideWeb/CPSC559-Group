@@ -203,14 +203,8 @@ public class AddrServerReadDispatcher {
 
                 // Guard clause - if no peers exist, we don't need to synchronize state with anyone but ourselves and any Chat Servers.
                 if (server.getAddrServerRegistry().getRecords().size() == 1) { // If there is only 1 record, then this registration is the FIRST request.
-                        // DEBUG
                         System.out.println("Registering the first replica ever!");
-                        this.peerManager.registerPeerSendACK(channel, nioChannel, primaryPID, newPID, record);
-                        this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
-                                server.getChatServerRegistry().getRecords(),
-                                server.getAddrServerRegistry().getRecords());
-                        this.broadcastManager.broadcastAddrServerRecordToCS(primaryPID, record);
-                        this.server.getAddrServerRegistry().debugPrintAllServers();
+                        this.registerFirstReplica(primaryPID, newPID, channel, nioChannel, record);
                         return;
                 } // Else there is at least one connected peer who IS registered.
 
@@ -220,10 +214,7 @@ public class AddrServerReadDispatcher {
                         .filter(ch -> ch.getServerPID() != null && ch.getServerPID() != 0)
                         .toList();
                 // Set the PID for the request channel to avoid errors when closing connections.
-                for (NIOMessageChannel p: registeredReplicaChannels) {
-                    System.out.println(p.getServerPID());
-                }
-
+                // Set the NIOChannel PID before continuing any of the response to the request
                 nioChannel.setServerPID(newPID);
                 // DEBUG
                 System.out.println("At least one registered replica exists.");
@@ -252,21 +243,6 @@ public class AddrServerReadDispatcher {
                 this.peerManager.addPendingEvent(messageID, pendingEvent);
                 // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.
                 broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, registeredReplicaChannels);
-                // Set the NIOChannel PID before continuing any of the response to the request
-
-
-                // Create the PendingMessage with a CompletionCallback
-
-//                this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
-//                        server.getChatServerRegistry().getRecords(),
-//                        server.getAddrServerRegistry().getRecords());
-//                AddrServerRecord record = this.peerManager.registerPeer(
-//                        channel, nioChannel,
-//                        this.server.generatePID(), pid,
-//                        registerMessage.safeCastPayload(AddrServerRecord.class)
-//                );
-                //this.broadcastManager.broadcastAddrServerRecord(primaryPID, record); // Broadcast the record to all servers.
-                //this.server.getAddrServerRegistry().debugPrintAllServers();
             }
             default -> throw new IllegalArgumentException("Unrecognized sender role for REGISTER: " + registerMessage.getSenderRole());
         }
@@ -421,5 +397,20 @@ public class AddrServerReadDispatcher {
         server.getLeaderElectionManager().processElectionMessage(channel, nioChannel, electionMessage);
     }
 
+
+
+    private void registerFirstReplica(long primaryPID, long newPID, SocketChannel channel, NIOMessageChannel nioChannel, AddrServerRecord record) {
+        try {
+            this.peerManager.registerPeerSendACK(channel, nioChannel, primaryPID, newPID, record);
+            this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
+                    server.getChatServerRegistry().getRecords(),
+                    server.getAddrServerRegistry().getRecords());
+            this.broadcastManager.broadcastAddrServerRecordToCS(primaryPID, record);
+            this.server.getAddrServerRegistry().debugPrintAllServers();
+        } catch (IOException ioe) {
+            System.err.printf("IOException triggered while registering PID: %d - triggering connection cleanup.%n", newPID);
+            cleanupManager.cleanupPersistentConnection(channel, true);
+        }
+    }
 
 }

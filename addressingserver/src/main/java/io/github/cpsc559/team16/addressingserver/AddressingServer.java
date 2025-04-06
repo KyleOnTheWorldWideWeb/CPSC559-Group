@@ -8,15 +8,56 @@ import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.messaging.MessageIDGenerator;
+import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 
 
 
 public class AddressingServer {
-     /**
+
+    /**
+     * Indicates whether the server has been instructed to restart. Typically used after an orphaned or failed
+     * AddressingServer has been instructed to terminate and reinitialize.
+     * <p>
+     * This flag is marked {@code volatile} to ensure visibility across threads. It can be
+     * safely updated by any thread (e.g. the {@code AddrServerReadDispatcher}) and read by the main thread
+     * to trigger a controlled in-process restart of the {@code AddressingServer}.
+     * </p>
+     * <p>
+     * When {@code true}, the main event loop exits and the server is re-instantiated as a new process.
+     * </p>
+     */
+    private volatile boolean restartRequested = false;
+
+    /**
+     * Sets the {@code restartRequested} flag to {@code true}.
+     * <p>
+     * This method is typically called when a shutdown or restart message is received from the network.
+     * It signals the {@code AddressingServer} to exit its current event loop and reinitialize as a new replica.
+     * </p>
+     */
+    public void requestRestart() {
+        this.restartRequested = true;
+    }
+
+    /**
+     * Checks whether the server has been flagged for restart.
+     *
+     * @return {@code true} if a restart has been requested, {@code false} otherwise.
+     */
+    public boolean isRestartRequested() {
+        return this.restartRequested;
+    }
+
+
+    /**
      * The network configuration for this {@code AddressingServer} process.
      */
     private final AddrServerConfig config;
+
+    public AddrServerConfig getConfig() {
+        return config;
+    }
 
     /**
      * Responsible for opening listener channels, managing the selector,
@@ -88,7 +129,9 @@ public class AddressingServer {
      */
     private final ClientManager clientManager;
 
-    public ClientManager getClientManager() { return clientManager;}
+    public ClientManager getClientManager() {
+        return clientManager;
+    }
 
     /**
      * The BroadcastManager is responsible for sending messages to all active channels.
@@ -171,17 +214,11 @@ public class AddressingServer {
     }
 
 
-    public AddrServerConfig getConfig() {
-        return config;
-    }
-
     /**
      * Constructs an AddressingServer with an {@code AddrServerConfig} object storing its network details.
      * <p>
      * This constructor initializes a new, empty address log to track registered chat servers.
      * </p>
-     *
-     *
      */
     public AddressingServer() {
         this.config = new AddrServerConfig();
@@ -213,15 +250,16 @@ public class AddressingServer {
     }
 
 
-
-    public void registerPrimaryAddrServer() {
+    public void registerPrimaryAddrServer() throws IOException {
         Long pid = generatePID();
         config.setPID(pid); // Assign a process id to the primary
         genMID.setPID(pid); // Set the PID in the message ID generator (it needs this to generate unique network message ID's)
         System.out.println("PRIMARY AddressingServer .env host address: " + config.getHostAddress());
         try {
             System.out.println("PRIMARY AddressingServer runtime host address: " + InetAddress.getLocalHost().getHostAddress());
-        } catch (Exception e) { System.err.println("Error reading host address: " + e.getMessage()); }
+        } catch (Exception e) {
+            System.err.println("Error reading host address: " + e.getMessage());
+        }
         addrServerRegistry.registerAddrServer(pid, config.getHostAddress(),
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort(), config.getRole());
     }
@@ -249,7 +287,7 @@ public class AddressingServer {
      * @see PeerManager#registerWithPrimary(String, int, int, int, int)
      * @see AddrServerNetworkManager#openPersistentChannel(SocketChannel)
      */
-    public void registerReplicaAddrServer() {
+    public void registerReplicaAddrServer() throws IOException {
         Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
                 System.getenv("HOST_ADDRESS"), 49801,
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
@@ -282,12 +320,25 @@ public class AddressingServer {
     }
 
     /**
+     * Close all connections in the {@link AddrServerNetworkManager}.
+     * Shut down the thread running the heartbeat pings in {@link PingManager}.
+     * <p>
+     * Throw a party with one candle! Play the cake song:
+     * </p>
+     * <p><a href="https://youtu.be/6ug6Bbc6diA?si=Empv4R9Wg6kdo1lD">"We do what we must, because we can"</a></p>
+     */
+    public void shutdown() {
+            networkManager.closeAllConnections();
+            pingManager.shutdown();
+    }
+
+
+    /**
      * Initializes the AddressingServer network access by binding all required NIO channels.
      * These are "listening channels" used solely to monitor incoming connections.
-     *<p>
+     * <p>
      * Starts the main event loop for this {@code AddressingServer} instance.
-     *</p>
-     *
+     * </p>
      */
     public void start() throws IOException {
         networkManager.openListenerChannels(config.getClientPort(),
@@ -298,8 +349,6 @@ public class AddressingServer {
         pingManager.shutdown();
     }
 
-
-
     public static void main(String[] args) {
         /* This timeout is necessary for proper output in the new terminal window..
          * ... without it, the initial output to console occurs before the terminal is open.
@@ -309,30 +358,99 @@ public class AddressingServer {
         } catch (Exception e) {
             System.err.println(e.getMessage());
         }
-        AddressingServer server = new AddressingServer();
-        String serverRole = System.getenv("AS_ROLE");
-        if (serverRole != null) {
-            if (serverRole.equals("PRIMARY")) {
-                System.out.println("AS_ROLE is set to: " + serverRole);
-                // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
-                server.registerPrimaryAddrServer(); // Puts the addressing server into the AddrServerRegistry
-            } else {
-                System.out.println("AS_ROLE is set to: " + serverRole);
-                // TODO - retrieve the address of the primary addressing server from the Domain A record
-                server.registerReplicaAddrServer();
-                // TODO - A thread(s) must be spun up for this method call.
-                //  Since this invocation causes an infinite loop, the main thread will get hung up.
-                //  And the Replica won't enter the main event loop and function as intended.
-                //server.getPingManager().run();
+
+        // Track whether this is the first time the loop has occurred.
+        boolean firstIteration = true;
+
+        while (true) {
+            try {
+                AddressingServer server = new AddressingServer();
+                String initialServerRole = System.getenv("AS_ROLE");
+                String currentServerRole = firstIteration ? initialServerRole : "REPLICA";
+
+                if (currentServerRole.equals(Roles.PRIMARY)) {
+                    System.out.println("Launching AddressingServer as PRIMARY");
+                    server.registerPrimaryAddrServer();
+                } else {
+                    System.out.println("Launching AddressingServer as REPLICA");
+                    // TODO - retrieve the address of the primary addressing server from the Domain A record
+                    server.registerReplicaAddrServer();
+                }
+//                // TODO - A thread(s) must be spun up for this method call.
+//                //  Since this invocation causes an infinite loop, the main thread will get hung up.
+//                //  And the Replica won't enter the main event loop and function as intended.
+//                //server.getPingManager().run();
+
+                try {
+                    server.start();         // blocks in main event loop of AddrServerNetworkManager
+                } catch (IOException e) {
+                    System.err.println("Server exited due to IOException: " + e.getMessage());
+                }
+
+                // If server didn’t request a restart and we are at this point -> exit the JVM
+                if (!server.isRestartRequested()) {
+                    System.out.println("Server exited normally. Shutting down.");
+                    break;
+                }
+
+                System.out.println("Restart requested. Reinitializing as REPLICA...");
+                server.shutdown();
+
+            } catch (IOException ioe) {
+                System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());
+                ioe.printStackTrace();
             }
+            firstIteration = false; // All restarts become replicas
+            try {
+                TimeUnit.MILLISECONDS.sleep(500); // brief pause before retry
+            } catch (InterruptedException ignored) {}
+
         }
-        try {
-            server.start();
-        } catch (IOException ioe) {
-            System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());
-            ioe.printStackTrace();
-        }
+//            AddressingServer server = new AddressingServer();
+//        String serverRole = System.getenv("AS_ROLE");
+//        if (serverRole != null) {
+//            if (serverRole.equals("PRIMARY")) {
+//                System.out.println("AS_ROLE is set to: " + serverRole);
+//                // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
+//                server.registerPrimaryAddrServer(); // Puts the addressing server into the AddrServerRegistry
+//            } else {
+//                System.out.println("AS_ROLE is set to: " + serverRole);
+//                // TODO - retrieve the address of the primary addressing server from the Domain A record
+//                server.registerReplicaAddrServer();
+//                // TODO - A thread(s) must be spun up for this method call.
+//                //  Since this invocation causes an infinite loop, the main thread will get hung up.
+//                //  And the Replica won't enter the main event loop and function as intended.
+//                //server.getPingManager().run();
+//            }
+//            try {
+//                server.start();
+//                while (true) {
+//                    AddressingServer newServer = new AddressingServer();
+//
+//                    try {
+//                        newServer.start();  // Blocks inside startEventLoop()
+//                    } catch (IOException e) {
+//                        System.err.println("Fatal error in event loop: " + e.getMessage());
+//                    }
+//
+//                    if (!server.isRestartRequested()) {
+//                        break; // Only restart if restart was explicitly requested
+//                    }
+//
+//                    System.out.println("Restart requested. Restarting server as fresh replica.");
+//                    // Optional: pause briefly
+//                    try {
+//                        TimeUnit.MILLISECONDS.sleep(500);
+//                    } catch (InterruptedException ignored) {}
+//                }
+//            } catch (IOException ioe) {
+//                System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());
+//                ioe.printStackTrace();
+//                server.requestRestart();
+//            }
+//        }
+        //}
+
+
     }
-
-
 }

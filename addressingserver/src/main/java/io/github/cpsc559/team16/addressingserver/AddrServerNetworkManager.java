@@ -27,6 +27,33 @@ import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.dese
  */
 public class AddrServerNetworkManager {
 
+
+    /**
+     * Indicates whether the server has been signaled to shut down or exit its main event loop.
+     * <p>
+     * This flag is marked {@code volatile} to ensure visibility across threads. It is used by the
+     * {@link AddrServerNetworkManager} to detect whether a controlled shutdown or restart has been
+     * requested (e.g., in response to a restart message or failure condition).
+     * </p>
+     * <p>
+     * When set to {@code true}, the main network event loop will
+     * close all connections and exit gracefully, allowing the server
+     * to clean up resources and reinitialize.
+     * </p>
+     */
+    private volatile boolean shutdownRequested = false;
+
+
+    /**
+     * Triggers shutdown of the network event loop.
+     * Called externally by the {@code AddrServerReadDispatcher}
+     * when the AddressingServer needs to exit its main loop (e.g. after a failure message is received).
+     */
+    public void requestShutdown() {
+        this.shutdownRequested = true;
+    }
+
+
     /**
      * The ServerSocketChannel that listens for incoming connection requests from chat servers.
      * When a connection is accepted, a new data channel is created for communicating with that chat server.
@@ -126,6 +153,52 @@ public class AddrServerNetworkManager {
         //this.executorService = Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors());
     }
 
+    public void closeAllConnections() {
+        System.out.println("Closing all listener channels and persistent connections...");
+        // Close each listener channel
+        tryCloseChannel(chatServerListenerChannel);
+        tryCloseChannel(peerListenerChannel);
+        tryCloseChannel(healthCheckListenerChannel);
+
+        //Close all persistent channels that may exist for peer and chat server channels
+        cleanupManager.getPeerManager().getChannels().keySet().forEach(this::tryCloseChannel);
+        cleanupManager.getChatServerManager().getChannels().keySet().forEach(this::tryCloseChannel);
+
+        // Cancel selection keys and close all remaining channels registered with selector
+        for (SelectionKey key : selector.keys()) {
+            try {
+                key.cancel();
+                key.channel().close();
+            } catch (IOException e) {
+                System.err.println("Error closing the selector-registered channel: " + e.getMessage());
+            }
+        }
+
+        // Shut down the executor (thread) service
+        executorService.shutdownNow();
+
+        // Close the selector
+        try {
+            selector.close();
+        } catch (IOException e) {
+            System.err.println("Failed to close selector: " + e.getMessage());
+        }
+
+        System.out.println("All network resources have been closed for the Addressing Server Object.");
+    }
+
+    // Helper method to close channels quietly
+    private void tryCloseChannel(Channel channel) {
+        if (channel != null && channel.isOpen()) {
+            try {
+                channel.close();
+            } catch (IOException e) {
+                System.err.println("Error closing channel: " + e.getMessage());
+            }
+        }
+    }
+
+
     /**
      * Opens and binds a ServerSocketChannel to the specified port.
      * <p>
@@ -171,15 +244,15 @@ public class AddrServerNetworkManager {
      * @param peerPort        The port used for replica-to-primary communication.
      * @param chatServerPort  The port used for ChatServer registration.
      */
-    public void openListenerChannels(int clientPort, int peerPort, int chatServerPort) {
+    public void openListenerChannels(int clientPort, int peerPort, int chatServerPort) throws IOException {
         try {
             openListenerChannel(clientPort);
             this.peerListenerChannel = openListenerChannel(peerPort);
             this.chatServerListenerChannel = openListenerChannel(chatServerPort);
             this.healthCheckListenerChannel = openListenerChannel(5050); // static port for health checks
         } catch (IOException e) {
-            System.err.println("Failed to open a listener channel.");
-            // TODO - Could add failure handling here, or just exit the process and spin up a new container.
+            System.err.println("Failed to open a listener channel. Exiting main event loop.");
+            throw e; // Throw the error so we can catch it in the main method of AddressingServer and reinitialize.
         }
     }
 
@@ -205,92 +278,6 @@ public class AddrServerNetworkManager {
         }
     }
 
-//    /**
-//     * Determines whether the specified {@link SocketChannel} is associated with a persistent server-to-server connection.
-//     * <p>
-//     * Persistent connections are long-lived channels used for internal communication between
-//     * {@code AddressingServer}s (peers) and {@code ChatServer}s. These are stored and tracked
-//     * using their respective manager classes.
-//     * </p>
-//     *
-//     * @param channel the {@code SocketChannel} to inspect.
-//     * @return {@code true} if the channel is known to be persistent (i.e., belongs to a peer or chat server), {@code false} otherwise.
-//     */
-//    private boolean isPersistentConnection(SocketChannel channel) {
-//        return peerManager.getChannels().containsKey(channel)
-//                || chatServerManager.getChannels().containsKey(channel);
-//    }
-
-//    /**
-//     * Retrieves the {@link NIOMessageChannel} wrapper for a known persistent connection.
-//     * <p>
-//     * This method searches the internal maps of both the {@code PeerManager} and {@code ChatServerManager}
-//     * to find the {@code NIOMessageChannel} corresponding to the provided {@link SocketChannel}.
-//     * </p>
-//     * <p>
-//     * If the channel is not found in either manager, the method returns {@code null}.
-//     * </p>
-//     *
-//     * @param channel the {@code SocketChannel} to look up.
-//     * @return the associated {@code NIOMessageChannel}, or {@code null} if not found.
-//     */
-//    private NIOMessageChannel getKnownPersistentChannel(SocketChannel channel) {
-//        NIOMessageChannel ch = peerManager.getChannels().get(channel);
-//        if (ch != null) return ch;
-//        return chatServerManager.getChannels().get(channel); // Will return null if it doesn't exist (which is what we want)
-//    }
-
-    /**
-     * Cleans up a persistent connection and deregisters it from the internal selector.
-     * <p>
-     * This method is triggered when a persistent connection is closed or encounters an unrecoverable I/O error.
-     * It performs the following steps:
-     * <ul>
-     *     <li>Logs the reason for cleanup (remote disconnect or local I/O failure).</li>
-     *     <li>Removes the connection from either the {@code PeerManager} or {@code ChatServerManager}.</li>
-     *     <li>Cancels the selection key and closes the channel gracefully.</li>
-     * </ul>
-     * </p>
-     *
-     * @param channel the {@code SocketChannel} being cleaned up.
-     * @param key the {@code SelectionKey} associated with the channel, used for deregistration.
-     * @param cce {@code true} if the cleanup is due to a remote disconnect (i.e., {@link ConnectionClosedException}),
-     *            {@code false} if due to a local I/O failure.
-     */
-//    private void cleanupPersistentConnection(SocketChannel channel, SelectionKey key, Boolean cce) {
-////        System.err.printf("Channel cleanup triggered for -> %s - due to -> (%s)\n",
-////                channel,
-////                cce ? "remote process disconnection." : "I/O failure."
-////        );
-//        if (cce) {
-//            NIOMessageChannel ch = getKnownPersistentChannel(channel);
-//            if (ch != null) {
-//                Long pid = ch.getServerPID();
-//                if (chatServerManager.getChannels().containsKey(channel)) {
-//                    chatServerManager.removeRemoteProcess(channel);
-//                } else if (peerManager.getChannels().containsKey(channel)) {
-//                    peerManager.removeRemoteProcess(channel);
-//                }
-//            }
-//        }
-//        key.cancel();
-//        try {
-//            channel.close();
-//        } catch (IOException ignored) {}  // if the channel is already closed, we don't need to do anything.
-//    }
-
-    /**
-     * Retrieves the internal {@link Selector} used for multiplexing non-blocking I/O operations.
-     * <p>
-     * The {@code Selector} enables the {@code AddressingServer} to monitor multiple registered
-     * {@link SocketChannel}s and {@link ServerSocketChannel}s for events such as connection
-     * requests or available data. This method provides access to the selector for components
-     * that need to register new channels or monitor channel readiness (e.g., read or accept).
-     * </p>
-     *
-     * @return the internal {@code Selector} used by this {@code AddrServerNetworkManager}.
-     */
-
     public Selector getSelector() {
         return selector;
     }
@@ -298,23 +285,37 @@ public class AddrServerNetworkManager {
     /**
      * Begins the main event loop for the {@code AddressingServer} process by
      * listening for incoming connections on the ports defined in its instance of the
-     * {@code AddrServerConfig} class -
+     * {@link AddrServerConfig} class:
      * <ul>
-     *     <li>{@code config.clientPort}</li>
-     *     <li>{@code config.replicaPort}</li>
-     *     <li>{@code config.chatServerPort}</li>
+     *     <li>{@code config.clientPort} – used for client connection requests</li>
+     *     <li>{@code config.replicaPort} – used for communication with peer replicas</li>
+     *     <li>{@code config.chatServerPort} – used for chat server registration</li>
      * </ul>
+     *
      * <p>
-     * This method blocks until an event occurs on a registered channel (i.e., a connection request
-     * is received). When an event is detected, it retrieves the corresponding SelectionKey,
-     * processes the event, and removes the key(event) from the selector to prevent re-processing.
+     * This method uses a {@link Selector} to multiplex I/O across all registered channels,
+     * blocking until at least one event becomes available. When a connection or read event
+     * is detected, it dispatches the appropriate handler logic and removes the processed
+     * key to prevent duplicate handling.
      * </p>
      *
-     * @throws IOException If an I/O error occurs while selecting or processing events.
+     * <p>
+     * The event loop continues to run until a shutdown is explicitly requested via
+     * {@link #requestShutdown()}. Once the shutdown flag is set, the loop exits cleanly,
+     * calling {@link #closeAllConnections()} to release all associated network resources.
+     * </p>
+     *
+     * @param readDispatcher the object responsible for handling all incoming requests on persistent connections.
+     *
+     * @throws IOException if an I/O error occurs while selecting or processing channel events
      */
     public void startEventLoop(AddrServerReadDispatcher readDispatcher) throws IOException {
         while (true) {
-
+            if (shutdownRequested) {
+                System.out.println("Shutdown signal received. Exiting the AddrServerNetworkManager main event loop.");
+                this.closeAllConnections();
+                return; // exit to calling code
+            }
             // TODO - Check for stale events and act accordingly
             //  idea! add flag to PendingEvent and set it for any event that is a "retry". If that goes stale, deny the request
             //long now = System.currentTimeMillis();

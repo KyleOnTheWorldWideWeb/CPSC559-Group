@@ -509,12 +509,21 @@ public class PeerManager {
         return this.registry.getRecords().get(pid).getRole().toString();
     }
 
+    /**
+     * Returns the network process ID (PID) of the current Primary Addressing Server
+     * by looking through all the current AddrServer records in the network.
+     *
+     * @return A Long integer containing the PID of the Primary Addressing Server.
+     */
     public Long getPrimaryPID() {
         for (AddrServerRecord record : registry.getRecords().values()) {
             if (record.getRole().equals(ServerRole.PRIMARY)) return record.getPID();
         }
         return 0L;
     }
+
+
+
 
 //    /**
 //     * Returns a set of all connected peer process IDs, excluding the given calling process ID.
