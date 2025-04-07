@@ -64,10 +64,24 @@ public class AddressingServer {
     }
 
     /**
-     * Responsible for opening listener channels, managing the selector,
-     * and dispatching accepted connections for the AddressingServer.
+     * The process responsible for initiating elections and handling election messages from
+     * {@code AddressingServer} peers.
      */
-    private final AddrServerNetworkManager networkManager;
+    private final LeaderElectionManager leaderElectionManager;
+
+    public LeaderElectionManager getLeaderElectionManager() {
+        return leaderElectionManager;
+    }
+
+    /**
+     * The process responsible for handling ping messages and managing the ping timeout.
+     */
+    private final PingManager pingManager;
+
+    public PingManager getPingManager() {
+        return pingManager;
+    }
+
 
     /**
      * The process responsible for managing {@code ChatServer} connections.
@@ -98,6 +112,25 @@ public class AddressingServer {
     }
 
     /**
+     * Manages synchronization and state consistency between the PRIMARY and all registered REPLICA AddressingServers.
+     * <p>
+     * This coordinator encapsulates the logic needed to track acknowledgments, manage pending events,
+     * handle retry logic, and ensure that all state changes
+     * (e.g. new server registrations/removal, server updates, leadership changes)
+     * are safely replicated across the distributed network.
+     * </p>
+     */
+    private final ReplicaSyncCoordinator replicaCoordinator;
+
+    /**
+     * Returns the {@link ReplicaSyncCoordinator} responsible for managing strong consistency across AddressingServers.
+     *
+     * @return the {@code ReplicaSyncCoordinator} used by this AddressingServer instance.
+     */
+    public ReplicaSyncCoordinator getReplicaCoordinator() {
+        return replicaCoordinator;
+    }
+    /**
      * The process responsible for managing interactions between the
      * {@code AddressingServer} and {@code ChatServer}'s
      */
@@ -105,25 +138,6 @@ public class AddressingServer {
 
     public ChatServerManager getChatServerManager() {
         return chatServerManager;
-    }
-
-    /**
-     * The process responsible for initiating elections and handling election messages from
-     * {@code AddressingServer} peers.
-     */
-    private final LeaderElectionManager leaderElectionManager;
-
-    public LeaderElectionManager getLeaderElectionManager() {
-        return leaderElectionManager;
-    }
-
-    /**
-     * The process responsible for handling ping messages and managing the ping timeout.
-     */
-    private final PingManager pingManager;
-
-    public PingManager getPingManager() {
-        return pingManager;
     }
 
 
@@ -168,6 +182,12 @@ public class AddressingServer {
     public ConnectionCleanupManager getCleanupManager() {
         return cleanupManager;
     }
+
+    /**
+     * Responsible for opening listener channels, managing the selector,
+     * and dispatching accepted connections for the AddressingServer.
+     */
+    private final AddrServerNetworkManager networkManager;
 
     /**
      * The {@code MessageIDGenerator} instance used by this server to produce globally unique message IDs.
@@ -217,6 +237,37 @@ public class AddressingServer {
         this.pidCounter = currentNetworkMaxPID;
     }
 
+    /**
+     * Generates a unique identifier for a chat server by incrementing the internal counter.
+     *
+     * @return a unique {@code Long} representing the chat server's ID.
+     */
+    public Long generatePID() {
+        return ++this.pidCounter;
+    }
+
+    /**
+     * Returns the highest process ID (PID) currently assigned in the network,
+     * considering both {@code AddressingServer}s and {@code ChatServer}s.
+     * <p>
+     *     This method is used to ensure that all future PIDs assigned during
+     *     registration events (e.g., new servers joining the network) are strictly
+     *     greater than any currently active PID. This prevents PID reuse and
+     *     maintains global uniqueness of process identifiers across both system roles.
+     * </p>
+     *
+     * @return the highest PID found in either the {@code AddrServerRegistry} or {@code ChatServerRegistry}.
+     */
+    public Long getMaxPidInNetwork() {
+        Long maxAddrServerPID = this.addrServerRegistry.getMaxPID();
+        Long maxChatServerPID = this.chatServerRegistry.getMaxPID();
+        return (maxAddrServerPID > maxChatServerPID) ? maxAddrServerPID : maxChatServerPID;
+    }
+
+    public void setPidCounterToNetworkMax() {
+        this.pidCounter = getMaxPidInNetwork();
+    }
+
 
     /**
      * Constructs an AddressingServer with an {@code AddrServerConfig} object storing its network details.
@@ -226,32 +277,32 @@ public class AddressingServer {
      */
     public AddressingServer() {
         this.config = new AddrServerConfig();
-        this.addrServerRegistry = new AddrServerRegistry();
-        this.peerManager = new PeerManager(addrServerRegistry);
+
         this.leaderElectionManager = new LeaderElectionManager(this);
         this.pingManager = new PingManager(this);
+
         this.chatServerRegistry = new ChatServerRegistry();
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
         this.clientManager = new ClientManager(chatServerRegistry);
+
+        this.addrServerRegistry = new AddrServerRegistry();
+        this.peerManager = new PeerManager(addrServerRegistry);
+
         this.cleanupManager = new ConnectionCleanupManager(peerManager, chatServerManager);
+        this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
+
+        this.replicaCoordinator = new ReplicaSyncCoordinator(peerManager, broadcastManager, cleanupManager);
+
         try {
             this.networkManager = new AddrServerNetworkManager(cleanupManager, this.config);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
-        this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
+
         this.pidCounter = 0L;
         this.genMID = new MessageIDGenerator();
     }
 
-    /**
-     * Generates a unique identifier for a chat server by incrementing the internal counter.
-     *
-     * @return a unique {@code Long} representing the chat server's ID.
-     */
-    public Long generatePID() {
-        return ++this.pidCounter;
-    }
 
 
     /**
@@ -353,9 +404,6 @@ public class AddressingServer {
                 }
         );
     }
-
-
-
 
 
     public void registerPrimaryAddrServer() throws IOException {

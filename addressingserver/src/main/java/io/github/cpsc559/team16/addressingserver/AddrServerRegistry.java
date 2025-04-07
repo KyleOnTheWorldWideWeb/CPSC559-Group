@@ -113,6 +113,31 @@ public class AddrServerRegistry {
     }
 
     /**
+     * Returns the greatest process ID (PID) held by any of the active
+     * {@code AddressingServer} by iterating through the current set
+     * of {@link AddrServerRecord}'s. These records represent the current
+     * {@link AddressingServer} network topology.
+     * <p>
+     *     This method is typically used during failover of an addressing server in conjunction with
+     *     a sister method in {@link ChatServerRegistry}, allowing the new leader process to set it's
+     *     {@link AddressingServer#pidCounter} to the highest active PID - ensuring no active PIDs are re-assigned
+     *     in future registration events.
+     * </p>
+     *
+     * @return a Long representing the highest PID held by any active {@code AddressingServer}
+     */
+    public Long getMaxPID() {
+        Long currentMax = 0L;
+        for (AddrServerRecord record: this.addrServerRecords.values())
+        {
+            if (record.getPID() > currentMax) currentMax = record.getPID();
+        }
+        return currentMax;
+    }
+
+
+
+    /**
      * Returns a set of all connected peer process IDs, excluding the given calling process ID.
      * <p>
      * This method is useful when the caller wants to get all *other* peer PIDs in the network,

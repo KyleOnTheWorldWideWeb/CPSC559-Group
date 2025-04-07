@@ -44,6 +44,26 @@ public class PeerManager {
     }
 
     /**
+     * Checks whether a replica with the specified {@code pid} is currently registered and connected.
+     * <p>
+     * This method iterates through all active {@link NIOMessageChannel}s in the peer channel map
+     * and returns {@code true} if any connected replica reports a non-null, matching PID.
+     * </p>
+     *
+     * @param pid the process ID to check for an existing registered replica connection
+     * @return {@code true} if a connected replica with the specified PID is found; {@code false} otherwise
+     */
+    public Boolean isRegistered (Long pid) {
+        for (NIOMessageChannel channel: peerChannels.values()) {
+            Long nioPID = channel.getServerPID();
+            if (nioPID != null) {
+                if (channel.getServerPID().equals(pid)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Returns all connected replica channels that have been assigned a non-zero PID.
      *
      * @return a collection of active {@link NIOMessageChannel}s linked to registered replicas.
@@ -76,42 +96,6 @@ public class PeerManager {
     }
 
 
-
-    /**
-     * Checks whether a replica with the specified {@code pid} is currently registered and connected.
-     * <p>
-     * This method iterates through all active {@link NIOMessageChannel}s in the peer channel map
-     * and returns {@code true} if any connected replica reports a non-null, matching PID.
-     * </p>
-     *
-     * @param pid the process ID to check for an existing registered replica connection
-     * @return {@code true} if a connected replica with the specified PID is found; {@code false} otherwise
-     */
-    public Boolean isRegistered (Long pid) {
-        for (NIOMessageChannel channel: peerChannels.values()) {
-            Long nioPID = channel.getServerPID();
-            if (nioPID != null) {
-                if (channel.getServerPID().equals(pid)) return true;
-            }
-        }
-        return false;
-    }
-
-
-    /**
-     * A thread-safe map of message or event IDs to their corresponding {@link PendingEvent} instances.
-     * <p>
-     * Each entry represents an ongoing network event (e.g., a registration or broadcast operation)
-     * that requires acknowledgments from one or more remote processes before completion.
-     * </p><p>
-     * This structure allows the system to track which events are still waiting for ACKs, trigger
-     * associated actions once all responses have been received, and perform retries or timeouts
-     * if necessary. Keys must be unique and are typically generated using the {@link MessageIDGenerator}.
-     * </p>
-     */
-    private final ConcurrentMap<Long, PendingEvent> pendingEvents = new ConcurrentHashMap<>();
-
-
     /**
      * The registry containing all known {@code AddrServerRecord} entries,
      * used to track state across the distributed network of AddressingServers.
@@ -120,6 +104,20 @@ public class PeerManager {
     public void debugPrintAllServers() {
         this.registry.debugPrintAllServers();
     }
+
+    /**
+     * Updates or inserts a record into the shared AddrServer registry.
+     * <p>
+     * This method is typically called when receiving an {@code UpdateMessage}
+     * containing new or modified AddrServer information.
+     * </p>
+     *
+     * @param record the record to insert or update.
+     */
+    public void updateRecords(AddrServerRecord record) {
+        registry.updateOrInsertRecord(record);
+    }
+
 
     /**
      * Constructs a {@code PeerManager} and binds it to a shared {@code AddrServerRegistry}.
@@ -241,7 +239,7 @@ public class PeerManager {
     /**
      * Registers a replica AddressingServer and sets up a persistent connection to it.
      * <p>
-     * This method also updates the replica’s {@code AddrServerRecord} with its resolved host address and PID,
+     * This method also updates the replicas {@code AddrServerRecord} with its resolved host address and PID,
      * stores it in the shared registry, and sends a confirmation {@code AckMessage} followed by
      * the current state of all known AddrServer records.
      * </p>
@@ -253,7 +251,7 @@ public class PeerManager {
      * @param record        a partially populated record to complete and store.
      * @throws IOException if an error occurs during network communication.
      */
-    public AddrServerRecord registerPeerSendACK(SocketChannel socketChannel, NIOMessageChannel nioChannel,
+    public void registerPeerSendACK(SocketChannel socketChannel, NIOMessageChannel nioChannel,
                                          Long primaryPID, Long peerPID, AddrServerRecord record) throws IOException {
         nioChannel.setServerPID(peerPID);
         peerChannels.put(socketChannel, nioChannel);
@@ -265,7 +263,6 @@ public class PeerManager {
 
         // Send an ACK to notify the server it has been registered.
         nioChannel.sendMessage(AckMessage.replicaRegistered(primaryPID, peerPID).toJson());
-        return record;
     }
 
     /**
@@ -293,61 +290,6 @@ public class PeerManager {
         return record;
     }
 
-//    /**
-//     * Sends all currently known {@code AddrServerRecord} entries from the primary
-//     * to a newly connected replica.
-//     * <p>
-//     * This ensures that the new replica is fully synchronized with the current
-//     * network topology known to the primary.
-//     * </p>
-//     *
-//     * @param primaryPID the PID of the primary server sending the updates.
-//     * @param nioChannel the channel over which to send the records.
-//     */
-//    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel) throws IOException {
-//        for (AddrServerRecord record : this.registry.getRecords().values()) {
-//            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
-//            try {
-//                nioChannel.sendMessage(message.toJson());
-//            } catch (JsonProcessingException e) {
-//                System.err.println("Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
-//            } catch (IOException ioe) {
-//                System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
-//                throw ioe;
-//            }
-//        }
-//        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
-//    }
-
-//    /**
-//     * Sends all currently known {@code ChatServerRecord} entries in the network.
-//     * <p>
-//     * This is typicall used to ensure that a new replica is fully synchronized with all of the
-//     * active ChatServer's known to the primary.
-//     * </p>
-//     *
-//     *
-//     * @param primaryPID  the PID of the primary server sending the updates.
-//     * @param nioChannel  the channel over which to send the records.
-//     * @param chatRecords a {@code HashMap} containing all {@code ChatServerRecord} entries.
-//     */
-//    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
-//                                         Map<Long, ChatServerRecord> chatRecords) throws IOException {
-//        for (ChatServerRecord record : chatRecords.values()) {
-//            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
-//            try {
-//                nioChannel.sendMessage(message.toJson());
-//            } catch (JsonProcessingException e) {
-//                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
-//            } catch (IOException ioe) {
-//                System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
-//                throw ioe;
-//            }
-//        }
-//        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
-//    }
-
-
     /**
      * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
      * <p>
@@ -374,100 +316,13 @@ public class PeerManager {
         }
     }
 
-//    /**
-//     * Sends a single {@link AddrServerRecord} to all the process tied to the NIOChannel.
-//     * <p>
-//     * This method is used by the PRIMARY {@code AddressingServer} to notify all registered
-//     * REPLICA servers about a new or updated {@code AddrServerRecord} - a necessary part of
-//     * maintaining network consistency.
-//     * </p>
-//     *
-//     * @param primaryPID the PID of the primary server issuing the update.
-//     * @param record     the {@link AddrServerRecord} to broadcast.
-//     */
-//    public void sendAddrServerRecord(long messageID, Long primaryPID, AddrServerRecord record, NIOMessageChannel nioChannel) throws IOException {
-//        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(messageID, primaryPID, record);
-//        try {
-//            nioChannel.sendMessage(message.toJson());
-//        }
-//        catch (JsonProcessingException e) {
-//            System.err.printf(
-//                    "Failed to serialize UpdateMessage<%s>. Context: messageID=%d, senderPID=%d, senderRole=%s, receiverPID=%d. Exception: %s%n",
-//                    message.getObjectType(), messageID, primaryPID, Roles.PRIMARY, nioChannel.getServerPID(), e.getMessage()
-//            );
-//        }
-//        catch (IOException ioe) {
-//            System.err.println("Failed to send UpdateMessage<AddrServerRecord> for message ID: " + message.getMessageID());
-//            throw ioe;
-//        }
-//    }
 
-    /**
-     * Broadcasts a single {@link AddrServerRecord} to all connected peer replicas.
-     * <p>
-     * This method is used by the PRIMARY {@code AddressingServer} to notify all registered
-     * REPLICA servers about a new or updated {@code AddrServerRecord} - a necessary part of
-     * maintaining network consistency.
-     * </p>
-     *
-     * @param primaryPID the PID of the primary server issuing the update.
-     * @param record     the {@link AddrServerRecord} to broadcast.
-     */
-    public void broadcastAddrServerRecord(Long primaryPID, AddrServerRecord record) {
-        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
-        broadcastServerRecord(message);
-    }
-
-    /**
-     * Broadcasts a single {@link ChatServerRecord} to all connected peer replicas.
-     * <p>
-     * This method is used by the PRIMARY {@code AddressingServer} to notify all registered
-     * REPLICA servers about a new or updated {@code ChatServerRecord} - a necessary part of
-     * maintaining network consistency.
-     * </p>
-     *
-     * @param primaryPID the PID of the primary server issuing the update.
-     * @param record     the {@link ChatServerRecord} to broadcast.
-     *
-     */
-    public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
-        UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
-        broadcastServerRecord(message);
-    }
-
-    /**
-     * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
-     * <p>
-     * This method handles JSON serialization and transmission errors consistently,
-     * logging any failures without interrupting the loop.
-     * </p>
-     *
-     * @param message the update message to be broadcast.
-     * @param <T>     the type of record being broadcast (e.g., {@code AddrServerRecord}, {@code ChatServerRecord}).
-     */
-    private <T> void broadcastServerRecord(UpdateMessage<T> message) {
-        try {
-            String jsonMessage = message.toJson();
-            for (NIOMessageChannel nioChannel : peerChannels.values()) {
-                try {
-                    nioChannel.sendMessage(jsonMessage);
-                } catch (IOException ioe) {
-                    System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
-                    // TODO - I need to log this error and deal with it later, not remove it immediately.
-                    removeProcessCloseConnection(nioChannel.getSocketChannel());
-                }
-            }
-        } catch (JsonProcessingException e) {
-            System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
-            return;
-        }
-    }
 
 
     /**
      * Broadcasts a message to all peer replicas in the {@code peerChannels}.
      * <p>
-     * This method is used to send one-off messages (e.g., state changes or heartbeats)
+     * This method is used to send one-off messages (e.g. heartbeats)
      * to all replicas, using their open persistent connections.
      * </p>
      *
@@ -538,54 +393,6 @@ public class PeerManager {
         }
     }
 
-
-
-    // Add a "pending event" to the concurrent hashmap
-    public void addPendingEvent(Long messageID, PendingEvent event) {
-        pendingEvents.put(messageID, event);
-    }
-
-
-    public void sendReplicatedAck(long messageID, Long senderPID) {
-
-    }
-
-    /**
-     * Processes an acknowledgment from a replica for a previously broadcasted message.
-     *
-     * <p>This method tracks the receipt of an acknowledgment for a given message ID and replica PID.
-     * Once all expected replicas have acknowledged the message, it attempts to respond to the original
-     * requester via the stored {@link NIOMessageChannel}. If this final response fails due to an
-     * {@link IOException}, the channel used to communicate with the requester is returned so it can be
-     * cleaned up by the caller (e.g., closed or deregistered).
-     *
-     * @param messageID the ID of the message that was acknowledged
-     * @param recipientPID the process ID of the replica that sent the acknowledgment
-     * @return the {@link NIOMessageChannel} of the original requester if responding failed,
-     *         or {@code null} if no cleanup is needed
-     * @throws IOException if responding to the original requester throws an {@link IOException}
-     */
-    public NIOMessageChannel processAck(Long messageID, Long recipientPID) {
-        PendingEvent message = pendingEvents.get(messageID);
-        if (message != null) {
-            // DEBUG
-            System.out.println("ACK received from network process with PID: " + recipientPID);
-            message.removePendingRecipient(recipientPID);
-            if (message.isComplete()) {
-                pendingEvents.remove(messageID);
-                try {
-                    message.respondToRequester();
-                } catch (IOException e) {
-                    System.err.println("Failed to respond to process with PID: " + message.getRequestChannel().getServerPID());
-                    return message.getRequestChannel(); // return the channel to the caller for cleanup
-                }
-            }
-        }
-        return null; // no cleanup needed
-    }
-
-
-
     /**
      * This is a hell of an obtuse way of finding out an addressing servers role, but if you need it,
      * here you go.
@@ -610,52 +417,146 @@ public class PeerManager {
     }
 
 
-
-
 //    /**
-//     * Returns a set of all connected peer process IDs, excluding the given calling process ID.
+//     * Sends all currently known {@code AddrServerRecord} entries from the primary
+//     * to a newly connected replica.
 //     * <p>
-//     * This method is useful when the caller wants to get all *other* peer PIDs in the network,
-//     * for example when broadcasting to all replicas except itself.
+//     * This ensures that the new replica is fully synchronized with the current
+//     * network topology known to the primary.
 //     * </p>
 //     *
-//     * @param callingPID the PID of the current process making the request (to be excluded).
-//     * @return a {@code Set<Long>} containing the PIDs of all connected peers except the caller.
+//     * @param primaryPID the PID of the primary server sending the updates.
+//     * @param nioChannel the channel over which to send the records.
 //     */
-//    public Set<Long> getAllRegisteredPeerPIDs(Long callingPID, Long requesterPID) {
-//        // TODO - Just go through the records instead in AddrServerRegistry and return any PIDs for role = REPLICA
-//        Set<Long> peerPIDs = ConcurrentHashMap.newKeySet();
-//        for (NIOMessageChannel channel : peerChannels.values()) {
-//            Long pid = channel.getServerPID();
-//            //System.out.printf("Examining channel with PID: %d%n", pid);
-//            if ( (pid != null) && !(pid.equals(callingPID) && !(pid.equals(requesterPID) ))) {
-//                System.out.println("PID added to event = " + pid);
-//                peerPIDs.add(pid);
+//    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel) throws IOException {
+//        for (AddrServerRecord record : this.registry.getRecords().values()) {
+//            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
+//            try {
+//                nioChannel.sendMessage(message.toJson());
+//            } catch (JsonProcessingException e) {
+//                System.err.println("Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
+//            } catch (IOException ioe) {
+//                System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
+//                throw ioe;
 //            }
 //        }
-//        return peerPIDs;
+//        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
 //    }
 
-
-
-
-
-    /**
-     * Updates or inserts a record into the shared AddrServer registry.
-     * <p>
-     * This method is typically called when receiving an {@code UpdateMessage}
-     * containing new or modified AddrServer information.
-     * </p>
-     *
-     * @param record the record to insert or update.
-     */
-    public void updateRecords(AddrServerRecord record) {
-        registry.updateOrInsertRecord(record);
-    }
-
-
-
-
+//    /**
+//     * Sends all currently known {@code ChatServerRecord} entries in the network.
+//     * <p>
+//     * This is typicall used to ensure that a new replica is fully synchronized with all of the
+//     * active ChatServer's known to the primary.
+//     * </p>
+//     *
+//     *
+//     * @param primaryPID  the PID of the primary server sending the updates.
+//     * @param nioChannel  the channel over which to send the records.
+//     * @param chatRecords a {@code HashMap} containing all {@code ChatServerRecord} entries.
+//     */
+//    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
+//                                         Map<Long, ChatServerRecord> chatRecords) throws IOException {
+//        for (ChatServerRecord record : chatRecords.values()) {
+//            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
+//            try {
+//                nioChannel.sendMessage(message.toJson());
+//            } catch (JsonProcessingException e) {
+//                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
+//            } catch (IOException ioe) {
+//                System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
+//                throw ioe;
+//            }
+//        }
+//        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
+//    }
+//    /**
+//     * Sends a single {@link AddrServerRecord} to all the process tied to the NIOChannel.
+//     * <p>
+//     * This method is used by the PRIMARY {@code AddressingServer} to notify all registered
+//     * REPLICA servers about a new or updated {@code AddrServerRecord} - a necessary part of
+//     * maintaining network consistency.
+//     * </p>
+//     *
+//     * @param primaryPID the PID of the primary server issuing the update.
+//     * @param record     the {@link AddrServerRecord} to broadcast.
+//     */
+//    public void sendAddrServerRecord(long messageID, Long primaryPID, AddrServerRecord record, NIOMessageChannel nioChannel) throws IOException {
+//        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(messageID, primaryPID, record);
+//        try {
+//            nioChannel.sendMessage(message.toJson());
+//        }
+//        catch (JsonProcessingException e) {
+//            System.err.printf(
+//                    "Failed to serialize UpdateMessage<%s>. Context: messageID=%d, senderPID=%d, senderRole=%s, receiverPID=%d. Exception: %s%n",
+//                    message.getObjectType(), messageID, primaryPID, Roles.PRIMARY, nioChannel.getServerPID(), e.getMessage()
+//            );
+//        }
+//        catch (IOException ioe) {
+//            System.err.println("Failed to send UpdateMessage<AddrServerRecord> for message ID: " + message.getMessageID());
+//            throw ioe;
+//        }
+//    }
+//
+//    /**
+//     * Broadcasts a single {@link AddrServerRecord} to all connected peer replicas.
+//     * <p>
+//     * This method is used by the PRIMARY {@code AddressingServer} to notify all registered
+//     * REPLICA servers about a new or updated {@code AddrServerRecord} - a necessary part of
+//     * maintaining network consistency.
+//     * </p>
+//     *
+//     * @param primaryPID the PID of the primary server issuing the update.
+//     * @param record     the {@link AddrServerRecord} to broadcast.
+//     */
+//    public void broadcastAddrServerRecord(Long primaryPID, AddrServerRecord record) {
+//        UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
+//        broadcastServerRecord(message);
+//    }
+//
+//    /**
+//     * Broadcasts a single {@link ChatServerRecord} to all connected peer replicas.
+//     * <p>
+//     * This method is used by the PRIMARY {@code AddressingServer} to notify all registered
+//     * REPLICA servers about a new or updated {@code ChatServerRecord} - a necessary part of
+//     * maintaining network consistency.
+//     * </p>
+//     *
+//     * @param primaryPID the PID of the primary server issuing the update.
+//     * @param record     the {@link ChatServerRecord} to broadcast.
+//     *
+//     */
+//    public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
+//        UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
+//        broadcastServerRecord(message);
+//    }
+//
+//    /**
+//     * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
+//     * <p>
+//     * This method handles JSON serialization and transmission errors consistently,
+//     * logging any failures without interrupting the loop.
+//     * </p>
+//     *
+//     * @param message the update message to be broadcast.
+//     * @param <T>     the type of record being broadcast (e.g., {@code AddrServerRecord}, {@code ChatServerRecord}).
+//     */
+//    private <T> void broadcastServerRecord(UpdateMessage<T> message) {
+//        try {
+//            String jsonMessage = message.toJson();
+//            for (NIOMessageChannel nioChannel : peerChannels.values()) {
+//                try {
+//                    nioChannel.sendMessage(jsonMessage);
+//                } catch (IOException ioe) {
+//                    System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+//                    removeProcessCloseConnection(nioChannel.getSocketChannel());
+//                }
+//            }
+//        } catch (JsonProcessingException e) {
+//            System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
+//            return;
+//        }
+//    }
 
 
 }

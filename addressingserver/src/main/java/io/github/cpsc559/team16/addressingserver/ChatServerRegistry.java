@@ -113,6 +113,28 @@ public class ChatServerRegistry {
         return record;
     }
 
+    /**
+     * Returns the greatest process ID (PID) held by any of the active
+     * {@code ChatServer}s by iterating through the current set
+     * of {@link ChatServerRecord}s.
+     * <p>
+     *     This method is typically used during failover handling or recovery
+     *     to ensure that no newly registered {@code ChatServer} is assigned a
+     *     PID that is already in use, preserving PID uniqueness across the system.
+     * </p>
+     *
+     * @return a Long representing the highest PID currently assigned to a {@code ChatServer}
+     */
+    public Long getMaxPID() {
+        Long currentMax = 0L;
+        for (ChatServerRecord record : this.chatServerRecords.values()) {
+            if (record.getPID() > currentMax) {
+                currentMax = record.getPID();
+            }
+        }
+        return currentMax;
+    }
+
 
     /**
      * Creates a record for a chat server by generating a unique ID and inserting its

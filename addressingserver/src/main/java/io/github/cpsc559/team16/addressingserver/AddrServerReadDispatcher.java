@@ -33,6 +33,7 @@ import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 public class AddrServerReadDispatcher {
     private final AddressingServer server;
     private final PeerManager peerManager;
+    private final ReplicaSyncCoordinator replicaCoordinator;
     private final ClientManager clientManager;
     private final ChatServerManager chatServerManager;
     private final BroadcastManager broadcastManager;
@@ -48,6 +49,7 @@ public class AddrServerReadDispatcher {
         this.broadcastManager = server.getBroadcastManager();
         this.genMID = server.getMessageIDGenerator();
         this.cleanupManager = server.getCleanupManager();
+        this.replicaCoordinator = server.getReplicaCoordinator();
     }
 
     /**
@@ -119,7 +121,7 @@ public class AddrServerReadDispatcher {
             // Otherwise, the channel is returned so that we can take appropriate action and shut it down/cleanup.
             // NOTE: This is not the channel of a replica, it is a channel tied to whichever process originally made a
             // request of the Primary addressing server which required a write/update to the state -> SC action required.
-            NIOMessageChannel senderChannel = peerManager.processAck(eventID, replicaPID);
+            NIOMessageChannel senderChannel = replicaCoordinator.processAck(eventID, replicaPID);
             if (senderChannel != null) {
                 this.server.getCleanupManager().cleanupPersistentConnection(senderChannel.getSocketChannel(), true);
             }
@@ -217,7 +219,7 @@ public class AddrServerReadDispatcher {
                 PendingEvent pendingEvent = server.createReplicaRegistrationEvent(primaryPID, newPID, channel, nioChannel,
                         record, replicaChannelMap);
                 // Add this to the list of pending events. The message ID used for replication messages is the key.
-                this.peerManager.addPendingEvent(messageID, pendingEvent);
+                this.replicaCoordinator.addPendingEvent(messageID, pendingEvent);
                 // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.
                 broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, pendingEvent);
             }
