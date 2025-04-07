@@ -195,33 +195,7 @@ public class AddrServerReadDispatcher {
             case Roles.REPLICA -> {
                 // TODO - Add try catch block for message failed IOExceptions
                 System.out.println("Replica registration message has been received.");
-                Long primaryPID = this.getPID();
-                Long newPID = this.server.generatePID();
-                // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
-                AddrServerRecord record = this.peerManager.updateServerRecord(channel, registerMessage.safeCastPayload(AddrServerRecord.class), newPID);
-                // Guard clause - if no peers exist, we don't need to synchronize state with anyone but ourselves and any Chat Servers.
-                if (server.getAddrServerRegistry().getRecords().size() == 1) { // If there is only 1 record, then this registration is the FIRST request.
-                        System.out.println("No active Addressing Server Replica's exist on the network - registering the first.");
-                        this.server.registerFirstReplicaServer(primaryPID, newPID, channel, nioChannel, record);
-                        return;
-                } // Else there is at least one connected peer who IS registered.
-
-                // Get the list of all NIOMessage channels for registered peers (non-zero PID)
-                Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
-
-                // Set the NIOChannel PID before continuing any of the response to the request (to avoid errors when closing connections).
-                nioChannel.setServerPID(newPID);
-                // DEBUG
-                System.out.println("At least one registered replica exists.");
-
-                // Create unique message ID that will be used to track ACK messages as well as the pending event.
-                long messageID = genMID.nextID();
-                PendingEvent pendingEvent = server.createReplicaRegistrationEvent(primaryPID, newPID, channel, nioChannel,
-                        record, replicaChannelMap);
-                // Add this to the list of pending events. The message ID used for replication messages is the key.
-                this.replicaCoordinator.addPendingEvent(messageID, pendingEvent);
-                // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.
-                broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, pendingEvent);
+                this.server.getRegistrationCoordinator().handleReplicaRegistration(channel, nioChannel, registerMessage);
             }
             default -> throw new IllegalArgumentException("Unrecognized sender role for REGISTER: " + registerMessage.getSenderRole());
         }

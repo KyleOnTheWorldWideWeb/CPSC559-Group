@@ -255,7 +255,7 @@ public class PeerManager {
                                          Long primaryPID, Long peerPID, AddrServerRecord record) throws IOException {
         nioChannel.setServerPID(peerPID);
         peerChannels.put(socketChannel, nioChannel);
-        System.out.println("PRIMARY REGISTERED PROCESS WITH PID ---------> " + peerPID);
+        System.out.println("PRIMARY AddrServer has registered a new REPLICA process with network PID: " + peerPID);
         System.out.println("NIOChannel PID = " + nioChannel.getServerPID());
         System.out.println("Socket Channel ID = " + socketChannel.toString());
 

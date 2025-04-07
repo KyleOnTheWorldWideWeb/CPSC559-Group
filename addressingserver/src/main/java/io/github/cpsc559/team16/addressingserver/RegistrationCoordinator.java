@@ -1,0 +1,261 @@
+package io.github.cpsc559.team16.addressingserver;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+
+import java.io.IOException;
+import java.nio.channels.SocketChannel;
+import java.util.Map;
+
+/**
+ * Centralized coordinator for handling registration logic for both
+ * {@code ChatServer}s and {@code AddressingServer} replicas.
+ * <p>
+ * This class consolidates registration pathways that follow a common pattern
+ * — receiving a {@link BaseAddrServerMessage}, assigning a PID, updating
+ * internal registries, and broadcasting state — to avoid code duplication and improve modularity.
+ */
+public class RegistrationCoordinator {
+
+    /** Reference to the primary AddressingServer instance that owns this coordinator. */
+    private final AddressingServer server;
+
+    /**
+     * The process responsible for managing {@code AddrServerRecord} records.
+     */
+    private final AddrServerRegistry addrServerRegistry;
+
+    /** Reference to the peer manager, used for updating peer records and managing replica state. */
+    private final PeerManager peerManager;
+
+    /**
+     * The process responsible for managing {@code ChatServer} connections.
+     */
+    private final ChatServerRegistry chatServerRegistry;
+
+    /** Reference to the chat server manager, responsible for handling ChatServer registration logic. */
+    private final ChatServerManager chatServerManager;
+
+    /** Broadcast manager used to propagate server state updates across the network. */
+    private final BroadcastManager broadcastManager;
+
+    /** Replica coordinator that tracks pending consistency events and manages ACK logic. */
+    private final ReplicaSyncCoordinator replicaCoordinator;
+
+    /**
+     * The ConnectionCleanupManager centralizes the logic for cleaning up and closing failed connections.
+     * It holds references to both PeerManager and ChatServerManager so that any channel failures can be
+     * promptly removed from the live channel maps and properly closed.
+     */
+    private final ConnectionCleanupManager cleanupManager;
+
+    /**
+     * Constructs a {@code RegistrationCoordinator} tied to a specific {@code AddressingServer}.
+     * <p>
+     * All supporting components are fetched from the server and stored for convenience.
+     *
+     * @param server the AddressingServer instance this coordinator operates within
+     */
+    public RegistrationCoordinator(AddressingServer server) {
+        this.server = server;
+        this.peerManager = server.getPeerManager();
+        this.chatServerManager = server.getChatServerManager();
+        this.broadcastManager = server.getBroadcastManager();
+        this.replicaCoordinator = server.getReplicaCoordinator();
+        this.cleanupManager = server.getCleanupManager();
+        this.chatServerRegistry = server.getChatServerRegistry();
+        this.addrServerRegistry = server.getAddrServerRegistry();
+    }
+
+
+    /**
+     * Handles the full registration workflow for the first replica connecting to the primary {@code AddressingServer}.
+     * <p>
+     * This method:
+     * <ol>
+     *     <li>Registers the replica with the {@link PeerManager}, sending an acknowledgment (ACK) back to confirm registration.</li>
+     *     <li>Sends all known chat server and address server records from the primary to the new replica
+     *         using the {@link BroadcastManager} to synchronize state.</li>
+     *     <li>Broadcasts the newly registered replica’s {@link AddrServerRecord} to all connected chat servers
+     *         so they are aware of the updated network state.</li>
+     *     <li>Prints the current address server registry to the console for debugging purposes.</li>
+     * </ol>
+     * <p>
+     * If an {@link IOException} occurs at any point during this process, the associated connection is cleaned up
+     * using the {@link ConnectionCleanupManager}.
+     * </p>
+     *
+     * @param primaryPID   the process ID of the primary {@code AddressingServer}
+     * @param newPID       the newly assigned process ID of the replica
+     * @param channel      the raw {@link SocketChannel} associated with the replica
+     * @param nioChannel   the {@link NIOMessageChannel} wrapper for communicating with the replica
+     * @param record       the {@link AddrServerRecord} representing the newly registered replica
+     */
+    public void registerFirstReplicaServer(long primaryPID, long newPID,
+                                           SocketChannel channel,
+                                           NIOMessageChannel nioChannel,
+                                           AddrServerRecord record) {
+        try {
+            this.peerManager.registerPeerSendACK(channel, nioChannel, primaryPID, newPID, record);
+            this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
+                    this.chatServerRegistry.getRecords(),
+                    this.addrServerRegistry.getRecords());
+            this.broadcastManager.broadcastAddrServerRecordToCS(primaryPID, record);
+            this.addrServerRegistry.debugPrintAllServers();
+        } catch (IOException ioe) {
+            System.err.printf("IOException triggered while registering PID: %d - triggering connection cleanup.%n", newPID);
+            this.cleanupManager.cleanupPersistentConnection(channel, true);
+        }
+    }
+
+    /**
+     * Creates a {@link PendingEvent} representing the registration of a new replica with the primary {@code AddressingServer}.
+     * <p>
+     * This event sends an initial acknowledgment message to the new replica and tracks acknowledgments from
+     * all currently registered replicas. The event is considered complete once all required ACKs are received.
+     * </p>
+     *
+     * <p>
+     * Once the event is complete, the following actions are performed in sequence:
+     * </p>
+     * <ul>
+     *     <li>The new replica is formally added to the list of active NIOChannels in {@link PeerManager}.</li>
+     *     <li>The new replica record is added to set of {@link AddrServerRecord} in {@link AddrServerRegistry}.</li>
+     *     <li>The full set of chat server and addressing server records are sent to the new replica.</li>
+     *     <li>The new replica's {@link AddrServerRecord} is broadcast to all connected chat servers.</li>
+     *     <li>The updated address server registry is printed for debugging purposes.</li>
+     * </ul>
+     *
+     * <p>
+     * This method encapsulates the full coordination logic required to safely and consistently register
+     * a replica across a distributed system, ensuring that all participating replicas are aware of the new node.
+     * </p>
+     *
+     * @param primaryPID  the PID of the primary {@code AddressingServer}
+     * @param newPID      the PID assigned to the newly registering replica
+     * @param channel     the {@link SocketChannel} associated with the requester
+     * @param nioChannel  the {@link NIOMessageChannel} used to communicate with the requester
+     * @param record      the {@link AddrServerRecord} representing the new replica's state
+     * @param recipients  a map containing all of the registered replica address server {@code NIOMessageChannel}'s and their PIDs
+     * @return a {@link PendingEvent} configured to complete registration once all ACKs have been received
+     */
+    public PendingEvent createReplicaRegistrationEvent(long primaryPID, long newPID,
+                                                       SocketChannel channel,
+                                                       NIOMessageChannel nioChannel,
+                                                       AddrServerRecord record,
+                                                       Map<Long, NIOMessageChannel> recipients) {
+        return new PendingEvent(
+                AckMessage.replicaRegistered(primaryPID, newPID),
+                recipients,
+                3,
+                nioChannel,
+                () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
+                    // All replicas have successfully replicated the update. Update state locally and continue with response.
+                    this.peerManager.registerPeer(channel, nioChannel, record);
+                    this.addrServerRegistry.debugPrintAllServers();
+                    // An ACK containing the PID for the newly registered replica will already have been sent by the pendingEvent (see above).
+                    // Once all ACKs received, send all the server records to the new replica
+                    try {
+                        this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
+                                this.chatServerRegistry.getRecords(),
+                                this.addrServerRegistry.getRecords());
+                        this.broadcastManager.broadcastAddrServerRecordToCS(primaryPID, record);
+                    } catch (IOException e) {
+                        System.err.printf("IOException triggered while registering PID: %d - triggering connection cleanup.%n", newPID);
+                        // An error occurred while trying to sync the new Replicas state. Remove it from the network.
+                        this.server.getCleanupManager().cleanupPersistentConnection(channel, true);
+                    }
+                }
+        );
+    }
+
+    /**
+     * Handles the registration of a new {@code ChatServer}.
+     * <p>
+     * This method assigns a unique PID, registers the server, sends the full state
+     * of the network to the new chat server, and broadcasts the new registration
+     * to all connected {@code ChatServer}s.
+     *
+     * @param channel the socket connection from the registering chat server
+     * @param nioChannel the message channel associated with the chat server
+     * @param msg the registration message containing a {@link ChatServerRecord}
+     * @throws IOException if sending the full state to the chat server fails
+     */
+    public void handleChatServerRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg)
+            throws IOException {
+        Long primaryPID = server.getConfig().getPID();
+        Long newPID = server.generatePID();
+
+        ChatServerRecord record = chatServerManager.registerServer(channel, nioChannel, newPID, primaryPID,
+                msg.safeCastPayload(ChatServerRecord.class));
+
+        broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
+                server.getChatServerRegistry().getRecords(),
+                server.getAddrServerRegistry().getRecords());
+
+        broadcastManager.broadcastChatServerRecordToCS(primaryPID, record);
+        server.getChatServerRegistry().debugPrintAllServers();
+    }
+
+    /**
+     * Handles the registration process for a newly connected {@code AddressingServer} replica.
+     * <p>
+     * This method coordinates the following steps:
+     * <ul>
+     *     <li>Assigns a new unique process ID (PID) to the incoming replica.</li>
+     *     <li>Updates the provided {@link AddrServerRecord} with the actual host address and assigned PID.</li>
+     *     <li>If this is the first replica to register (i.e., no other replicas are active), it bypasses coordination logic
+     *         and directly completes registration.</li>
+     *     <li>If other replicas exist, it triggers a synchronization event where all existing replicas must acknowledge
+     *         the update before the new replica is officially registered.</li>
+     *     <li>Creates a {@link PendingEvent} to track replica ACKs and triggers the associated completion routine once all ACKs arrive.</li>
+     *     <li>Broadcasts the updated state to all registered replicas.</li>
+     * </ul>
+     *
+     * <p>
+     * This ensures strong consistency in the network by requiring all replicas to synchronize their
+     * internal state before accepting the new replica into the system.
+     * </p>
+     *
+     * @param channel the socket connection from the registering replica
+     * @param nioChannel the message channel used to communicate with the replica
+     * @param msg the registration message containing the {@link AddrServerRecord}
+     * @throws IOException if updating the record or broadcasting fails
+     */
+    public void handleReplicaRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg)
+    {
+
+        Long primaryPID = server.getConfig().getPID();
+        Long newPID = server.generatePID();
+        // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
+        AddrServerRecord record = null;
+        try {
+            record = peerManager.updateServerRecord(channel, msg.safeCastPayload(AddrServerRecord.class), newPID);
+        } catch (IOException e) {
+            System.err.printf("Failed to resolve remote address for replica (PID: %d). Registration aborted.%n", newPID);
+            cleanupManager.cleanupPersistentConnection(channel, true);
+            return;
+        }
+        // If this is the first and only replica, register directly without coordinating with others.
+        if (addrServerRegistry.getRecords().size() == 1) {
+            this.registerFirstReplicaServer(primaryPID, newPID, channel, nioChannel, record);
+            return;
+        } // Otherwise, initiate strong consistency: wait for ACKs from all existing replicas.
+
+        // Get the list of all NIOMessage channels for registered peers (non-zero PID)
+        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
+        // Set the NIOChannel PID before continuing any of the response to the request (to avoid errors when closing connections).
+        nioChannel.setServerPID(newPID);
+        // Create unique message ID that will be used to track ACK messages as well as the pending event.
+        long messageID = server.getMessageIDGenerator().nextID();
+        // Create a new event that will trigger once all ACKs for synchronizing state have been received.
+        PendingEvent event = this.createReplicaRegistrationEvent(primaryPID, newPID, channel, nioChannel, record, replicaChannelMap);
+        // Add this to the list of pending events. The message ID used for replication messages is the key.
+        replicaCoordinator.addPendingEvent(messageID, event);
+        // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.
+        broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, event);
+    }
+}

@@ -61,7 +61,6 @@ public class ChatServerManager {
         Long pid = ch.getServerPID();
         try {
             this.registry.removeRecordByKey(pid);
-
             System.out.println("Removed the network communication channels for the ChatServer with PID: " + pid);
         } catch (NullPointerException e){
             System.err.println("Removed a NIOMessageChannel and SocketChannel connection for a ChatServer that had no ChatServerRecord. It's network PID was - " + pid);
