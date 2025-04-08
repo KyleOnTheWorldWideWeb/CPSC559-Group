@@ -130,7 +130,7 @@ public class BroadcastManager {
                 } catch (IOException ioe) {
                     System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
                     cleanupManager.cleanupPersistentConnectionNIO(nioChannel,true);
-                    pendingEvent.removeRecipientChannel(nioChannel.getServerPID()); // The PID cannot null because the replicaChannelMap only contains registered replica channels
+                    pendingEvent.removeRecipientChannel(nioChannel.getServerPID());
                 }
             }
         } catch (JsonProcessingException e) {

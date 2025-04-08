@@ -45,8 +45,14 @@ public class NIOMessageChannel {
 
     /**
      * The unique identifier of the server associated with this channel.
+     * 0L represents "not yet registered" or "uninitialized" in the system —
+     * i.e. it is a placeholder PID that no valid process will ever use.
+     * <p>
+     *     Using 0L as a sentinel value avoids the case of null-pointer exceptions,
+     *     while providing the same function of denoting an unregistered process/channel.
+     * </p>
      */
-    private Long serverPID;
+    private Long serverPID = 0L;
 
 
     /**
@@ -77,8 +83,6 @@ public class NIOMessageChannel {
     public NIOMessageChannel(SocketChannel channel) {
         this.channel = channel;
         this.streamBuffer = ByteBuffer.allocate(1024);  // Adjustable buffer size
-
-        //this.serverPID = 0L;    // All network PID start at 1 - this replaces a null value to avoid null pointer exceptions
     }
 
 
@@ -212,9 +216,28 @@ public class NIOMessageChannel {
         } catch (IOException ignore) { } // Our goal is to close the channel. If there is an error -> it's closed.
     }
 
+    /**
+     * Returns the process ID (PID) associated with the remote server connected through this channel.
+     * <p>
+     * A PID of {@code 0L} indicates that the remote server has not yet been assigned
+     * a unique identifier by the primary {@code AddressingServer}.
+     * </p>
+     *
+     * @return the PID of the remote server; {@code 0L} if unregistered.
+     */
     public Long getServerPID() {
         return serverPID;
     }
+
+    /**
+     * Assigns a unique process ID (PID) to the remote server connected through this channel.
+     * <p>
+     * This is typically called during the registration process, once the primary
+     * {@code AddressingServer} has issued a valid PID to the remote server.
+     * </p>
+     *
+     * @param pid the PID to associate with this channel's remote server.
+     */
     public void setServerPID(Long pid) {
         this.serverPID = pid;
     }

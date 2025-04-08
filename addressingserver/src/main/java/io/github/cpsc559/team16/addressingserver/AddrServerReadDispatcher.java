@@ -193,7 +193,6 @@ public class AddrServerReadDispatcher {
                 this.server.getChatServerRegistry().debugPrintAllServers();
             }
             case Roles.REPLICA -> {
-                // TODO - Add try catch block for message failed IOExceptions
                 System.out.println("Replica registration message has been received.");
                 this.server.getRegistrationCoordinator().handleReplicaRegistration(channel, nioChannel, registerMessage);
             }

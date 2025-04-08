@@ -39,7 +39,7 @@ public class ChatServerRegistry {
     }
 
 
-    public void putChatServerRecord(Long chatServerPID, ChatServerRecord record) throws IOException {
+    public void putChatServerRecord(Long chatServerPID, ChatServerRecord record) {
         this.chatServerRecords.put(chatServerPID, record);
     }
 

@@ -245,10 +245,27 @@ public class AddressingServer {
     }
 
     /**
-     * The number of servers that have been registered cummulatively since network initialization - i.e. PID's are not recycled or reassigned.
-     * Count begins at 1, not zero, because normals don't start at zero.
+     * The current highest assigned PID in the distributed network.
+     * Typically, this number only grows, i.e. PIDs are not reassigned.
+     * <p>
+     * However, in the event of a PRIMARY failure, the REPLICA server that is elected leader
+     * will find the highest PID in the network by searching through all of the
+     * active {@code ServerRecord}'s set {@code pidCounter} to that value.
+     * </p>
+     * Count begins at 1, not zero. Any PID = 0 represents an unregistered process that should
+     * not be allowed to interact with any network process until it has been registered and assigned
+     * a PID.
      */
     private Long pidCounter = 0L;
+
+    /**
+     * Generates a unique identifier for a chat server by incrementing the internal counter.
+     *
+     * @return a unique {@code Long} representing the chat server's ID.
+     */
+    public Long generatePID() {
+        return ++this.pidCounter;
+    }
 
     /**
      * Sets the internal process ID counter to a specified value.
@@ -264,15 +281,6 @@ public class AddressingServer {
      */
     public void setPidCounter(Long currentNetworkMaxPID) {
         this.pidCounter = currentNetworkMaxPID;
-    }
-
-    /**
-     * Generates a unique identifier for a chat server by incrementing the internal counter.
-     *
-     * @return a unique {@code Long} representing the chat server's ID.
-     */
-    public Long generatePID() {
-        return ++this.pidCounter;
     }
 
     /**

@@ -195,13 +195,8 @@ public class ChatServerRecord extends ServerRecord {
         }
     }
 
-    public void setPID(Long serverPID) { super.setPID(serverPID);}
 
     public void setClientCount(int newClientCount) { this.clientCount = newClientCount; }
-
-    public void setHostAddress(String hostAddress) {
-        super.setHostAddress(hostAddress);
-    }
 
     public int getAddrServerPort() { return this.addrServerPort; }
 

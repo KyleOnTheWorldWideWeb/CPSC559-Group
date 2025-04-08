@@ -56,8 +56,8 @@ public class PeerManager {
     public Boolean isRegistered (Long pid) {
         for (NIOMessageChannel channel: peerChannels.values()) {
             Long nioPID = channel.getServerPID();
-            if (nioPID != null) {
-                if (channel.getServerPID().equals(pid)) return true;
+            if (nioPID != 0L && nioPID.equals(pid)) {
+                return true;
             }
         }
         return false;
@@ -71,7 +71,7 @@ public class PeerManager {
     public Collection<NIOMessageChannel> getRegisteredNIOChannels() {
         return peerChannels.values()
                 .stream()
-                .filter(ch -> ch.getServerPID() != null && ch.getServerPID() != 0)
+                .filter(ch -> ch.getServerPID() != 0L)
                 .toList();
     }
 
@@ -79,7 +79,7 @@ public class PeerManager {
      * Returns a concurrent map of all connected replica channels that have been assigned a non-zero PID.
      * <p>
      * The map is keyed by the replica's PID, with values being their corresponding {@link NIOMessageChannel}.
-     * Unregistered channels (PID == 0 or null) are excluded.
+     * Unregistered channels (PID == 0L) are excluded.
      * </p>
      *
      * @return a {@link ConcurrentHashMap} of replica PIDs to active {@link NIOMessageChannel}s.
@@ -88,7 +88,7 @@ public class PeerManager {
         ConcurrentHashMap<Long, NIOMessageChannel> registered = new ConcurrentHashMap<>();
         for (NIOMessageChannel ch : peerChannels.values()) {
             Long pid = ch.getServerPID();
-            if (pid != null && pid != 0) {
+            if (pid != 0L) {
                 registered.put(pid, ch);
             }
         }
@@ -149,15 +149,15 @@ public class PeerManager {
         // We already ensured that the key:value pair exists in the calling code AddrServerNetworkManager.cleanupPersistentConnection()
         NIOMessageChannel ch = peerChannels.remove(channel);
         Long pid = ch.getServerPID();
-        try {
+        if (pid != 0L) {
             this.registry.removeRecordByKey(pid);
             try {
                 System.out.printf("Successfully removed *communication channels* for Network Process with PID: %d " +
                         "- and Host Address: %s%n", pid, channel.getRemoteAddress());
             } catch (IOException ignore) {}
 
-        } catch (NullPointerException e){
-            System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer that had no AddrServerRecord. It's network PID was - " + pid);
+        } else {
+            System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer with a PID = 0L that had no AddrServerRecord.");
         }
     }
 
@@ -219,10 +219,10 @@ public class PeerManager {
      * @param socketChannel the socket channel for the replica connection.
      * @param nioChannel    the messaging channel used to communicate with the replica.
      * @param record        a partially populated record to complete and store.
-     * @throws IllegalArgumentException  if an error occurs during network communication.
+     * @throws IllegalArgumentException  if there is a mismatch between the PID stored in the NIOMessageChannel and the AddrServerRecord.
      */
     public void registerPeer(SocketChannel socketChannel, NIOMessageChannel nioChannel,
-                                         AddrServerRecord record) throws IllegalArgumentException {
+                             AddrServerRecord record) throws IllegalArgumentException {
 
         if (!nioChannel.getServerPID().equals(record.getPID())) {
             String err = String.format("Peer PID in nioChannel : %d does not match Peer PID in AddrServerRecord: %d%n",
@@ -238,21 +238,16 @@ public class PeerManager {
 
     /**
      * Registers a replica AddressingServer and sets up a persistent connection to it.
-     * <p>
-     * This method also updates the replicas {@code AddrServerRecord} with its resolved host address and PID,
-     * stores it in the shared registry, and sends a confirmation {@code AckMessage} followed by
-     * the current state of all known AddrServer records.
-     * </p>
      *
      * @param socketChannel the socket channel for the replica connection.
      * @param nioChannel    the messaging channel used to communicate with the replica.
      * @param peerPID       the process ID assigned to the replica.
      * @param primaryPID    the process ID of the primary server.
-     * @param record        a partially populated record to complete and store.
+     * @param record        a fully populated (PID and Host Address set) {@link AddrServerRecord}
      * @throws IOException if an error occurs during network communication.
      */
     public void registerPeerSendACK(SocketChannel socketChannel, NIOMessageChannel nioChannel,
-                                         Long primaryPID, Long peerPID, AddrServerRecord record) throws IOException {
+                                    Long primaryPID, Long peerPID, AddrServerRecord record) throws IOException {
         nioChannel.setServerPID(peerPID);
         peerChannels.put(socketChannel, nioChannel);
         System.out.println("PRIMARY AddrServer has registered a new REPLICA process with network PID: " + peerPID);
@@ -265,30 +260,7 @@ public class PeerManager {
         nioChannel.sendMessage(AckMessage.replicaRegistered(primaryPID, peerPID).toJson());
     }
 
-    /**
-     * Updates the provided {@link AddrServerRecord} with runtime information from the given socket connection and PID.
-     * <p>
-     * This method is typically called during replica registration to ensure that the record accurately reflects
-     * the replica's actual host address and assigned PID. The host address is extracted directly from the
-     * {@link SocketChannel}'s remote address to avoid relying on potentially incorrect values sent by the remote process.
-     * </p>
-     *
-     * @param socketChannel the channel representing the remote replica's connection
-     * @param record        the {@link AddrServerRecord} instance provided by the replica
-     * @param peerPID       the process ID assigned to the replica by the primary
-     * @return the updated {@link AddrServerRecord} with corrected host address and assigned PID
-     * @throws IOException if the remote address cannot be resolved from the socket
-     */
-    public AddrServerRecord updateServerRecord(SocketChannel socketChannel,
-                                               AddrServerRecord record, Long peerPID) throws IOException {
-        // Retrieve the remote process Host Address.
-        InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
-        String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
-        // Update the incoming AddrServerRecord provided by the remote process.
-        record.setHostAddress(replicaHostAddr);
-        record.setPID(peerPID);
-        return record;
-    }
+
 
     /**
      * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
@@ -315,8 +287,6 @@ public class PeerManager {
             System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
         }
     }
-
-
 
 
     /**
@@ -416,7 +386,30 @@ public class PeerManager {
         return 0L;
     }
 
-
+//    /**
+//     * Updates the provided {@link AddrServerRecord} with runtime information from the given socket connection and PID.
+//     * <p>
+//     * This method is typically called during replica registration to ensure that the record accurately reflects
+//     * the replica's actual host address and assigned PID. The host address is extracted directly from the
+//     * {@link SocketChannel}'s remote address to avoid relying on potentially incorrect values sent by the remote process.
+//     * </p>
+//     *
+//     * @param socketChannel the channel representing the remote replica's connection
+//     * @param record        the {@link AddrServerRecord} instance provided by the replica
+//     * @param peerPID       the process ID assigned to the replica by the primary
+//     * @return the updated {@link AddrServerRecord} with corrected host address and assigned PID
+//     * @throws IOException if the remote address cannot be resolved from the socket
+//     */
+//    public static AddrServerRecord updateServerRecord(SocketChannel socketChannel,
+//                                               AddrServerRecord record, Long peerPID) throws IOException {
+//        // Retrieve the remote process Host Address.
+//        InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
+//        String replicaHostAddr = remoteAddress.getAddress().getHostAddress();
+//        // Update the incoming AddrServerRecord provided by the remote process.
+//        record.setHostAddress(replicaHostAddr);
+//        record.setPID(peerPID);
+//        return record;
+//    }
 //    /**
 //     * Sends all currently known {@code AddrServerRecord} entries from the primary
 //     * to a newly connected replica.
