@@ -34,6 +34,25 @@ public class BroadcastManager {
         this.cleanupManager = cleanupManager;
     }
 
+
+    /**
+     * Broadcasts a single {@link ChatServerRecord} to all connected servers.
+     * <p>
+     * This method is used by the PRIMARY {@code AddressingServer} to inform ChatServers and Replica AddrServers
+     * about a new or updated {@code ChatServerRecord}. This ensures the distributed state
+     * remains consistent across all registered nodes.
+     * </p>
+     *
+     * @param primaryPID the PID of the primary server issuing the update.
+     * @param record        the {@link AddrServerRecord} containing the update information.
+     */
+    public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
+        UpdateMessage<ChatServerRecord> forChatServer = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
+        broadcastServerRecordNoEvent(forChatServer, chatServerChannels);
+        UpdateMessage<ChatServerRecord> forReplica = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
+        broadcastServerRecordNoEvent(forReplica, peerChannels);
+    }
+
     /**
      * Broadcasts a single {@link AddrServerRecord} to all connected {@code ChatServer}s.
      * <p>
@@ -49,7 +68,7 @@ public class BroadcastManager {
      */
     public void broadcastAddrServerRecordToCS(Long primaryPID, AddrServerRecord record) {
         UpdateMessage<AddrServerRecord> forChatServer = UpdateMessage.asRecordPrimaryToCS(primaryPID, record);
-        broadcastServerRecordToCS(forChatServer, chatServerChannels);
+        broadcastServerRecordNoEvent(forChatServer, chatServerChannels);
     }
 
 
@@ -67,7 +86,7 @@ public class BroadcastManager {
      */
     public void broadcastChatServerRecordToCS(Long primaryPID, ChatServerRecord record) {
         UpdateMessage<ChatServerRecord> forChatServer = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
-        broadcastServerRecordToCS(forChatServer, chatServerChannels);
+        broadcastServerRecordNoEvent(forChatServer, chatServerChannels);
     }
 
 
@@ -84,7 +103,7 @@ public class BroadcastManager {
      * @param message the update message to be broadcast.
      * @param <T>     the type of record being broadcast (e.g., {@code AddrServerRecord}, {@code ChatServerRecord}).
      */
-    public <T> void broadcastServerRecordToCS(UpdateMessage<T> message, Map<SocketChannel, NIOMessageChannel> channelHashMap) {
+    public <T> void broadcastServerRecordNoEvent(UpdateMessage<T> message, Map<SocketChannel, NIOMessageChannel> channelHashMap) {
         try {
             String jsonMessage = message.toJson();
             for (NIOMessageChannel nioChannel : channelHashMap.values()) {

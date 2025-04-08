@@ -106,13 +106,13 @@ public class RegistrationCoordinator {
         try {
             record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(ChatServerRecord.class), newPID);
         } catch (IOException e) {
-            System.err.printf("Failed to resolve remote address for replica (PID: %d). Registration aborted.%n", newPID);
+            System.err.printf("Failed to resolve remote address for ChatServer (PID: %d). Registration aborted.%n", newPID);
             cleanupManager.cleanupPersistentConnection(channel, true);
             return;
         }
         // If there are no other Replica addressing servers, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
-            this.registerFirstChatServer(primaryPID, newPID, channel, nioChannel, record);
+            this.registerChatServerNoReplicasExist(primaryPID, newPID, channel, nioChannel, record);
             return;
         } // Otherwise, initiate strong consistency: wait for ACKs from all existing replicas.
 
@@ -128,6 +128,7 @@ public class RegistrationCoordinator {
         replicaCoordinator.addPendingEvent(messageID, event);
         // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.
         broadcastManager.broadcastCSRecordToReplicas(messageID, primaryPID, record, event);
+        System.out.println("PRIMARY has sent ChatServerRecord to all REPLICA's - waiting for `Replicated` ACK before a response is issued.");
     }
 
 
@@ -154,7 +155,7 @@ public class RegistrationCoordinator {
      * @param nioChannel   the {@link NIOMessageChannel} used to communicate with the chat server
      * @param record       the {@link ChatServerRecord} representing the newly registered server
      */
-    public void registerFirstChatServer(long primaryPID, long newPID,
+    public void registerChatServerNoReplicasExist(long primaryPID, long newPID,
                                         SocketChannel channel,
                                         NIOMessageChannel nioChannel,
                                         ChatServerRecord record) {

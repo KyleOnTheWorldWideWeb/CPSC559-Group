@@ -260,6 +260,86 @@ public class PeerManager {
         nioChannel.sendMessage(AckMessage.replicaRegistered(primaryPID, peerPID).toJson());
     }
 
+    /**
+     * Processes an incoming {@link UpdateMessage} containing an {@link AddrServerRecord},
+     * updates the registry, and conditionally responds with an ACK if the message
+     * is part of a synchronization event (i.e., message ID > 0).
+     *
+     * <p>
+     * This method is typically used on REPLICA servers to respond to broadcasted
+     * updates from the PRIMARY server. It ensures strong consistency by acknowledging
+     * only those updates tied to a {@link PendingEvent}.
+     * </p>
+     *
+     * @param updateMessage the {@link UpdateMessage} containing the {@link AddrServerRecord} update
+     * @param nioChannel the {@link NIOMessageChannel} used to reply to the PRIMARY
+     * @param localPID the process ID of the local replica
+     * @param cleanupManager the {@link ConnectionCleanupManager} used to close faulty channels
+     */
+    public void processAddrServerUpdateSendAck(BaseAddrServerMessage<?> updateMessage,
+                                               NIOMessageChannel nioChannel,
+                                               Long localPID,
+                                               ConnectionCleanupManager cleanupManager) {
+        if (updateMessage.getMessageID() != 0) {
+            try {
+                System.out.println("Sending *AddrServerRecord* 'Replicated' ACK to Primary for message ID: " + updateMessage.getMessageID());
+                nioChannel.sendMessage(AckMessage.replicated(
+                        updateMessage.getMessageID(), localPID, true).toJson());
+                this.updateRecords(updateMessage.safeCastPayload(AddrServerRecord.class));
+                this.registry.debugPrintAllServers();
+            } catch (JsonProcessingException e) {
+                System.err.printf(
+                        "Failed to serialize AckMessage<%s> for broadcast. Context: messageID=%d, senderPID=%d, senderRole=%s. Exception: %s%n",
+                        updateMessage.getObjectType(), updateMessage.getMessageID(), localPID, Roles.REPLICA, e.getMessage()
+                );
+            } catch (IOException ioe) {
+                System.err.println("Failed to send ACK for message ID: " + updateMessage.getMessageID());
+                cleanupManager.cleanupPersistentConnection(nioChannel.getSocketChannel(), true);
+            }
+        }
+    }
+
+    /**
+     * Processes an incoming {@link UpdateMessage} containing an {@link ChatServerRecord},
+     * updates the ChatServerRegistry, and conditionally responds with an ACK if the message
+     * is part of a synchronization event (i.e., message ID > 0).
+     *
+     * <p>
+     * This method is typically used on REPLICA servers to respond to broadcasted
+     * updates from the PRIMARY server. It ensures strong consistency by acknowledging
+     * only those updates tied to a {@link PendingEvent}.
+     * </p>
+     *
+     * @param updateMessage the {@link UpdateMessage} containing the {@link AddrServerRecord} update
+     * @param nioChannel the {@link NIOMessageChannel} used to reply to the PRIMARY
+     * @param localPID the process ID of the local replica
+     * @param cleanupManager the {@link ConnectionCleanupManager} used to close faulty channels
+     * @param registry the {@link ChatServerRegistry} that stores all the ChatServerRecords for this process.
+     */
+    public void processChatServerUpdateSendAck(BaseAddrServerMessage<?> updateMessage,
+                                               NIOMessageChannel nioChannel,
+                                               Long localPID,
+                                               ConnectionCleanupManager cleanupManager,
+                                               ChatServerRegistry registry) {
+        if (updateMessage.getMessageID() != 0) {
+            try {
+                System.out.println("Sending *ChatServerRecord* 'Replicated' ACK to Primary for message ID: " + updateMessage.getMessageID());
+                nioChannel.sendMessage(AckMessage.replicated(
+                        updateMessage.getMessageID(), localPID, true).toJson());
+                registry.updateOrInsertRecord(updateMessage.safeCastPayload(ChatServerRecord.class));
+                registry.debugPrintAllServers();
+            } catch (JsonProcessingException e) {
+                System.err.printf(
+                        "Failed to serialize AckMessage<%s> for broadcast. Context: messageID=%d, senderPID=%d, senderRole=%s. Exception: %s%n",
+                        updateMessage.getObjectType(), updateMessage.getMessageID(), localPID, Roles.REPLICA, e.getMessage()
+                );
+            } catch (IOException ioe) {
+                System.err.println("Failed to send ACK for message ID: " + updateMessage.getMessageID());
+                cleanupManager.cleanupPersistentConnection(nioChannel.getSocketChannel(), true);
+            }
+        }
+    }
+
 
 
     /**

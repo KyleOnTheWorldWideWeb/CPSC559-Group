@@ -1,12 +1,10 @@
 package io.github.cpsc559.team16.common.messaging;
 
 /**
- * A standardized acknowledgment message used for confirming successful
- * communication,
+ * A standardized acknowledgment message used for confirming successful communication,
  * such as registration or message receipt.
  * <p>
- * The payload of an {@code AckMessage} is typically a string (e.g., "OK",
- * "Registered", or an error reason).
+ * The payload of an {@code AckMessage} is typically a string (e.g., "OK", "Registered", or an error reason).
  * </p>
  *
  * <pre>
@@ -22,13 +20,6 @@ package io.github.cpsc559.team16.common.messaging;
  * </pre>
  */
 public class AckMessage<T> extends BaseAddrServerMessage<T> {
-
-     /**
-      * need to have a default constructor for deserialization to work
-      */
-     public AckMessage() {
-          super(); // Make sure BaseAddrServerMessage also has a no-arg constructor
-     }
 
     /**
      * Constructs a new acknowledgment message.
@@ -57,43 +48,34 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
     }
 
 
-     /**
-      * Creates a simple "OK" acknowledgment.
-      *
-      * @param senderPID  The process ID of the sender.
-      * @param senderRole The role of the sender.
-      * @param targetRole The role of the intended recipient.
-      * @return A basic {@code AckMessage} with payload "OK".
-      */
-     public static AckMessage<String> ok(long senderPID, String senderRole, String targetRole) {
-          return new AckMessage<>(AckObjectTypes.OK, senderPID, senderRole, targetRole, "OK");
-     }
+    /**
+     * Creates a simple "OK" acknowledgment.
+     *
+     * @param senderPID The process ID of the sender.
+     * @param senderRole The role of the sender.
+     * @param targetRole The role of the intended recipient.
+     * @return A basic {@code AckMessage} with payload "OK".
+     */
+    public static AckMessage<String> ok(long senderPID, String senderRole, String targetRole) {
+        return new AckMessage<>(AckObjectTypes.OK, senderPID, senderRole, targetRole, "OK");
+    }
 
-     /**
-      * Creates an ACK message from the PRIMARY server directed to a CLIENT.
-      * <p>
-      * This factory method generates an {@code AckMessage} where the sender is
-      * identified as PRIMARY and the recipient as CLIENT.
-      * The provided {@code ackType} is used as the message's object type (e.g.,
-      * indicating the nature of the acknowledgment),
-      * and the {@code chatServerHostAddress} serves as the payload, typically
-      * representing the host address (and optionally port)
-      * of the chat server.
-      * </p>
-      *
-      * @param senderPID             The process ID of the PRIMARY server sending
-      *                              this message
-      * @param chatServerHostAddress The host address (and optionally port) of the
-      *                              chat server to be communicated to the client
-      * @return an {@code AckMessage} constructed with the specified parameters,
-      *         ready to be sent from the PRIMARY to the CLIENT
-      */
-     public static AckMessage<String> chatHostAddress(long senderPID, String chatServerHostAddress) {
-          return new AckMessage<>(AckObjectTypes.HOSTADDRESS, senderPID, Roles.PRIMARY, Roles.CLIENT,
-                    chatServerHostAddress);
-     }
+    /**
+     * Creates an ACK message from the PRIMARY server directed to a CLIENT.
+     * <p>
+     * This factory method generates an {@code AckMessage} where the sender is identified as PRIMARY and the recipient as CLIENT.
+     * The acknowledgment type is hardcoded as {@code AckObjectTypes.HOSTADDRESS}, and the payload represents the assigned host.
+     * </p>
+     *
+     * @param senderPID             the process ID of the PRIMARY server sending this message
+     * @param chatServerHostAddress the host address (and optionally port) of the chat server to be communicated to the client
+     * @return an {@code AckMessage} constructed with the specified parameters, ready to be sent from the PRIMARY to the CLIENT
+     */
+    public static AckMessage<String> chatHostAddress(long senderPID, String chatServerHostAddress) {
+        return new AckMessage<>(AckObjectTypes.HOSTADDRESS, senderPID, Roles.PRIMARY, Roles.CLIENT, chatServerHostAddress);
+    }
 
-     /**
+    /**
      * Creates an ACK message from the PRIMARY server directed to a CLIENT.
      * <p>
      * This factory method generates an {@code AckMessage} where the sender is identified as PRIMARY and the recipient as CLIENT.
@@ -104,8 +86,8 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
      * @return an {@code AckMessage} constructed with the specified parameters, ready to be sent from the PRIMARY to the CLIENT
      */
     public static AckMessage<String> noChatHost(long senderPID) {
-     return new AckMessage<>(AckObjectTypes.NOHOST, senderPID, Roles.PRIMARY, Roles.CLIENT, "404 ChatServer Not Found — they ghosted you.");
- }
+        return new AckMessage<>(AckObjectTypes.NOHOST, senderPID, Roles.PRIMARY, Roles.CLIENT, "404 ChatServer Not Found — they ghosted you.");
+    }
 
 
 

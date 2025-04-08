@@ -3,6 +3,7 @@ package io.github.cpsc559.team16.chatserver;
 import java.nio.channels.SelectionKey;
 import java.util.Map;
 
+import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -123,8 +124,9 @@ class AddressingServerHandler implements ConnectionHandler {
     private void handleAck(BaseAddrServerMessage<?> message, ConnectionContext ctx, SelectionKey key) {
         debug(DEBUG_NORMAL, "[ADDR_SERVER] Handling ACK...");
 
-        try {
-            if (!"Registered".equals(message.getObjectType())) {
+        try { // NOTE: Please try to use the AckObjectTypes and MessageTypes and ObjectTypes declared in the Messaging module
+            // This helps ensure there are no runtime errors due to syntax errors. It also helps with readability IMO.
+            if (!AckObjectTypes.REGISTERED.equals(message.getObjectType())) {
                 debug(DEBUG_BASIC, "[ADDR_SERVER] Ignoring ACK with objectType: " + message.getObjectType());
                 return;
             }
