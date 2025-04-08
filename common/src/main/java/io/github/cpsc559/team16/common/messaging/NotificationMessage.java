@@ -36,7 +36,21 @@ public class NotificationMessage<T> extends BaseAddrServerMessage<T> {
      * @param payload The data being sent in the payload.
      */
     private NotificationMessage(String objectType, long senderPID, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.NOTIFICATION, objectType, senderPID, senderRole, targetRole, payload);
+        super(0, MessageTypes.NOTIFICATION, objectType, senderPID, senderRole, targetRole, payload);
+    }
+
+    /**
+     * Private constructor to prevent direct instantiation and enforce the use of factory methods.
+     *
+     * @param messageID   A globally unique identifier for the message. Use {@link MessageIDGenerator} for generation.
+     * @param objectType The type of data being sent in the payload.
+     * @param senderPID The process ID of the sender.
+     * @param senderRole The role of the sender (e.g., CHATSERVER).
+     * @param targetRole The intended recipient's role (e.g., PRIMARY).
+     * @param payload The data being sent in the payload.
+     */
+    private NotificationMessage(long messageID, String objectType, long senderPID, String senderRole, String targetRole, T payload) {
+        super(messageID, MessageTypes.NOTIFICATION, objectType, senderPID, senderRole, targetRole, payload);
     }
 
 

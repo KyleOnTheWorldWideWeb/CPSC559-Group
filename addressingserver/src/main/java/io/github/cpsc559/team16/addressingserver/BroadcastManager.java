@@ -10,6 +10,7 @@ import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+import java.util.Collection;
 import java.util.Map;
 
 public class BroadcastManager {
@@ -35,6 +36,24 @@ public class BroadcastManager {
 
 
     /**
+     * Broadcasts a single {@link ChatServerRecord} to all connected servers.
+     * <p>
+     * This method is used by the PRIMARY {@code AddressingServer} to inform ChatServers and Replica AddrServers
+     * about a new or updated {@code ChatServerRecord}. This ensures the distributed state
+     * remains consistent across all registered nodes.
+     * </p>
+     *
+     * @param primaryPID the PID of the primary server issuing the update.
+     * @param record        the {@link AddrServerRecord} containing the update information.
+     */
+    public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
+        UpdateMessage<ChatServerRecord> forChatServer = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
+        broadcastServerRecordNoEvent(forChatServer, chatServerChannels);
+        UpdateMessage<ChatServerRecord> forReplica = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
+        broadcastServerRecordNoEvent(forReplica, peerChannels);
+    }
+
+    /**
      * Broadcasts a single {@link AddrServerRecord} to all connected {@code ChatServer}s.
      * <p>
      * This method is used by the PRIMARY {@code AddressingServer} to inform chat servers
@@ -47,12 +66,12 @@ public class BroadcastManager {
      * @param primaryPID the PID of the primary server issuing the update.
      * @param record        the {@link AddrServerRecord} containing the update information.
      */
-    public void broadcastAddrServerRecord(Long primaryPID, AddrServerRecord record) {
+    public void broadcastAddrServerRecordToCS(Long primaryPID, AddrServerRecord record) {
         UpdateMessage<AddrServerRecord> forChatServer = UpdateMessage.asRecordPrimaryToCS(primaryPID, record);
-        broadcastServerRecord(forChatServer, chatServerChannels);
-        UpdateMessage<AddrServerRecord> forReplica = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
-        broadcastServerRecord(forReplica, peerChannels);
+        broadcastServerRecordNoEvent(forChatServer, chatServerChannels);
     }
+
+
 
     /**
      * Broadcasts a single {@link ChatServerRecord} to all connected {@code ChatServer}s.
@@ -65,12 +84,11 @@ public class BroadcastManager {
      * @param primaryPID the PID of the primary server issuing the update.
      * @param record        the {@link AddrServerRecord} containing the update information.
      */
-    public void broadcastChatServerRecord(Long primaryPID, ChatServerRecord record) {
+    public void broadcastChatServerRecordToCS(Long primaryPID, ChatServerRecord record) {
         UpdateMessage<ChatServerRecord> forChatServer = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
-        broadcastServerRecord(forChatServer, chatServerChannels);
-        UpdateMessage<ChatServerRecord> forReplica = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
-        broadcastServerRecord(forReplica, peerChannels);
+        broadcastServerRecordNoEvent(forChatServer, chatServerChannels);
     }
+
 
     /**
      * Generic helper method for broadcasting {@code UpdateMessage<T>} to all connected peer addressing servers.
@@ -79,24 +97,130 @@ public class BroadcastManager {
      * logging any failures without interrupting the loop.
      * </p>
      *
+     *<strong>NOTE:</strong> This method automatically handles any I/O exceptions and cleans up the connection that
+     * triggered it.
+     *
      * @param message the update message to be broadcast.
      * @param <T>     the type of record being broadcast (e.g., {@code AddrServerRecord}, {@code ChatServerRecord}).
      */
-    public <T> void broadcastServerRecord(UpdateMessage<T> message, Map<SocketChannel, NIOMessageChannel> channelHashMap) {
+    public <T> void broadcastServerRecordNoEvent(UpdateMessage<T> message, Map<SocketChannel, NIOMessageChannel> channelHashMap) {
         try {
             String jsonMessage = message.toJson();
             for (NIOMessageChannel nioChannel : channelHashMap.values()) {
                 try {
+                    // Only new connections have a PID set to zero. ALL registered connections have the PID of the remote process.
+                    if (nioChannel.getServerPID() == 0) continue;
                     nioChannel.sendMessage(jsonMessage);
                 } catch (IOException ioe) {
                     System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
                     cleanupManager.cleanupPersistentConnectionNIO(nioChannel,true);
+                    // TODO - remove this from the list of channels passed in
                 }
             }
         } catch (JsonProcessingException e) {
             System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
         }
     }
+
+    /**
+     * Sends a broadcast {@link UpdateMessage} to all remaining recipients tracked by the given {@link PendingEvent}.
+     * <p>
+     * This method serializes the message and attempts delivery to each {@link NIOMessageChannel} still listed
+     * in the {@code PendingEvent}'s recipient map. If a channel fails to deliver the message due to an
+     * {@link IOException}, it is cleaned up and removed from the pending recipient list.
+     * </p>
+     *
+     * <p>
+     * This method ensures consistency between the state of the messaging layer and the {@code PendingEvent},
+     * allowing retry logic or completion checks to rely on the recipient map accurately.
+     * </p>
+     *
+     * @param message       the {@link UpdateMessage} to broadcast to registered replicas
+     * @param pendingEvent  the {@link PendingEvent} tracking the recipients and acknowledgments for this update
+     * @param <T>           the type of object included in the {@code UpdateMessage} payload (e.g., {@code AddrServerRecord})
+     */
+    public <T> void broadcastServerRecord(UpdateMessage<T> message, PendingEvent pendingEvent)
+    {
+        try {
+            String jsonMessage = message.toJson();
+            for (NIOMessageChannel nioChannel : pendingEvent.getPendingRecipients().values()) {
+                try {
+                    nioChannel.sendMessage(jsonMessage);
+                    System.out.println("Sending ChatServerRecord update to replicas: " + message.getMsgType());
+                } catch (IOException ioe) {
+                    System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
+                    cleanupManager.cleanupPersistentConnectionNIO(nioChannel,true);
+                    pendingEvent.removeRecipientChannel(nioChannel.getServerPID());
+                }
+            }
+        } catch (JsonProcessingException e) {
+            System.err.println("Failed to serialize UpdateMessage<" + message.getObjectType() + ">: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Broadcasts a single {@link AddrServerRecord} update to all registered {@code AddressingServer} replicas,
+     * and associates the broadcast with a {@link PendingEvent} for coordination and retry tracking.
+     *
+     * <p>
+     * This method wraps the update in an {@link UpdateMessage}, stores it in the pending event,
+     * and delegates actual message transmission to {@link #broadcastServerRecord}.
+     * </p>
+     *
+     * <p>
+     * This supports eventual consistency by ensuring all known replicas receive and acknowledge
+     * the updated addressing server state. Any replicas that fail to receive the message are removed
+     * from the pending set and will not be expected to ACK.
+     * </p>
+     *
+     * @param messageID        the unique message ID used to correlate ACKs and retries
+     * @param primaryPID       the PID of the primary addressing server initiating the update
+     * @param record           the {@link AddrServerRecord} containing the update to replicate
+     * @param pendingEvent     the {@link PendingEvent} tracking acknowledgments and recipient state
+     */
+    public void broadcastASRecordToReplicas(long messageID, Long primaryPID, AddrServerRecord record,
+                                            PendingEvent pendingEvent)
+    {
+        // Create the message to send to Replicas for synchronization of state across all Addressing Servers.
+        UpdateMessage<AddrServerRecord> updateMessage = UpdateMessage.asRecordPrimaryToReplica(messageID, primaryPID, record);
+        // Add this message to the pending event in case we need to retry sending the message.
+        pendingEvent.setMessageRequiringACK(updateMessage);
+        // Broadcast the message to all registered replicas - pass the map that is referenced by the pending event
+        // so that we can remove any channels that had an I/O failure and had their connections cleaned up (we can't be waiting for ACK's that will never come!)
+        broadcastServerRecord(updateMessage, pendingEvent);
+    }
+
+    /**
+     * Broadcasts a single {@link ChatServerRecord} update to all registered {@code AddressingServer} replicas,
+     * and associates the broadcast with a {@link PendingEvent} for coordination and retry tracking.
+     *
+     * <p>
+     * This method wraps the update in an {@link UpdateMessage}, stores it in the pending event,
+     * and delegates actual message transmission to {@link #broadcastServerRecord}.
+     * </p>
+     *
+     * <p>
+     * This supports eventual consistency by ensuring all known replicas receive and acknowledge
+     * the updated addressing server state. Any replicas that fail to receive the message are removed
+     * from the pending set and will not be expected to ACK.
+     * </p>
+     *
+     * @param messageID        the unique message ID used to correlate ACKs and retries
+     * @param primaryPID       the PID of the primary addressing server initiating the update
+     * @param record           the {@link ChatServerRecord} containing the update to replicate
+     * @param pendingEvent     the {@link PendingEvent} tracking acknowledgments and recipient state
+     */
+    public void broadcastCSRecordToReplicas(long messageID, Long primaryPID, ChatServerRecord record,
+                                            PendingEvent pendingEvent) {
+        // Create the message to send to Replicas for synchronization of state across all Addressing Servers.
+        UpdateMessage<ChatServerRecord> updateMessage = UpdateMessage.csRecordPrimaryToReplica(messageID, primaryPID, record);
+        // Add this message to the pending event in case we need to retry sending the message.
+        pendingEvent.setMessageRequiringACK(updateMessage);
+        // Broadcast the message to all registered replicas - pass the map that is referenced by the pending event
+        // so that we can remove any channels that had an I/O failure and had their connections cleaned up (we can't be waiting for ACK's that will never come!)
+        broadcastServerRecord(updateMessage, pendingEvent);
+    }
+
 
 
     /**

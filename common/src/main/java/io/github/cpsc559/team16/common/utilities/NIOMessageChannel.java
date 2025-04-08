@@ -41,14 +41,19 @@ public class NIOMessageChannel {
      */
     private final SocketChannel channel;
 
-    public Long getServerPID() {
-        return serverPID;
-    }
+
 
     /**
      * The unique identifier of the server associated with this channel.
+     * 0L represents "not yet registered" or "uninitialized" in the system —
+     * i.e. it is a placeholder PID that no valid process will ever use.
+     * <p>
+     *     Using 0L as a sentinel value avoids the case of null-pointer exceptions,
+     *     while providing the same function of denoting an unregistered process/channel.
+     * </p>
      */
-    private Long serverPID;
+    private Long serverPID = 0L;
+
 
     /**
      * A {@link ByteBuffer} used as an intermediate storage buffer for network data.
@@ -80,9 +85,7 @@ public class NIOMessageChannel {
         this.streamBuffer = ByteBuffer.allocate(1024);  // Adjustable buffer size
     }
 
-    public void setServerPID(Long pid) {
-        this.serverPID = pid;
-    }
+
 
     /**
      * Retrieves the {@code SocketChannel} being managed by this instance of
@@ -162,6 +165,11 @@ public class NIOMessageChannel {
      * <p>
      * This method accumulates data until a full message (ending in `\n`) is received.
      * </p>
+     * <p>If data exists on the channel, it will continue looping until
+     * it exhausts that data, or retrieves a message whichever comes first.
+     * A message here meaning: a sequence of characters ending with a newline `\n` character.
+     * <strong>NOTE:</strong>If you read from an empty channel (before the message arrives) it will just return null.
+     * This does not operate in a "blocking" manner like regular Sockets</p>
      *
      * @return The received message as a string, or {@code null} if no complete message is available.
      * @throws IOException If an I/O error occurs.
@@ -188,8 +196,6 @@ public class NIOMessageChannel {
     }
 
 
-
-
     /**
      * Closes the {@code SocketChannel} being managed by this instance of
      * {@link NIOMessageChannel}, terminating the persistent I/O connection
@@ -203,10 +209,37 @@ public class NIOMessageChannel {
      * {@code NIOMessageChannel} instance should be discarded to avoid unintended use
      * of a closed channel.
      * </p>
-     * @throws IOException If an error occurs while closing the channel.
      */
-    public void close() throws IOException {
-        channel.close();
+    public void closeSocketChannel() {
+        try {
+            channel.close();
+        } catch (IOException ignore) { } // Our goal is to close the channel. If there is an error -> it's closed.
+    }
+
+    /**
+     * Returns the process ID (PID) associated with the remote server connected through this channel.
+     * <p>
+     * A PID of {@code 0L} indicates that the remote server has not yet been assigned
+     * a unique identifier by the primary {@code AddressingServer}.
+     * </p>
+     *
+     * @return the PID of the remote server; {@code 0L} if unregistered.
+     */
+    public Long getServerPID() {
+        return serverPID;
+    }
+
+    /**
+     * Assigns a unique process ID (PID) to the remote server connected through this channel.
+     * <p>
+     * This is typically called during the registration process, once the primary
+     * {@code AddressingServer} has issued a valid PID to the remote server.
+     * </p>
+     *
+     * @param pid the PID to associate with this channel's remote server.
+     */
+    public void setServerPID(Long pid) {
+        this.serverPID = pid;
     }
 
 }

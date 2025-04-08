@@ -21,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -60,7 +61,7 @@ public class ChatServer {
      * </p>
      * <p>
      * Example usage in shell to reduce output to basic info only:
-     * 
+     *
      * <pre>{@code
      * export DEBUG_LEVEL=1
      * }</pre>
@@ -553,17 +554,27 @@ public class ChatServer {
             ConnectionContext ctx = new ConnectionContext(channel);
             ctx.type = ConnectionType.ADDRESSING_SERVER;
 
+
+            // NOTE: Use the factory methods in RegisterMessage for registering a process.
+            // These ensure all syntax is correct and help with bug tracking.
+
             // Save registration payload in ctx (optional, in case needed later)
-            ChatServerRecord record = new ChatServerRecord(
-                    0L,
-                    InetAddress.getLocalHost().getHostAddress(),
-                    CLIENT_PORT,
+//            ChatServerRecord record = new ChatServerRecord(
+//                    0L,
+//                    InetAddress.getLocalHost().getHostAddress(),
+//                    CLIENT_PORT,
+//                    PEER_LISTEN_PORT,
+//                    ADDRESSING_SERVER_PORT,
+//                    MAX_CLIENTS);
+
+//            BaseAddrServerMessage<ChatServerRecord> registrationMsg = new BaseAddrServerMessage<>(
+//                    "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
+
+            // This creates a registration message and a properly formed chat server record all in one.
+            RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(CLIENT_PORT,
                     PEER_LISTEN_PORT,
                     ADDRESSING_SERVER_PORT,
                     MAX_CLIENTS);
-
-            BaseAddrServerMessage<ChatServerRecord> registrationMsg = new BaseAddrServerMessage<>(
-                    "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
 
             String json = registrationMsg.toJson() + "\n";
             ctx.writeQueue.add(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
@@ -1105,7 +1116,7 @@ public class ChatServer {
      */
     private static boolean isPortInUse(int port) {
         try (@SuppressWarnings("unused")
-        ServerSocket serverSocket = new ServerSocket(port)) {
+             ServerSocket serverSocket = new ServerSocket(port)) {
             // If we can bind to the port, it's available
             return false;
         } catch (IOException e) {

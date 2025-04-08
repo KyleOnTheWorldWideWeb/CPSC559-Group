@@ -4,7 +4,9 @@ import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class AddrServerRegistry {
@@ -36,7 +38,7 @@ public class AddrServerRegistry {
      */
     public void putAddrServerRecord(Long id, AddrServerRecord record) {
         addrServerRecords.put(id, record);
-        debugPrintAllServers();
+        debugPrintServer(record);
     }
 
     /**
@@ -53,9 +55,9 @@ public class AddrServerRegistry {
         }
         AddrServerRecord existing = addrServerRecords.get(id);
         if (existing != null) {
-            System.out.println("Updating existing AddrServerRecord for ID: " + id);
+            System.out.println(">--Updating--< existing AddrServerRecord for ID: " + id);
         } else {
-            System.out.println("Inserting new AddrServerRecord for ID: " + id);
+            System.out.println(">--Inserting--< new AddrServerRecord for ID: " + id);
         }
         addrServerRecords.put(id, record);
         debugPrintAllServers();
@@ -108,6 +110,50 @@ public class AddrServerRegistry {
             System.err.println("Error registering addressing server: " + e.getMessage());
             throw e;
         }
+    }
+
+    /**
+     * Returns the greatest process ID (PID) held by any of the active
+     * {@code AddressingServer} by iterating through the current set
+     * of {@link AddrServerRecord}'s. These records represent the current
+     * {@link AddressingServer} network topology.
+     * <p>
+     *     This method is typically used during failover of an addressing server in conjunction with
+     *     a sister method in {@link ChatServerRegistry}, allowing the new leader process to set it's
+     *     {@link AddressingServer#pidCounter} to the highest active PID - ensuring no active PIDs are re-assigned
+     *     in future registration events.
+     * </p>
+     *
+     * @return a Long representing the highest PID held by any active {@code AddressingServer}
+     */
+    public Long getMaxPID() {
+        Long currentMax = 0L;
+        for (AddrServerRecord record: this.addrServerRecords.values())
+        {
+            if (record.getPID() > currentMax) currentMax = record.getPID();
+        }
+        return currentMax;
+    }
+
+
+
+    /**
+     * Returns a set of all connected peer process IDs, excluding the given calling process ID.
+     * <p>
+     * This method is useful when the caller wants to get all *other* peer PIDs in the network,
+     * for example when broadcasting to all replicas except itself.
+     * </p>
+     *
+     * @return a {@code Set<Long>} containing the PIDs of all connected peers except the caller.
+     */
+    public Set<Long> getAllReplicaPIDs() {
+        Set<Long> registeredReplicaPIDs = new HashSet<>();
+        for (AddrServerRecord record : this.addrServerRecords.values()) {
+            if (record.getRole().equals(ServerRole.REPLICA)) {
+                registeredReplicaPIDs.add(record.getPID());
+            }
+        }
+        return registeredReplicaPIDs;
     }
 
     /**

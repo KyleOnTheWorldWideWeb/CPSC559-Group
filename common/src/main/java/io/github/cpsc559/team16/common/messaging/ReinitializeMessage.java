@@ -22,7 +22,20 @@ public class ReinitializeMessage extends BaseAddrServerMessage<Long> {
      * @param failsafePID The process ID of the target process (failsafe check).
      */
     private ReinitializeMessage(long senderPID, String senderRole, String targetRole, long failsafePID) {
-        super(MessageTypes.REINITIALIZE, OBJECT_TYPE, senderPID, senderRole, targetRole, failsafePID);
+        super(0, MessageTypes.REINITIALIZE, OBJECT_TYPE, senderPID, senderRole, targetRole, failsafePID);
+    }
+
+    /**
+     * Private constructor to enforce the use of factory methods.
+     *
+     * @param messageID   A globally unique identifier for the message. Use {@link MessageIDGenerator} for generation.
+     * @param senderPID   The PID of the sender.
+     * @param senderRole  The role of the sender.
+     * @param targetRole  The intended recipient's role.
+     * @param failsafePID The process ID of the target process (failsafe check).
+     */
+    private ReinitializeMessage(long messageID, long senderPID, String senderRole, String targetRole, long failsafePID) {
+        super(messageID, MessageTypes.REINITIALIZE, OBJECT_TYPE, senderPID, senderRole, targetRole, failsafePID);
     }
 
     /**
