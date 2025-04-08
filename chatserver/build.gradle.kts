@@ -9,6 +9,8 @@ dependencies {
     implementation(project(":addressingserver"))
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.0")
+    implementation("org.json:json:20231013")
+
 }
 
 application {

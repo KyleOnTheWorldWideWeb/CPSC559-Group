@@ -1,23 +1,29 @@
 package io.github.cpsc559.team16.common.utilities;
 
 public class ClientServerMessage extends BaseMessage {
+    private int id;
     private String content;
-    private int clientCounter;
+    private String command;
 
     public ClientServerMessage() {
         super();
+        this.content = "";
+        this.command = "CHAT";
     }
 
-    public ClientServerMessage(String sender, String receiver, String content, int clientCounter) {
+    public ClientServerMessage(String sender, String receiver, int id, String content) {
         super(sender, receiver);
-        this.content = content;
-        this.clientCounter = clientCounter;
+        this.id = id;
+        this.content = (content != null) ? content : "";
+        this.command = "CHAT";
     }
 
-    public ClientServerMessage(String sender, String receiver, String content) {
-        super(sender, receiver);
-        this.content = content;
-        this.clientCounter = 0;
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public String getContent() {
@@ -28,21 +34,23 @@ public class ClientServerMessage extends BaseMessage {
         this.content = content;
     }
 
-    public int getClientCounter() {
-        return clientCounter;
+    public String getCommand() {
+        return command;
     }
 
-    public void setClientCounter(int clientCounter) {
-        this.clientCounter = clientCounter;
+    public void setCommand(String command) {
+        this.command = command;
     }
 
     @Override
     public String toString() {
         return "ClientServerMessage{" +
-                "sender='" + getSender() + '\'' +
-                ", receiver='" + getReceiver() + '\'' +
+                "sender=" + getSender() +
+                ", receiver=" + getReceiver() +
+                ", id=" + id +
                 ", timeSent=" + getTimeSent() +
-                ", content='" + content + '\'' +
+                ", command=" + command +
+                ", content='" + content + "'" +
                 '}';
     }
 }
