@@ -122,35 +122,35 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
      * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a ChatServer.
      */
     public static UpdateMessage<ChatServerRecord> csRecordPrimaryToCS(long messageID, Long senderPID, ChatServerRecord record) {
-        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
+        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
     }
 
     /**
      * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a ChatServer.
      */
     public static UpdateMessage<ChatServerRecord> csRecordPrimaryToCS(Long senderPID, ChatServerRecord record) {
-        return new UpdateMessage<>(0, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
+        return new UpdateMessage<>(0, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
     }
 
     /**
      * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a REPLICA.
      */
     public static UpdateMessage<ChatServerRecord> csRecordPrimaryToReplica(long messageID, Long senderPID, ChatServerRecord record) {
-        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
+        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
     }
 
     /**
      * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a REPLICA.
      */
     public static UpdateMessage<ChatServerRecord> csRecordPrimaryToReplica(Long senderPID, ChatServerRecord record) {
-        return new UpdateMessage<>(0, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
+        return new UpdateMessage<>(0, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
     }
 
     /**
      * Sends a {@link ChatServerRecord} from a ChatServer to the PRIMARY AddressingServer.
      */
     public static UpdateMessage<ChatServerRecord> csRecordChatServerToPrimary(long messageID, Long senderPID, ChatServerRecord record) {
-        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
+        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
 
 }

@@ -190,6 +190,8 @@ public class AddrServerReadDispatcher {
     }
 
     private void handleUpdate(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> updateMessage) {
+        System.out.printf("Replica handling update. MsgType: %s | ObjectType: %s | MsgID: %d | SenderRole: %s%n.",
+                updateMessage.getMsgType(), updateMessage.getObjectType(), updateMessage.getMessageID(), updateMessage.getSenderRole());
         switch (updateMessage.getSenderRole()) {
             case Roles.CHATSERVER -> {
                 switch (updateMessage.getObjectType()) {  // THIS IS THE CASE WHERE A CHAT SERVER UPDATES THE ADDRESSING SERVER WITH ITS NEW CLIENT COUNT.
@@ -213,27 +215,32 @@ public class AddrServerReadDispatcher {
             case Roles.PRIMARY -> {
                 switch (updateMessage.getObjectType()) {
                     case ObjectTypes.ADDR_SERVER_RECORD -> {
-                        // TODO - remove this if conditional once all messages require an ACK and only use proceesAddrServerUpdateSendAck
+                        // TODO - remove this if conditional once all messages require an ACK and only use processAddrServerUpdateSendAck
                         if (updateMessage.getMessageID() == 0) {
+                            //System.out.println("Replica in AddrServerRecord update - no message ID");
                             this.peerManager.updateRecords(updateMessage.safeCastPayload(AddrServerRecord.class));
                             this.peerManager.debugPrintAllServers();
                         }
                         else {
+                            //System.out.println("Replica in AddrServerRecord update - message ID: " + updateMessage.getMessageID());
                             this.peerManager.processAddrServerUpdateSendAck(updateMessage ,nioChannel,
                                     this.server.getConfig().getPID(), cleanupManager);
                         }
                     }
                     case ObjectTypes.CHAT_SERVER_RECORD -> {
-                        // TODO - remove this if conditional once all messages require an ACK and only use proceesChatServerUpdateSendAck
+                        // TODO - remove this if conditional once all messages require an ACK and only use processChatServerUpdateSendAck
                         if (updateMessage.getMessageID() == 0) {
+                            //System.out.println("Replica in ChatServerRecord update - no message ID");
                             this.server.getChatServerRegistry().updateOrInsertRecord(updateMessage.safeCastPayload(ChatServerRecord.class));
                             this.server.getChatServerRegistry().debugPrintAllServers();
                         }
                         else {
+                            //System.out.println("Replica in ChatServerRecord update - message ID: " + updateMessage.getMessageID());
                             this.peerManager.processChatServerUpdateSendAck(updateMessage, nioChannel,
                                     this.server.getConfig().getPID(), cleanupManager, server.getChatServerRegistry());
                         }
                     }
+                    default -> System.err.println("Unrecognized object type for UPDATE: " + updateMessage.getObjectType());
                 }
             }
             case Roles.REPLICA -> {

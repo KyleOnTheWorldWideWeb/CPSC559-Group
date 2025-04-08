@@ -216,6 +216,8 @@ public class RegistrationCoordinator {
                 3,
                 nioChannel,
                 () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
+                    // DEBUG
+                    System.out.println("PRIMARY has received all ACK's from REPLICA's - server state synchronized, sending response...");
                     // All replicas have successfully replicated the update. Update state locally and continue with response.
                     this.chatServerManager.registerServer(channel, nioChannel, record);
                     this.chatServerRegistry.debugPrintAllServers();

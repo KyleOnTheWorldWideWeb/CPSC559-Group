@@ -310,7 +310,7 @@ public class PeerManager {
      * only those updates tied to a {@link PendingEvent}.
      * </p>
      *
-     * @param updateMessage the {@link UpdateMessage} containing the {@link AddrServerRecord} update
+     * @param updateMessage the {@link UpdateMessage} containing the {@link ChatServerRecord} update
      * @param nioChannel the {@link NIOMessageChannel} used to reply to the PRIMARY
      * @param localPID the process ID of the local replica
      * @param cleanupManager the {@link ConnectionCleanupManager} used to close faulty channels

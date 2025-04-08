@@ -146,6 +146,7 @@ public class BroadcastManager {
             for (NIOMessageChannel nioChannel : pendingEvent.getPendingRecipients().values()) {
                 try {
                     nioChannel.sendMessage(jsonMessage);
+                    System.out.println("Sending ChatServerRecord update to replicas: " + message.getMsgType());
                 } catch (IOException ioe) {
                     System.err.println("Failed to send UpdateMessage<" + message.getObjectType() + ">: " + ioe.getMessage());
                     cleanupManager.cleanupPersistentConnectionNIO(nioChannel,true);
