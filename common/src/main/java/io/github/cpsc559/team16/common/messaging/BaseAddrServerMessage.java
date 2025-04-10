@@ -2,7 +2,6 @@ package io.github.cpsc559.team16.common.messaging;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.cpsc559.team16.common.dto.*;
 
 
 /**
@@ -58,6 +57,13 @@ import io.github.cpsc559.team16.common.dto.*;
  * </pre>
  */
 public class BaseAddrServerMessage<T> {
+
+    /**
+     * This field does not have to be set, but if you do -
+     * use the {@link MessageIDGenerator} to generate a unique message ID
+     * based on the network PID of the calling code.
+     */
+    private long messageID;
 
     /**
      * Defines the type of action required for the message.
@@ -123,14 +129,17 @@ public class BaseAddrServerMessage<T> {
     /**
      * Constructs a new message with the provided parameters.
      *
-     * @param msgType The type of action required (UPDATE, REQUEST, etc.).
+     * @param messageID  The unique message ID - created by the MessageIDGenerator class
+     * @param msgType    The type of action required (UPDATE, REQUEST, etc.).
      * @param objectType The type of data contained in the payload.
-     * @param senderPID The process ID of the sender.
+     * @param senderPID  The process ID of the sender.
      * @param senderRole The role of the sender (PRIMARY, REPLICA, CHATSERVER).
      * @param targetRole The intended recipient's role.
-     * @param payload The actual data being sent.
+     * @param payload    The actual data being sent.
+     *
      */
-    public BaseAddrServerMessage(String msgType, String objectType, long senderPID, String senderRole, String targetRole, T payload) {
+    public BaseAddrServerMessage(long messageID, String msgType, String objectType, long senderPID, String senderRole, String targetRole, T payload) {
+        this.messageID = messageID;
         this.msgType = msgType;
         this.objectType = objectType;
         this.senderPID = senderPID;
@@ -139,6 +148,7 @@ public class BaseAddrServerMessage<T> {
         this.payload = payload;
     }
 
+    public long getMessageID() { return messageID; }
     public String getMsgType() { return msgType; }
     public String getObjectType() { return objectType; }
     public long getSenderPID() { return senderPID; }

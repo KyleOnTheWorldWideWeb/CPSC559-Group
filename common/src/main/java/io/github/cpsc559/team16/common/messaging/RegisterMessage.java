@@ -46,7 +46,39 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      * </p>
      */
     private RegisterMessage(String objectType, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.REGISTER, objectType, DEFAULT_PID, senderRole, targetRole, payload);
+        super(0, MessageTypes.REGISTER, objectType, DEFAULT_PID, senderRole, targetRole, payload);
+    }
+
+    /**
+     * Constructs an "REGISTER" message.
+     * <p>
+     * An example of a {@code ChatServer} a primary {@code AddressingServer} a REGISTER for all the ChatServerRecord
+     * records for the distributed system is given below:
+     * </p>
+     * <pre>
+     *   {
+     *   "msgType": "REGISTER",
+     *   "objectType": "",
+     *   "senderPID":
+     *   "senderRole": "CHATSERVER",
+     *   "targetRole": "PRIMARY",
+     *   "payload": { null }
+     *   }
+     * </pre>
+     *
+     * @param messageID   A globally unique identifier for the message. Use {@link MessageIDGenerator} for generation.
+     * @param objectType The subclass of {@code ServerRecord} being sent - {@code ChatServerRecord} or {@code AddrServerRecord}
+     * @param senderRole The role of the sender (PRIMARY, REPLICA, CHATSERVER).
+     * @param targetRole The role of the receiver - The PRIMARY {@code AddressingServer}.
+     * @param payload    The ServerRecord record to be sent for registering on the network.
+     *
+     * <p>
+     * <strong>NOTE:</strong> All {@code RegisterMessage}'s are sent with a process ID (PID) set to zero, as
+     * all network processes are assigned a pid UPON registration, not before.
+     * </p>
+     */
+    private RegisterMessage(long messageID, String objectType, String senderRole, String targetRole, T payload) {
+        super(messageID, MessageTypes.REGISTER, objectType, DEFAULT_PID, senderRole, targetRole, payload);
     }
 
     /**

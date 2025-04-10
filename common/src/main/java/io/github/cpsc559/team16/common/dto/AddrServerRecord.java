@@ -25,10 +25,10 @@ public class AddrServerRecord extends ServerRecord {
 
 
     /**
-     * Constructs a new {@code ChatServerRecord} instance with the specified parameters, a default
+     * Constructs a new {@code AddrServerRecord} instance with the specified parameters, a default
      * {@code ACTIVE status} and a starting {@code clientCount} of zero.
      *
-     * @param serverID       The unique identifier (key) of the chat server. Needed for the HashMap of ChatServerRecord records kept by Addressing Servers.
+     * @param serverPID       The unique identifier (key) of the chat server. Needed for the HashMap of ChatServerRecord records kept by Addressing Servers.
      * @param hostAddress    The network (IP) address of the chat server.
      * @param clientPort     The port used for communication with client processes.
      * @param peerPort       The port used for peer-to-peer communication with other addressing servers.
@@ -38,14 +38,14 @@ public class AddrServerRecord extends ServerRecord {
      */
     @JsonCreator
     public AddrServerRecord(
-            @JsonProperty("pid") Long serverID,
+            @JsonProperty("pid") Long serverPID,
             @JsonProperty("hostAddress") String hostAddress,
             @JsonProperty("clientPort") int clientPort,
             @JsonProperty("peerPort") int peerPort,
             @JsonProperty("chatServerPort") int chatServerPort,
             @JsonProperty("role") ServerRole role
     ) {
-        super(serverID, hostAddress, peerPort, clientPort);
+        super(serverPID, hostAddress, peerPort, clientPort);
         this.chatServerPort = chatServerPort;
         this.role = role;
     }
@@ -63,15 +63,6 @@ public class AddrServerRecord extends ServerRecord {
         return role;
     }
 
-    // --- Setters for fields that need to be updated after construction ---
-
-    public void setPID(Long serverID) {
-        super.setPID(serverID);
-    }
-
-    public void setHostAddress(String hostAddress) {
-        super.setHostAddress(hostAddress);
-    }
 
 
 }

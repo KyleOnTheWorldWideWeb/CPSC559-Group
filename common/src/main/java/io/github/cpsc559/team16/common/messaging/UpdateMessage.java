@@ -18,154 +18,139 @@ public class UpdateMessage<T> extends BaseAddrServerMessage<T> {
      * Constructs an "UPDATE" message.
      * <p>
      * An example of a {@code ChatServer} sending a notification to a REPLICA that a failure of the primary
-     * {@code AddressingServer} has occured is given below:
+     * {@code AddressingServer} has occurred is given below:
      * </p>
      * <pre>
-     *   {
+     * {
      *   "msgType": "UPDATE",
      *   "objectType": "Failure",
      *   "senderPID": 72,
      *   "senderRole": "CHATSERVER",
      *   "targetRole": "REPLICA",
      *   "payload": { `Long failedServerPID` }
-     *   }
+     * }
      * </pre>
      *
      * @param objectType The type of data contained in the payload.
-     * @param senderPID The process ID of the sender.
+     * @param senderPID  The process ID of the sender.
      * @param senderRole The role of the sender (PRIMARY, REPLICA, CHATSERVER).
      * @param targetRole The intended recipient's role.
-     * @param payload The actual data being sent.
-     *
+     * @param payload    The actual data being sent.
      */
     public UpdateMessage(String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
-        super(MessageTypes.UPDATE, objectType, senderPID, senderRole, targetRole, payload);
+        super(0, MessageTypes.UPDATE, objectType, senderPID, senderRole, targetRole, payload);
+    }
+
+    /**
+     * Constructs an "UPDATE" message.
+     * <p>
+     * An example of a {@code ChatServer} sending a notification to a REPLICA that a failure of the primary
+     * {@code AddressingServer} has occurred is given below:
+     * </p>
+     * <pre>
+     * {
+     *   "msgType": "UPDATE",
+     *   "objectType": "Failure",
+     *   "senderPID": 72,
+     *   "senderRole": "CHATSERVER",
+     *   "targetRole": "REPLICA",
+     *   "payload": { `Long failedServerPID` }
+     * }
+     * </pre>
+     *
+     * @param messageID   A globally unique identifier for the message. Use {@link MessageIDGenerator} for generation.
+     * @param objectType The type of data contained in the payload.
+     * @param senderPID  The process ID of the sender.
+     * @param senderRole The role of the sender (PRIMARY, REPLICA, CHATSERVER).
+     * @param targetRole The intended recipient's role.
+     * @param payload    The actual data being sent.
+     */
+    public UpdateMessage(long messageID, String objectType, Long senderPID, String senderRole, String targetRole, T payload) {
+        super(messageID, MessageTypes.UPDATE, objectType, senderPID, senderRole, targetRole, payload);
+    }
+
+
+    /**
+     * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
+     * from the PRIMARY AddressingServer to a REPLICA.
+     */
+    public static UpdateMessage<AddrServerRecord> asRecordPrimaryToReplica(long messageID, Long senderPID, AddrServerRecord record) {
+        return new UpdateMessage<>(messageID, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
     }
 
     /**
      * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
      * from the PRIMARY AddressingServer to a REPLICA.
-     *
-     * <p>This message uses:
-     * <ul>
-     *     <li><strong>objectType:</strong> "AddrServerRecord"</li>
-     *     <li><strong>senderRole:</strong> "PRIMARY"</li>
-     *     <li><strong>targetRole:</strong> "REPLICA"</li>
-     * </ul>
-     * </p>
-     *
-     * @param senderPID The process ID of the PRIMARY server sending the update.
-     * @param record    The {@link AddrServerRecord} payload to include.
-     * @return An {@code UpdateMessage} with the provided record and fixed metadata.
      */
     public static UpdateMessage<AddrServerRecord> asRecordPrimaryToReplica(Long senderPID, AddrServerRecord record) {
-        return new UpdateMessage<>(ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
+        return new UpdateMessage<>(0, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
     }
 
     /**
      * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
-     * from the PRIMARY AddressingServer to a {@code ChatServer}
-     *
-     * <p>This message uses:
-     * <ul>
-     *     <li><strong>objectType:</strong> "AddrServerRecord"</li>
-     *     <li><strong>senderRole:</strong> "PRIMARY"</li>
-     *     <li><strong>targetRole:</strong> "REPLICA"</li>
-     * </ul>
-     * </p>
-     *
-     * @param senderPID The process ID of the PRIMARY server sending the update.
-     * @param record    The {@link AddrServerRecord} payload to include.
-     * @return An {@code UpdateMessage} with the provided record and fixed metadata.
+     * from the PRIMARY AddressingServer to a ChatServer.
+     */
+    public static UpdateMessage<AddrServerRecord> asRecordPrimaryToCS(long messageID, Long senderPID, AddrServerRecord record) {
+        return new UpdateMessage<>(messageID, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
+    }
+
+    /**
+     * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
+     * from the PRIMARY AddressingServer to a ChatServer.
      */
     public static UpdateMessage<AddrServerRecord> asRecordPrimaryToCS(Long senderPID, AddrServerRecord record) {
-        return new UpdateMessage<>(ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
+        return new UpdateMessage<>(0, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
     }
 
     /**
-     * <p>
-     * For use by {@code AddressingServer} REPLICA's during failover of the Primary AddressingServer.
-     * </p>
-     *
-     * Creates an {@code UpdateMessage} to send an {@link AddrServerRecord}
-     * from the PRIMARY AddressingServer to a REPLICA.
-     *
-     * <p>This message uses:
-     * <ul>
-     *     <li><strong>objectType:</strong> "AddrServerRecord"</li>
-     *     <li><strong>senderRole:</strong> "PRIMARY"</li>
-     *     <li><strong>targetRole:</strong> "REPLICA"</li>
-     * </ul>
-     * </p>
-     *
-     * @param senderPID The process ID of the PRIMARY server sending the update.
-     * @param record    The {@link AddrServerRecord} payload to include.
-     * @return An {@code UpdateMessage} with the provided record and fixed metadata.
+     * For use by {@code AddressingServer} REPLICAs during failover of the Primary AddressingServer.
+     * Sends an {@code UpdateMessage} with an {@link AddrServerRecord} from one REPLICA to another.
+     */
+    public static UpdateMessage<AddrServerRecord> asRecordReplicaToReplica(long messageID, Long senderPID, AddrServerRecord record) {
+        return new UpdateMessage<>(messageID, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.REPLICA, Roles.REPLICA, record);
+    }
+
+    /**
+     * For use by {@code AddressingServer} REPLICAs during failover of the Primary AddressingServer.
+     * Sends an {@code UpdateMessage} with an {@link AddrServerRecord} from one REPLICA to another.
      */
     public static UpdateMessage<AddrServerRecord> asRecordReplicaToReplica(Long senderPID, AddrServerRecord record) {
-        return new UpdateMessage<>(ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.REPLICA, Roles.REPLICA, record);
+        return new UpdateMessage<>(0, ObjectTypes.ADDR_SERVER_RECORD, senderPID, Roles.REPLICA, Roles.REPLICA, record);
     }
 
+    /**
+     * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a ChatServer.
+     */
+    public static UpdateMessage<ChatServerRecord> csRecordPrimaryToCS(long messageID, Long senderPID, ChatServerRecord record) {
+        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
+    }
 
     /**
-     * Creates an {@code UpdateMessage} to send a {@link ChatServerRecord}
-     * from the PRIMARY AddressingServer to a ChatServer in the Network.
-     *
-     * <p>This message uses:
-     * <ul>
-     *     <li><strong>objectType:</strong> "ChatServerRecord"</li>
-     *     <li><strong>senderRole:</strong> "CHATSERVER"</li>
-     *     <li><strong>targetRole:</strong> "PRIMARY"</li>
-     * </ul>
-     * </p>
-     *
-     * @param senderPID The process ID of the ChatServer sending the update.
-     * @param record    The {@link ChatServerRecord} payload to include.
-     * @return An {@code UpdateMessage} with the provided record and fixed metadata.
+     * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a ChatServer.
      */
     public static UpdateMessage<ChatServerRecord> csRecordPrimaryToCS(Long senderPID, ChatServerRecord record) {
-        return new UpdateMessage<>(ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
+        return new UpdateMessage<>(0, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
     }
 
     /**
-     * Creates an {@code UpdateMessage} to send a {@link ChatServerRecord}
-     * from the PRIMARY AddressingServer to a ChatServer in the Network.
-     *
-     * <p>This message uses:
-     * <ul>
-     *     <li><strong>objectType:</strong> "ChatServerRecord"</li>
-     *     <li><strong>senderRole:</strong> "CHATSERVER"</li>
-     *     <li><strong>targetRole:</strong> "PRIMARY"</li>
-     * </ul>
-     * </p>
-     *
-     * @param senderPID The process ID of the ChatServer sending the update.
-     * @param record    The {@link ChatServerRecord} payload to include.
-     * @return An {@code UpdateMessage} with the provided record and fixed metadata.
+     * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a REPLICA.
+     */
+    public static UpdateMessage<ChatServerRecord> csRecordPrimaryToReplica(long messageID, Long senderPID, ChatServerRecord record) {
+        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
+    }
+
+    /**
+     * Sends a {@link ChatServerRecord} from the PRIMARY AddressingServer to a REPLICA.
      */
     public static UpdateMessage<ChatServerRecord> csRecordPrimaryToReplica(Long senderPID, ChatServerRecord record) {
-        return new UpdateMessage<>(ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
+        return new UpdateMessage<>(0, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.REPLICA, record);
     }
 
     /**
-     * Creates an {@code UpdateMessage} to send a {@link ChatServerRecord}
-     * from a ChatServer to the PRIMARY AddressingServer.
-     *
-     * <p>This message uses:
-     * <ul>
-     *     <li><strong>objectType:</strong> "ChatServerRecord"</li>
-     *     <li><strong>senderRole:</strong> "CHATSERVER"</li>
-     *     <li><strong>targetRole:</strong> "PRIMARY"</li>
-     * </ul>
-     * </p>
-     *
-     * @param senderPID The process ID of the ChatServer sending the update.
-     * @param record    The {@link ChatServerRecord} payload to include.
-     * @return An {@code UpdateMessage} with the provided record and fixed metadata.
+     * Sends a {@link ChatServerRecord} from a ChatServer to the PRIMARY AddressingServer.
      */
-    public static UpdateMessage<ChatServerRecord> csRecordChatServerToPrimary(Long senderPID, ChatServerRecord record) {
-        return new UpdateMessage<>(ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.PRIMARY, Roles.CHATSERVER, record);
+    public static UpdateMessage<ChatServerRecord> csRecordChatServerToPrimary(long messageID, Long senderPID, ChatServerRecord record) {
+        return new UpdateMessage<>(messageID, ObjectTypes.CHAT_SERVER_RECORD, senderPID, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
-
 
 }

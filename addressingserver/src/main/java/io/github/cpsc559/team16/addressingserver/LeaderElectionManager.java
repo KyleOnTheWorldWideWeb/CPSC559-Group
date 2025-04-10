@@ -73,8 +73,7 @@ public class LeaderElectionManager {
     /**
      * Constructs a LeaderElectionManager and determines the initial leader.
      *
-     * @param config The Addressing Server configuration.
-     * @param peerManager Manages peer server communication.
+     * @param server the AddressingServer that instantiated this LeaderElectionManager object
      */
     public LeaderElectionManager(AddressingServer server) {
         this.config = server.getConfig();
@@ -82,13 +81,14 @@ public class LeaderElectionManager {
         this.running = false;
 
         // Initialize leaderPID to the highest PID among self and peers
-        leaderPID = config.getPID();
-        for (NIOMessageChannel peerChannel : getPeerChannels()) {
-            Long peerPID = peerChannel.getServerPID();
-            if (peerPID > leaderPID) {
-                leaderPID = peerPID;
-            }
-        }
+        //leaderPID = config.getPID();
+        leaderPID = server.getAddrServerRegistry().getMaxPID();
+//        for (NIOMessageChannel peerChannel : getPeerChannels()) {
+//            Long peerPID = peerChannel.getServerPID();
+//            if (peerPID > leaderPID) {
+//                leaderPID = peerPID;
+//            }
+//        }
     }
 
     /**

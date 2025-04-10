@@ -100,7 +100,7 @@ public class ObjectTypes {
             case NONE -> Object.class;
 
             // ACK types — Payloads are all strings (unless otherwise noted)
-            case AckObjectTypes.HOSTADDRESS,
+            case    AckObjectTypes.HOSTADDRESS,
                     AckObjectTypes.NOHOST,
                     AckObjectTypes.DEMOTED,
                     AckObjectTypes.OK -> String.class;
@@ -111,6 +111,8 @@ public class ObjectTypes {
              * servers in the network, and finally, a response is sent to the newly registered process with it's PID as the payload.
               */
             case AckObjectTypes.REGISTERED -> Long.class;
+
+            case AckObjectTypes.REPLICATED -> Boolean.class;
 
             default -> Object.class; // fallback
         };

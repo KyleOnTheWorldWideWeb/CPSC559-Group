@@ -27,7 +27,17 @@ public class ElectionMessage extends BaseAddrServerMessage<String> {
      * @param senderPID The ID of the process initiating the election.
      */
     private ElectionMessage(long senderPID, String payload) {
-        super(MessageTypes.ELECTION, ObjectTypes.STRING, senderPID, "", "", payload);
+        super(0, MessageTypes.ELECTION, ObjectTypes.STRING, senderPID, "", "", payload);
+    }
+
+    /**
+     * Constructs a new election message, used to initiate a leader election.
+     *
+     * @param messageID   A globally unique identifier for the message. Use {@link MessageIDGenerator} for generation.
+     * @param senderPID The ID of the process initiating the election.
+     */
+    private ElectionMessage(long messageID, long senderPID, String payload) {
+        super(messageID, MessageTypes.ELECTION, ObjectTypes.STRING, senderPID, "", "", payload);
     }
 
     /**
