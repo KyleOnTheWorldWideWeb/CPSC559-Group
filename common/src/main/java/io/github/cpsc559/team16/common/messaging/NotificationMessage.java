@@ -66,8 +66,26 @@ public class NotificationMessage<T> extends BaseAddrServerMessage<T> {
      * @param currentClientCount The current count of clients connected to the server.
      * @return A {@code NotificationMessage} containing the client count.
      */
-    public NotificationMessage<Integer> clientCountNotification(long senderPID, Integer currentClientCount) {
+    public static NotificationMessage<Integer> clientCountNotification(long senderPID, Integer currentClientCount) {
         return new NotificationMessage<>(ObjectTypes.CLIENT_COUNT, senderPID, Roles.CHATSERVER, Roles.PRIMARY, currentClientCount);
+    }
+
+
+    /**
+     * Factory method for creating a failure notification message in response to a failed request.
+     * <p>
+     * This method creates a {@code NotificationMessage} with an {@code ObjectType} of {@code REQUEST_FAILURE}
+     * and a payload containing the message ID of the original request that triggered the failure.
+     * It is typically used when the {@code PRIMARY} AddressingServer notifies a process that their
+     * previously sent request could not be completed.
+     * </p>
+     *
+     * @param senderPID        The process ID of the sender (usually a {@code CHATSERVER}).
+     * @param requestMessageID The message ID from the original request message.
+     * @return A {@code NotificationMessage} indicating a failed request.
+     */
+    public static NotificationMessage<Long> requestFailedNotification(long senderPID, long requestMessageID) {
+        return new NotificationMessage<>(ObjectTypes.REQUEST_FAILURE, senderPID, Roles.PRIMARY, Roles.CHATSERVER, requestMessageID);
     }
 
 

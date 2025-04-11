@@ -33,13 +33,12 @@ import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 public class AddrServerReadDispatcher {
     private final AddressingServer server;
     private final PeerManager peerManager;
-    private final ReplicaSyncCoordinator replicaCoordinator;
     private final ClientManager clientManager;
     private final ChatServerManager chatServerManager;
     private final BroadcastManager broadcastManager;
     private final MessageIDGenerator genMID;
-
     private final ConnectionCleanupManager cleanupManager;
+    private final ReplicaSyncCoordinator replicaCoordinator;
 
     public AddrServerReadDispatcher(AddressingServer server) {
         this.server = server;
@@ -215,7 +214,7 @@ public class AddrServerReadDispatcher {
             case Roles.PRIMARY -> {
                 switch (updateMessage.getObjectType()) {
                     case ObjectTypes.ADDR_SERVER_RECORD -> {
-                        // TODO - remove this if conditional once all messages require an ACK and only use processAddrServerUpdateSendAck
+                        // TODO - remove this conditional once all messages require an ACK and only use processAddrServerUpdateSendAck
                         if (updateMessage.getMessageID() == 0) {
                             //System.out.println("Replica in AddrServerRecord update - no message ID");
                             this.peerManager.updateRecords(updateMessage.safeCastPayload(AddrServerRecord.class));
@@ -223,12 +222,12 @@ public class AddrServerReadDispatcher {
                         }
                         else {
                             //System.out.println("Replica in AddrServerRecord update - message ID: " + updateMessage.getMessageID());
-                            this.peerManager.processAddrServerUpdateSendAck(updateMessage ,nioChannel,
+                            this.replicaCoordinator.processAddrServerUpdateSendAck(updateMessage ,nioChannel,
                                     this.server.getConfig().getPID(), cleanupManager);
                         }
                     }
                     case ObjectTypes.CHAT_SERVER_RECORD -> {
-                        // TODO - remove this if conditional once all messages require an ACK and only use processChatServerUpdateSendAck
+                        // TODO - remove this conditional once all messages require an ACK and only use processChatServerUpdateSendAck
                         if (updateMessage.getMessageID() == 0) {
                             //System.out.println("Replica in ChatServerRecord update - no message ID");
                             this.server.getChatServerRegistry().updateOrInsertRecord(updateMessage.safeCastPayload(ChatServerRecord.class));
@@ -236,7 +235,7 @@ public class AddrServerReadDispatcher {
                         }
                         else {
                             //System.out.println("Replica in ChatServerRecord update - message ID: " + updateMessage.getMessageID());
-                            this.peerManager.processChatServerUpdateSendAck(updateMessage, nioChannel,
+                            this.replicaCoordinator.processChatServerUpdateSendAck(updateMessage, nioChannel,
                                     this.server.getConfig().getPID(), cleanupManager, server.getChatServerRegistry());
                         }
                     }

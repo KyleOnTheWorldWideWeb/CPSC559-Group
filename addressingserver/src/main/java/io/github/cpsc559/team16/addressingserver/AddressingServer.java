@@ -158,6 +158,7 @@ public class AddressingServer {
         return registrationCoordinator;
     }
 
+
     /**
      * The process responsible for managing interactions between the
      * {@code AddressingServer} and {@code ChatServer}'s
@@ -330,7 +331,7 @@ public class AddressingServer {
         this.registrationCoordinator = new RegistrationCoordinator(this);
 
         try {
-            this.networkManager = new AddrServerNetworkManager(cleanupManager, this.config);
+            this.networkManager = new AddrServerNetworkManager(cleanupManager, this.config, replicaCoordinator.getPendingEvents());
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
