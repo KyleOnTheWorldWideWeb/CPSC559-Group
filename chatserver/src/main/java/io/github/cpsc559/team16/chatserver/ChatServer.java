@@ -1,12 +1,10 @@
 package io.github.cpsc559.team16.chatserver;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -16,25 +14,25 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
+import io.github.cpsc559.team16.common.messaging.NotificationMessage;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
-import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 
 /**
  * The main ChatServer class implements a non-blocking I/O chat server that:
@@ -172,6 +170,14 @@ public class ChatServer {
      */
     private static final int ADDRESSING_SERVER_PORT = Integer
             .parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "49802"));
+
+    /**
+     * The {@link ConnectionContext} for the Addressing Server connection.
+     * <p>
+     * This is used to send and receive messages to/from the Addressing Server.
+     * </p>
+     */
+    private static ConnectionContext PRIMARY_AS_CTX;
 
     /**
      * Port used for accepting client connections.
@@ -551,8 +557,8 @@ public class ChatServer {
             channel.configureBlocking(false);
             channel.connect(new InetSocketAddress(ADDRESSING_SERVER_HOST, ADDRESSING_SERVER_PORT));
 
-            ConnectionContext ctx = new ConnectionContext(channel);
-            ctx.type = ConnectionType.ADDRESSING_SERVER;
+            PRIMARY_AS_CTX = new ConnectionContext(channel);
+            PRIMARY_AS_CTX.type = ConnectionType.ADDRESSING_SERVER;
 
 
             // NOTE: Use the factory methods in RegisterMessage for registering a process.
@@ -577,9 +583,9 @@ public class ChatServer {
                     MAX_CLIENTS);
 
             String json = registrationMsg.toJson() + "\n";
-            ctx.writeQueue.add(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
+            PRIMARY_AS_CTX.writeQueue.add(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
 
-            channel.register(selector, SelectionKey.OP_CONNECT, ctx);
+            channel.register(selector, SelectionKey.OP_CONNECT, PRIMARY_AS_CTX);
             debug(DEBUG_BASIC, "Initiated non-blocking registration to Addressing Server");
         } catch (IOException e) {
             debug(DEBUG_BASIC, "Failed to connect to Addressing Server: " + e.getMessage());
@@ -993,6 +999,10 @@ public class ChatServer {
         ConnectionContext ctx = (ConnectionContext) key.attachment();
         if (ctx.username != null) {
             ClientHandler.unregisterUsername(ctx.username);
+
+            // Then send a clientCountUpdate message to the primary addressing server
+            String json = NotificationMessage.clientCountNotification(ID, ClientHandler.getClientCount()).toJson() + "\n";
+            PRIMARY_AS_CTX.writeQueue.add(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
         }
 
         if (ctx.type == ConnectionType.SERVER) {
