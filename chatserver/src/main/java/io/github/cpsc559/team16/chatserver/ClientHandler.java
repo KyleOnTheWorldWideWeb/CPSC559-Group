@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
@@ -54,6 +55,20 @@ class ClientHandler implements ConnectionHandler {
      * </p>
      */
     private static final Set<String> registeredUsernames = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Returns the number of currently registered clients.
+     * <p>
+     * This method provides a count of all unique usernames that have been
+     * successfully registered
+     * with the server. It is used for monitoring and debugging purposes.
+     * </p>
+     *
+     * @return the number of registered clients
+     */
+    public static int getClientCount() {
+        return registeredUsernames.size();
+    }
 
     /**
      * A cached list of peer server PIDs considered "closest" for gossiping
@@ -197,6 +212,7 @@ class ClientHandler implements ConnectionHandler {
 
                 ctx.username = desiredUsername;
                 registeredUsernames.add(desiredUsername);
+                
 
                 debug(DEBUG_BASIC, "[REGISTER] User registered: " + desiredUsername);
                 WriteUtils.enqueueResponse(ctx, key, msg.toJson() + "\n");
