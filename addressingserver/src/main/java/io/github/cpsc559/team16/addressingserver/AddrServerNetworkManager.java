@@ -2,8 +2,7 @@ package io.github.cpsc559.team16.addressingserver;
 
 // For thread management
 import java.nio.ByteBuffer;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentMap;
 
 
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
@@ -90,29 +89,7 @@ public class AddrServerNetworkManager {
      */
     private final Selector selector;
 
-    /**
-     * Manages all peer-to-peer communication and synchronization tasks between this
-     * {@code AddressingServer} and its peers.
-     * <p>
-     * The {@code PeerManager} handles replica registration, state broadcasting, and
-     * persistent connection tracking for other {@code AddressingServer} processes in the network.
-     * It maintains a map of {@link SocketChannel} to {@link NIOMessageChannel} for message exchange.
-     * </p>
-     */
-//    private final PeerManager peerManager;
 
-    /**
-     * Handles all communication, registration, and record synchronization
-     * between this {@code AddressingServer} and the network of {@code ChatServer}s.
-     * <p>
-     * The {@code ChatServerManager} maintains persistent socket connections to registered chat servers,
-     * pushes network updates to them, and manages updates to the shared {@link ChatServerRegistry}.
-     * </p>
-     */
-//    private final ChatServerManager chatServerManager;
-
-
-    private final ConnectionCleanupManager cleanupManager;
 
     /**
      * The network configuration for this {@code AddressingServer} process.
@@ -120,35 +97,80 @@ public class AddrServerNetworkManager {
     private final AddrServerConfig config;
 
     /**
-     * A fixed-size thread pool used to offload network I/O processing from the main selector loop.
+     * Handles cleanup of unresponsive or failed ChatServer and AddressingServer processes.
      * <p>
-     * This {@code ExecutorService} executes read and dispatch tasks asynchronously to prevent
-     * the main event loop from blocking during expensive operations such as deserialization,
-     * registration, or broadcast updates (multi-message streams).
-     * </p>
-     * <p>
-     * The pool size is typically based on the number of available CPU cores on the host system,
-     * but can be adjusted for high-throughput scenarios.
+     * This manager provides logic to remove broken persistent connections and broadcast
+     * failure notifications to the remaining network. It is shared with the watchdog
+     * and other components that need to remove stale or disconnected processes.
      * </p>
      */
-    private final ExecutorService executorService;
+    private final ConnectionCleanupManager cleanupManager;
+
+    /**
+     * A thread-safe map of pending synchronization events that require acknowledgment (ACK) messages.
+     * <p>
+     * Each entry corresponds to a message that was broadcast to peers or chat servers and is still
+     * waiting for acknowledgments from one or more recipients. This map is monitored by the watchdog
+     * thread to retry, finalize, or fail messages that do not receive timely responses.
+     * </p>
+     */
+    private final ConcurrentMap<Long, PendingEvent> pendingSyncEvents;
+
+    /**
+     * A background thread that monitors {@code pendingSyncEvents} for timeouts and retry logic.
+     * <p>
+     * This watchdog resends unacknowledged messages, tracks retry counts, and invokes cleanup
+     * procedures for unresponsive network participants.
+     * </p>
+     */
+    PendingEventWatchdog eventWatchdog;
+
+    /**
+     * Returns the {@link PendingEventWatchdog} responsible for monitoring retry timeouts
+     * and failed network events.
+     *
+     * @return the active {@code PendingEventWatchdog} instance for this coordinator
+     */
+    public PendingEventWatchdog getEventWatchdog() {
+        return eventWatchdog;
+    }
+
+//    /**
+//     * A fixed-size thread pool used to offload network I/O processing from the main selector loop.
+//     * <p>
+//     * This {@code ExecutorService} executes read and dispatch tasks asynchronously to prevent
+//     * the main event loop from blocking during expensive operations such as deserialization,
+//     * registration, or broadcast updates (multi-message streams).
+//     * </p>
+//     * <p>
+//     * The pool size is typically based on the number of available CPU cores on the host system,
+//     * but can be adjusted for high-throughput scenarios.
+//     * </p>
+//     */
+//    private final ExecutorService executorService;
+
+
+
+
 
     /**
      * Constructs the network manager for the AddressingServer.
      *
      * @throws IOException If the selector fails to initialize.
      */
-    public AddrServerNetworkManager(ConnectionCleanupManager cleanupManager, AddrServerConfig config) throws IOException {
+    public AddrServerNetworkManager(ConnectionCleanupManager cleanupManager, AddrServerConfig config, ConcurrentMap<Long, PendingEvent> pendingSyncEvents) throws IOException {
         this.cleanupManager = cleanupManager;
         this.selector = Selector.open();
         this.config = config;
+        this.pendingSyncEvents = pendingSyncEvents;
+        this.eventWatchdog = new PendingEventWatchdog(pendingSyncEvents, this.cleanupManager,  500);
         /*
          Creates a pool with a fixed number of threads - usually one per CPU core. This will allow us to benefit from
          some level of asynchronous message handling - preventing the main event-loop from blocking during events that
          necessitate many I/O operations. Using a thread pool will allow us to avoid expensive thread creation/destruction,
          while also limiting idle threads due to the constant network traffic the {@code AddressingSerer}'s will experience.
          */
-        this.executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        //this.executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         // Can try and increase the pool to see if network I/O demands it.
         //this.executorService = Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors());
     }
@@ -175,7 +197,15 @@ public class AddrServerNetworkManager {
         }
 
         // Shut down the executor (thread) service
-        executorService.shutdownNow();
+//        executorService.shutdownNow();
+        try {
+            eventWatchdog.shutdown();
+            eventWatchdog.join(); // wait for it to finish
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restore the interrupt status
+            System.err.println("Interrupted while waiting for watchdog to finish.");
+        }
+
 
         // Close the selector
         try {
@@ -310,20 +340,20 @@ public class AddrServerNetworkManager {
      * @throws IOException if an I/O error occurs while selecting or processing channel events
      */
     public void startEventLoop(AddrServerReadDispatcher readDispatcher) throws IOException {
+        eventWatchdog.start();
         while (true) {
+
+            if (!eventWatchdog.isAlive()) {
+                System.err.println("Watchdog thread is not alive. Restarting...");
+                eventWatchdog = new PendingEventWatchdog(this.pendingSyncEvents, cleanupManager, 500);
+                eventWatchdog.start();
+            }
+
             if (shutdownRequested) {
                 System.out.println("Shutdown signal received. Exiting the AddrServerNetworkManager main event loop.");
                 this.closeAllConnections();
                 return; // exit to calling code
             }
-            // TODO - Check for stale events and act accordingly
-            //  idea! add flag to PendingEvent and set it for any event that is a "retry". If that goes stale, deny the request
-            //long now = System.currentTimeMillis();
-            //for (PendingEvent pending : pendingEvents.values()) {
-            //    if ((now - pending.getCreationTime()) > TIMEOUT_THRESHOLD_MS) {
-            //        // Consider retry or mark as failed
-            //    }
-
 
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();

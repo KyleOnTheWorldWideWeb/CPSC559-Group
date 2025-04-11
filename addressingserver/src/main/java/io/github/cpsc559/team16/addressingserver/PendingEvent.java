@@ -2,6 +2,7 @@ package io.github.cpsc559.team16.addressingserver;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.NotificationMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
@@ -41,6 +42,9 @@ public class PendingEvent {
     /** The original requester’s communication channel. */
     private final NIOMessageChannel requestChannel;
 
+    /** The message ID of the request message that triggered this PendingEvent to be created */
+    private final Long requestMessageID;
+
     /** The action to take once all ACKs have been received and a response has been sent. */
     private final CompletionCallback onComplete;
 
@@ -62,13 +66,14 @@ public class PendingEvent {
      * @param requestChannel          the channel to reply to once the event is complete
      * @param onComplete              an optional callback to invoke after response is sent
      * @param maxIterations           the maximum number of retry attempts before failure
+     * @param requestMessageID        the message ID from the message that made the request causing this event to be created.
      */
     public PendingEvent(BaseAddrServerMessage<?> deferredResponseMessage,
                         Map<Long, NIOMessageChannel> recipients,
                         BaseAddrServerMessage<?> messageRequiringACK,
                         NIOMessageChannel requestChannel,
                         CompletionCallback onComplete,
-                        int maxIterations) {
+                        int maxIterations, Long requestMessageID) {
         this.deferredResponseMessage = deferredResponseMessage;
         this.pendingRecipients = recipients;
         this.messageRequiringACK = messageRequiringACK;
@@ -76,6 +81,7 @@ public class PendingEvent {
         this.onComplete = onComplete;
         this.creationTime = System.currentTimeMillis();
         this.maxIterations = maxIterations;
+        this.requestMessageID = requestMessageID;
     }
 
     /**
@@ -83,22 +89,26 @@ public class PendingEvent {
      *
      * @param deferredResponseMessage the response to send once all ACKs are received
      * @param recipients              the initial map of expected recipient PIDs to their channels
-     * @param maxIterations           the maximum number of retry attempts before failure
      * @param requestChannel          the channel to reply to once the event is complete
      * @param onComplete              an optional callback to invoke after response is sent
+     * @param maxIterations           the maximum number of retry attempts before failure
+     * @param requestMessageID        the message ID from the message that made the request causing this event to be created.
      */
     public PendingEvent(BaseAddrServerMessage<?> deferredResponseMessage,
                         Map<Long, NIOMessageChannel> recipients,
-                        int maxIterations,
-                        NIOMessageChannel requestChannel,
-                        CompletionCallback onComplete) {
+                        NIOMessageChannel requestChannel, CompletionCallback onComplete, int maxIterations, Long requestMessageID) {
         this.deferredResponseMessage = deferredResponseMessage;
         this.pendingRecipients = recipients;
         this.requestChannel = requestChannel;
         this.onComplete = onComplete;
         this.creationTime = System.currentTimeMillis();
         this.maxIterations = maxIterations;
+        this.requestMessageID = requestMessageID;
     }
+
+
+
+
 
     /**
      * Sends the final deferred response message to the requester and runs any follow-up actions.
@@ -119,6 +129,40 @@ public class PendingEvent {
             throw e;
         }
     }
+
+    /**
+     * Sends a failure notification back to the original requester when a {@code PendingEvent}
+     * cannot be successfully completed (e.g. due to missing ACKs after all retries).
+     * <p>
+     * This method constructs a {@link NotificationMessage} with an {@code ObjectType} of
+     * {@code REQUEST_FAILURE}, using the original request's message ID as the payload.
+     * The notification is then serialized to JSON and sent to the original requester's
+     * {@link NIOMessageChannel}.
+     * </p>
+     *
+     * <p>
+     * If serialization fails, the error is logged but no exception is thrown.
+     * If message sending fails, an {@link IOException} is thrown to indicate that the
+     * requester's connection is broken and should be cleaned up.
+     * </p>
+     *
+     * @throws IOException if sending the failure notification to the requester fails.
+     */
+    public void respondToRequesterFailure() throws IOException {
+        try {
+            NotificationMessage<Long> message =
+                    NotificationMessage.requestFailedNotification(deferredResponseMessage.getSenderPID(), requestMessageID);
+            String json = message.toJson();
+            requestChannel.sendMessage(json);
+        } catch (JsonProcessingException j) {
+            System.err.println("Failed to serialize PendingEvent: " + this.deferredResponseMessage);
+        } catch (IOException e) {
+            System.err.println("Failed to respond to requester with PID: " + requestChannel.getServerPID());
+            throw e;
+        }
+    }
+
+
 
     /** @return the channel used to reply to the original request initiator */
     public NIOMessageChannel getRequestChannel() {
@@ -178,5 +222,7 @@ public class PendingEvent {
     public void removeRecipientChannel(Long pid) {
         this.pendingRecipients.remove(pid);
     }
+
+    public BaseAddrServerMessage<?> getMessageRequiringACK() { return this.messageRequiringACK; }
 }
 

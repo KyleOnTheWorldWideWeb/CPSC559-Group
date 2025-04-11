@@ -123,7 +123,7 @@ public class RegistrationCoordinator {
         // Create unique message ID that will be used to track ACK messages as well as the pending event.
         long messageID = server.getMessageIDGenerator().nextID();
         // Create a new event that will trigger once all ACKs for synchronizing state have been received.
-        PendingEvent event = this.createChatServerRegistrationEvent(primaryPID, newPID, channel, nioChannel, record, replicaChannelMap);
+        PendingEvent event = this.createChatServerRegistrationEvent(primaryPID, newPID, channel, nioChannel, record, replicaChannelMap, msg.getMessageID());
         // Add this to the list of pending events. The message ID used for replication messages is the key.
         replicaCoordinator.addPendingEvent(messageID, event);
         // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.
@@ -203,19 +203,18 @@ public class RegistrationCoordinator {
      * @param nioChannel  the {@link NIOMessageChannel} used to communicate with the requester
      * @param record      the {@link ChatServerRecord} received from the registering process.
      * @param recipients  a map containing all the registered replica address server {@code NIOMessageChannel}'s and their PIDs
+     * @param requestMessageID the message ID from the message that made the request causing this event to be created.
      * @return a {@link PendingEvent} configured to complete registration once all ACKs have been received
      */
     public PendingEvent createChatServerRegistrationEvent(long primaryPID, long newPID,
                                                        SocketChannel channel,
                                                        NIOMessageChannel nioChannel,
                                                        ChatServerRecord record,
-                                                       Map<Long, NIOMessageChannel> recipients) {
+                                                       Map<Long, NIOMessageChannel> recipients, long requestMessageID) {
         return new PendingEvent(
                 AckMessage.chatServerRegistered(primaryPID, newPID),
                 recipients,
-                3,
-                nioChannel,
-                () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
+                nioChannel, () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
                     // DEBUG
                     System.out.println("PRIMARY has received all ACK's from REPLICA's - server state synchronized, sending response...");
                     // All replicas have successfully replicated the update. Update state locally and continue with response.
@@ -233,7 +232,8 @@ public class RegistrationCoordinator {
                         // An error occurred while trying to sync the new ChatServer's state. Remove it from the network.
                         this.server.getCleanupManager().cleanupPersistentConnection(channel, true);
                     }
-                }
+                },
+                3, requestMessageID
         );
     }
 
@@ -266,19 +266,18 @@ public class RegistrationCoordinator {
      * @param nioChannel  the {@link NIOMessageChannel} used to communicate with the requester
      * @param record      the {@link AddrServerRecord} representing the new replica's state
      * @param recipients  a map containing all of the registered replica address server {@code NIOMessageChannel}'s and their PIDs
+     * @param requestMessageID the message ID from the message that made the request causing this event to be created.
      * @return a {@link PendingEvent} configured to complete registration once all ACKs have been received
      */
     public PendingEvent createReplicaRegistrationEvent(long primaryPID, long newPID,
                                                        SocketChannel channel,
                                                        NIOMessageChannel nioChannel,
                                                        AddrServerRecord record,
-                                                       Map<Long, NIOMessageChannel> recipients) {
+                                                       Map<Long, NIOMessageChannel> recipients, long requestMessageID) {
         return new PendingEvent(
                 AckMessage.replicaRegistered(primaryPID, newPID),
                 recipients,
-                3,
-                nioChannel,
-                () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
+                nioChannel, () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
                     // All replicas have successfully replicated the update. Update state locally and continue with response.
                     this.peerManager.registerPeer(channel, nioChannel, record);
                     this.addrServerRegistry.debugPrintAllServers();
@@ -294,7 +293,8 @@ public class RegistrationCoordinator {
                         // An error occurred while trying to sync the new Replicas state. Remove it from the network.
                         this.server.getCleanupManager().cleanupPersistentConnection(channel, true);
                     }
-                }
+                },
+                3, requestMessageID
         );
     }
 
@@ -389,7 +389,7 @@ public class RegistrationCoordinator {
         // Create unique message ID that will be used to track ACK messages as well as the pending event.
         long messageID = server.getMessageIDGenerator().nextID();
         // Create a new event that will trigger once all ACKs for synchronizing state have been received.
-        PendingEvent event = this.createReplicaRegistrationEvent(primaryPID, newPID, channel, nioChannel, record, replicaChannelMap);
+        PendingEvent event = this.createReplicaRegistrationEvent(primaryPID, newPID, channel, nioChannel, record, replicaChannelMap, msg.getMessageID());
         // Add this to the list of pending events. The message ID used for replication messages is the key.
         replicaCoordinator.addPendingEvent(messageID, event);
         // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.

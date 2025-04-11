@@ -58,9 +58,9 @@ public class ChatServerRegistry {
         }
         ChatServerRecord existing = chatServerRecords.get(id);
         if (existing != null) {
-            System.out.println("Updating existing ChatServerRecord for ID: " + id);
+            debugPrintUpdateServerPID(record);
         } else {
-            System.out.println("Inserting new ChatServerRecord for ID: " + id);
+            debugPrintInsertServerPID(record);
         }
         chatServerRecords.put(id, record);
         debugPrintAllServers();
@@ -186,6 +186,20 @@ public class ChatServerRegistry {
         System.out.printf("\tClient Count : %d%n", s.getClientCount());
         System.out.printf("\tStatus       : %s%n", s.getStatus());
         System.out.println("\t-------------------------------------------");
+    }
+
+    public void debugPrintInsertServerPID(ChatServerRecord s) {
+        System.out.println("\t------ Inserting ChatServer Record -------");
+        System.out.printf("\tProcess ID : %s%n", s.getPID());
+        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
+        System.out.println("\t------------------------------------------");
+    }
+
+    public void debugPrintUpdateServerPID(ChatServerRecord s) {
+        System.out.println("\t------ Updating ChatServer Record -------");
+        System.out.printf("\tProcess ID : %s%n", s.getPID());
+        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
+        System.out.println("\t------------------------------------------");
     }
 
     public void debugPrintAllServers() {

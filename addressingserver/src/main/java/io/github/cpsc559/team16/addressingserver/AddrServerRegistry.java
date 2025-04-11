@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 
 
@@ -55,12 +56,12 @@ public class AddrServerRegistry {
         }
         AddrServerRecord existing = addrServerRecords.get(id);
         if (existing != null) {
-            System.out.println(">--Updating--< existing AddrServerRecord for ID: " + id);
+            debugPrintUpdateServerPID(record);
         } else {
-            System.out.println(">--Inserting--< new AddrServerRecord for ID: " + id);
+            debugPrintInsertServerPID(record);
         }
         addrServerRecords.put(id, record);
-        debugPrintAllServers();
+        debugPrintServer(record);
     }
 
 
@@ -120,7 +121,7 @@ public class AddrServerRegistry {
      * <p>
      *     This method is typically used during failover of an addressing server in conjunction with
      *     a sister method in {@link ChatServerRegistry}, allowing the new leader process to set it's
-     *     {@link AddressingServer#pidCounter} to the highest active PID - ensuring no active PIDs are re-assigned
+     *     {@code AddressingServer.pidCounter} to the highest active PID - ensuring no active PIDs are re-assigned
      *     in future registration events.
      * </p>
      *
@@ -177,4 +178,19 @@ public class AddrServerRegistry {
         }
         System.out.println("|--------------------------------------------------------------------|");
     }
+
+    public void debugPrintInsertServerPID(AddrServerRecord s) {
+        System.out.println("\t------ Inserting AddrServer Record -------");
+        System.out.printf("\tProcess ID : %s%n", s.getPID());
+        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
+        System.out.println("\t------------------------------------------");
+    }
+
+    public void debugPrintUpdateServerPID(AddrServerRecord s) {
+        System.out.println("\t------ Updating AddrServer Record -------");
+        System.out.printf("\tProcess ID : %s%n", s.getPID());
+        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
+        System.out.println("\t------------------------------------------");
+    }
+
 }

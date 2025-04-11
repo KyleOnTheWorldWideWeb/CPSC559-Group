@@ -73,6 +73,8 @@ public class ObjectTypes {
      */
     public static final String ADDRSERVER_FAILURE = "AddrServerFailure";
 
+    public static final String REQUEST_FAILURE = "RequestFailed";
+
     /**
      * The object type for representing a vote in a leader election process.
      */

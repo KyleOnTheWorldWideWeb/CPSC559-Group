@@ -62,6 +62,9 @@ public class BaseAddrServerMessage<T> {
      * This field does not have to be set, but if you do -
      * use the {@link MessageIDGenerator} to generate a unique message ID
      * based on the network PID of the calling code.
+     *<p>
+     * A message ID of 0L represents a message that was not created with a message ID.
+     * </p>
      */
     private long messageID;
 
