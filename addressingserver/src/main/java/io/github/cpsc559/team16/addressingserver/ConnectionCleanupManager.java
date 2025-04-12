@@ -1,15 +1,24 @@
 package io.github.cpsc559.team16.addressingserver;
 
+import java.io.IOException;
+import java.nio.channels.SocketChannel;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
+
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.messaging.ServerFailureMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
-import java.io.IOException;
-import java.nio.channels.SocketChannel;
-
 public class ConnectionCleanupManager {
+
+    /**
+     * The {@code AddressingServer} instance that this class is associated with.
+     */
+    private final AddressingServer server;
+    public AddressingServer getServer() {
+        return server;
+    }
 
     /**
      * The process responsible for managing interactions between the Primary
@@ -31,8 +40,9 @@ public class ConnectionCleanupManager {
         return chatServerManager;
     }
 
-    public ConnectionCleanupManager(PeerManager peerManager,
+    public ConnectionCleanupManager(AddressingServer server, PeerManager peerManager,
                                     ChatServerManager chatServerManager) {
+        this.server = server;
         this.peerManager = peerManager;
         this.chatServerManager = chatServerManager;
     }
@@ -87,7 +97,7 @@ public class ConnectionCleanupManager {
      * @param nioChannel the {@code NIOMessageChannel} associated with the error.
      * @param cce        {@code true} if the cleanup is due to a remote disconnect (i.e., {@link ConnectionClosedException}),
      *                   {@code false} if due to a local I/O failure.
-     */
+     */ 
     public void cleanupPersistentConnectionNIO(NIOMessageChannel nioChannel, Boolean cce) {
         SocketChannel channel = nioChannel.getSocketChannel();
         if (cce) {
@@ -131,15 +141,28 @@ public class ConnectionCleanupManager {
         if (cce) {
             NIOMessageChannel ch = getKnownPersistentChannel(channel);
             if (ch != null) {
+                // Get the PID of the remote process.
                 Long pid = ch.getServerPID();
+                // Create unique message ID that will be used to track ACK messages as well as the pending event.
+                long messageID = server.getMessageIDGenerator().nextID();
                 if (chatServerManager.getChannels().containsKey(channel)) {
                     chatServerManager.removeRemoteProcess(channel);
                     this.chatServerManager.debugPrintAllServers();
-                    broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.CHATSERVER);
+                    // Create a new event that will trigger once all ACKs for synchronizing state have been received.
+                    PendingEvent event = this.createChatServerDeregistrationEvent();
+                    // Add this to the list of pending events.
+                    server.getReplicaCoordinator().addPendingEvent(messageID, event);
+                    // Broadcast the server failure message to all connected peers.
+                    broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.CHATSERVER, messageID);
                 } else if (peerManager.getChannels().containsKey(channel)) {
-                    broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.REPLICA);
                     peerManager.removeRemoteProcess(channel);
                     this.peerManager.debugPrintAllServers();
+                    // Create a new event that will trigger once all ACKs for synchronizing state have been received.
+                    PendingEvent event = this.createReplicaDeregistrationEvent();
+                    // Add this to the list of pending events.
+                    server.getReplicaCoordinator().addPendingEvent(messageID, event);
+                    // Broadcast the server failure message to all connected peers.
+                    broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.REPLICA, messageID);
                 }
             }
         }
@@ -147,6 +170,33 @@ public class ConnectionCleanupManager {
         try {
             channel.close();
         } catch (IOException ignored) {}  // if the channel is already closed, we don't need to do anything.
+    }
+
+    /**
+     * Creates a new {@link PendingEvent} for chat server deregistration.
+     * <p>
+     * This method is used to create a new event that will be triggered once all acknowledgments (ACKs)
+     * for synchronizing state have been received from the chat servers.
+     * </p>
+     *
+     * @return a new {@code PendingEvent} instance.
+     */
+    public PendingEvent createChatServerDeregistrationEvent() {
+        return new PendingEvent();
+    }
+
+
+    /**
+     * Creates a new {@link PendingEvent} for replica deregistration.
+     * <p>
+     * This method is used to create a new event that will be triggered once all acknowledgments (ACKs)
+     * for synchronizing state have been received from the replicas.
+     * </p>
+     *
+     * @return a new {@code PendingEvent} instance.
+     */
+    public PendingEvent createReplicaDeregistrationEvent() {
+        return new PendingEvent();
     }
 
 
@@ -168,13 +218,13 @@ public class ConnectionCleanupManager {
      * @param failedPID        the process ID of the failed server process
      * @param failedServerRole the role of the failed server process (e.g., {@link Roles#CHATSERVER} or an addressing server role)
      */
-    private void broadcastServerFailure(Long senderPID, Long failedPID, String failedServerRole) {
+    private void broadcastServerFailure(Long senderPID, Long failedPID, String failedServerRole, long messageId) {
         // Create the message with the proper {@code ObjectType} so the receiver knows which kind of record/connection to remove.
         ServerFailureMessage<Long> message;
         if (failedServerRole.equals(Roles.CHATSERVER)) {
-            message = ServerFailureMessage.chatServerFailed(senderPID, Roles.PRIMARY, failedServerRole, failedPID);
+            message = ServerFailureMessage.chatServerFailed(messageId, senderPID, Roles.PRIMARY, failedServerRole, failedPID);
         } else {    // It's an addressing server (REPLICA or PRIMARY)
-            message = ServerFailureMessage.addrServerFailed(senderPID, Roles.PRIMARY, failedServerRole, failedPID);
+            message = ServerFailureMessage.addrServerFailed(messageId, senderPID, Roles.PRIMARY, failedServerRole, failedPID);
         }
         // Serialize the message and return if a failure occurs. This would only happen because of a
         // logic error introduced by us (the programmers), so it shouldn't shut down the program, but we need to log it and fix it.
