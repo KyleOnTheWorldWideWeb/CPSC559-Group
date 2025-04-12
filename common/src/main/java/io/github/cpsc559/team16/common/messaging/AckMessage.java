@@ -106,6 +106,9 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
     public static AckMessage<Long> replicaRegistered(long senderPID, Long payload) {
         return new AckMessage<>(AckObjectTypes.REGISTERED, senderPID, Roles.PRIMARY, Roles.REPLICA, payload);
     }
+    public static AckMessage<Long> replicaDeregistered(long senderPID, Long payload) {
+        return new AckMessage<>(AckObjectTypes.DEREGISTERED, senderPID, Roles.PRIMARY, Roles.REPLICA, payload);
+    }
 
     /**
      * Creates an ACK message from the PRIMARY {@code AddressingServer} directed to a {@code ChatServer}.
@@ -121,6 +124,9 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
      */
     public static AckMessage<Long> chatServerRegistered(long senderPID, Long payload) {
         return new AckMessage<>(AckObjectTypes.REGISTERED, senderPID, Roles.PRIMARY, Roles.CHATSERVER, payload);
+    }
+    public static AckMessage<Long> chatServerDeregistered(long senderPID, Long payload) {
+        return new AckMessage<>(AckObjectTypes.DEREGISTERED, senderPID, Roles.PRIMARY, Roles.CHATSERVER, payload);
     }
 
     public static AckMessage<Boolean> replicated(long messagedID, long senderPID, Boolean eventReplicated) {
