@@ -2,10 +2,13 @@ package io.github.cpsc559.team16.addressingserver;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.messaging.ServerFailureMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
@@ -139,30 +142,39 @@ public class ConnectionCleanupManager {
      */
     public void cleanupPersistentConnection(SocketChannel channel, Boolean cce) {
         if (cce) {
-            NIOMessageChannel ch = getKnownPersistentChannel(channel);
+            NIOMessageChannel nioChannel = getKnownPersistentChannel(channel);
             if (ch != null) {
                 // Get the PID of the remote process.
-                Long pid = ch.getServerPID();
+                Long deregisteredPID = nioChannel.getServerPID();
                 // Create unique message ID that will be used to track ACK messages as well as the pending event.
                 long messageID = server.getMessageIDGenerator().nextID();
+
+                // CHATSERVER CONNECTION CLEANUP
                 if (chatServerManager.getChannels().containsKey(channel)) {
                     chatServerManager.removeRemoteProcess(channel);
-                    this.chatServerManager.debugPrintAllServers();
                     // Create a new event that will trigger once all ACKs for synchronizing state have been received.
-                    PendingEvent event = this.createChatServerDeregistrationEvent();
+                    long primaryPID = server.getPeerManager().getPrimaryPID();
+                    ChatServerRecord record = this.server.getChatServerRegistry().getRecords().get(deregisteredPID);
+                    Map<Long, NIOMessageChannel> recipients = server.getPeerManager().getRegisteredReplicaChannelMap();
+                    PendingEvent event = this.createChatServerDeregistrationEvent(primaryPID, deregisteredPID, channel, nioChannel, record, recipients, messageID);
                     // Add this to the list of pending events.
                     server.getReplicaCoordinator().addPendingEvent(messageID, event);
                     // Broadcast the server failure message to all connected peers.
-                    broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.CHATSERVER, messageID);
-                } else if (peerManager.getChannels().containsKey(channel)) {
+                    broadcastServerFailure(peerManager.getPrimaryPID(), deregisteredPID, Roles.CHATSERVER, messageID);
+                }
+
+                // PEER CONNECTION CLEANUP
+                else if (peerManager.getChannels().containsKey(channel)) {
                     peerManager.removeRemoteProcess(channel);
-                    this.peerManager.debugPrintAllServers();
                     // Create a new event that will trigger once all ACKs for synchronizing state have been received.
-                    PendingEvent event = this.createReplicaDeregistrationEvent();
+                    long primaryPID = server.getPeerManager().getPrimaryPID();
+                    ChatServerRecord record = this.server.getChatServerRegistry().getRecords().get(deregisteredPID);
+                    Map<Long, NIOMessageChannel> recipients = server.getPeerManager().getRegisteredReplicaChannelMap();
+                    PendingEvent event = this.createPeerDeregistrationEvent(primaryPID, deregisteredPID, channel, nioChannel, record, recipients, messageID);
                     // Add this to the list of pending events.
                     server.getReplicaCoordinator().addPendingEvent(messageID, event);
                     // Broadcast the server failure message to all connected peers.
-                    broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.REPLICA, messageID);
+                    broadcastServerFailure(peerManager.getPrimaryPID(), deregisteredPID, Roles.REPLICA, messageID);
                 }
             }
         }
@@ -181,8 +193,22 @@ public class ConnectionCleanupManager {
      *
      * @return a new {@code PendingEvent} instance.
      */
-    public PendingEvent createChatServerDeregistrationEvent() {
-        return new PendingEvent();
+    public PendingEvent createChatServerDeregistrationEvent(long primaryPID, long deregisteredPID,
+                                                        SocketChannel channel,
+                                                        NIOMessageChannel nioChannel,
+                                                        ChatServerRecord record,
+                                                        Map<Long, NIOMessageChannel> recipients, long requestMessageID) {
+        return new PendingEvent(
+                AckMessage.chatServerDeregistered(primaryPID, deregisteredPID),
+                recipients,
+                nioChannel, () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
+                    // DEBUG
+                    System.out.println("PRIMARY has received all ACK's from REPLICA's - server state synchronized, sending response...");
+                    // All replicas have successfully replicated the update. Update state locally and continue with response.
+                    this.peerManager.debugPrintAllServers();
+                },
+                3, requestMessageID
+        );
     }
 
 
@@ -195,8 +221,23 @@ public class ConnectionCleanupManager {
      *
      * @return a new {@code PendingEvent} instance.
      */
-    public PendingEvent createReplicaDeregistrationEvent() {
-        return new PendingEvent();
+    public PendingEvent createPeerDeregistrationEvent(long primaryPID, long deregisteredPID,
+                                                        SocketChannel channel,
+                                                        NIOMessageChannel nioChannel,
+                                                        ChatServerRecord record,
+                                                        Map<Long, NIOMessageChannel> recipients, long requestMessageID)
+    {
+        return new PendingEvent(
+            AckMessage.chatServerDeregistered(primaryPID, deregisteredPID),
+            recipients,
+            nioChannel, () -> {  // THESE ARE ALL THE ACTIONS THAT WILL OCCUR ONCE AddressingServer STATES ARE CONSISTENT.
+                // DEBUG
+                System.out.println("PRIMARY has received all ACK's from REPLICA's - server state synchronized, sending response...");
+                // All replicas have successfully replicated the update. Update state locally and continue with response.
+                this.peerManager.debugPrintAllServers();
+            },
+            3, requestMessageID
+        );
     }
 
 
