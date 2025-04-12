@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentMap;
 
 
+import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 import io.github.cpsc559.team16.common.messaging.*;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.*;
 import java.util.Iterator;
+import java.util.function.Supplier;
 
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
 
@@ -83,13 +85,13 @@ public class AddrServerNetworkManager {
      */
     private ServerSocketChannel healthCheckListenerChannel;
 
+    private AddrServerReadDispatcher readDispatcher;
+
     /**
      * The Selector used for multiplexing non-blocking I/O operations on the registered channels.
      * This allows the AddressingServer to monitor multiple channels using a single thread.
      */
     private final Selector selector;
-
-
 
     /**
      * The network configuration for this {@code AddressingServer} process.
@@ -135,44 +137,65 @@ public class AddrServerNetworkManager {
         return eventWatchdog;
     }
 
-//    /**
-//     * A fixed-size thread pool used to offload network I/O processing from the main selector loop.
-//     * <p>
-//     * This {@code ExecutorService} executes read and dispatch tasks asynchronously to prevent
-//     * the main event loop from blocking during expensive operations such as deserialization,
-//     * registration, or broadcast updates (multi-message streams).
-//     * </p>
-//     * <p>
-//     * The pool size is typically based on the number of available CPU cores on the host system,
-//     * but can be adjusted for high-throughput scenarios.
-//     * </p>
-//     */
-//    private final ExecutorService executorService;
 
+    /**
+     * Background thread responsible for periodically requesting synchronization data from the {@code PRIMARY} server.
+     * <p>
+     * This thread is only active on {@code REPLICA} AddressingServers. It coordinates periodic sync requests to
+     * retrieve up-to-date {@link io.github.cpsc559.team16.common.dto.ChatServerRecord} and
+     * {@link io.github.cpsc559.team16.common.dto.AddrServerRecord} entries.
+     * </p>
+     * <p>
+     * The coordinator uses a {@link java.util.function.Supplier} to retrieve the latest {@link NIOMessageChannel}
+     * connected to the {@code PRIMARY}. If the channel is unavailable at startup (e.g., connection has not yet been
+     * established), it will wait and retry until the primary becomes reachable.
+     * </p>
+     * <p>
+     * Once a connection is active, the coordinator will:
+     * <ul>
+     *   <li>Send {@code ChatServerRecord} requests on a regular interval.</li>
+     *   <li>Send {@code AddrServerRecord} requests once every N cycles (default is 6).</li>
+     * </ul>
+     * This component is lifecycle-managed by the {@code AddrServerNetworkManager}, which starts and stops the thread
+     * alongside other internal systems.
+     * </p>
+     */
+    ReplicaRequestCoordinator replicaRequestCoordinator = null;
 
+    public ReplicaRequestCoordinator getReplicaRequestCoordinator () { return this.replicaRequestCoordinator; }
 
+    public void createReplicaRequestCoordinator() {
+        this.replicaRequestCoordinator = this.replicaRequestFactory.get(); }
 
+    private final Supplier<ReplicaRequestCoordinator> replicaRequestFactory;
+
+    
+    public void shutdownCoordinatorRequest() {
+        if (this.replicaRequestCoordinator != null && this.replicaRequestCoordinator.isAlive()) {
+            this.replicaRequestCoordinator.shutdown();
+            try {
+                this.replicaRequestCoordinator.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("Interrupted while waiting for ReplicaRequestCoordinator to finish.");
+            }
+        }
+    }
 
     /**
      * Constructs the network manager for the AddressingServer.
      *
      * @throws IOException If the selector fails to initialize.
      */
-    public AddrServerNetworkManager(ConnectionCleanupManager cleanupManager, AddrServerConfig config, ConcurrentMap<Long, PendingEvent> pendingSyncEvents) throws IOException {
+    public AddrServerNetworkManager(ConnectionCleanupManager cleanupManager, AddrServerConfig config,
+                                    ConcurrentMap<Long, PendingEvent> pendingSyncEvents,
+                                    Supplier<ReplicaRequestCoordinator> replicaRequestFactory) throws IOException {
         this.cleanupManager = cleanupManager;
         this.selector = Selector.open();
         this.config = config;
         this.pendingSyncEvents = pendingSyncEvents;
         this.eventWatchdog = new PendingEventWatchdog(pendingSyncEvents, this.cleanupManager,  500);
-        /*
-         Creates a pool with a fixed number of threads - usually one per CPU core. This will allow us to benefit from
-         some level of asynchronous message handling - preventing the main event-loop from blocking during events that
-         necessitate many I/O operations. Using a thread pool will allow us to avoid expensive thread creation/destruction,
-         while also limiting idle threads due to the constant network traffic the {@code AddressingSerer}'s will experience.
-         */
-        //this.executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        // Can try and increase the pool to see if network I/O demands it.
-        //this.executorService = Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors());
+        this.replicaRequestFactory = replicaRequestFactory;
     }
 
     public void closeAllConnections() {
@@ -196,8 +219,8 @@ public class AddrServerNetworkManager {
             }
         }
 
-        // Shut down the executor (thread) service
-//        executorService.shutdownNow();
+        // Shutdown the thread pool in AddrServerReadDispatcher
+        readDispatcher.shutdownExecutorService();
         try {
             eventWatchdog.shutdown();
             eventWatchdog.join(); // wait for it to finish
@@ -205,6 +228,8 @@ public class AddrServerNetworkManager {
             Thread.currentThread().interrupt(); // Restore the interrupt status
             System.err.println("Interrupted while waiting for watchdog to finish.");
         }
+        // Stop the request coordinator thread
+        shutdownCoordinatorRequest();
 
 
         // Close the selector
@@ -215,7 +240,7 @@ public class AddrServerNetworkManager {
         }
 
         System.out.println("All network resources have been closed for the Addressing Server Object.");
-    }
+        }
 
     // Helper method to close channels quietly
     private void tryCloseChannel(Channel channel) {
@@ -340,8 +365,25 @@ public class AddrServerNetworkManager {
      * @throws IOException if an I/O error occurs while selecting or processing channel events
      */
     public void startEventLoop(AddrServerReadDispatcher readDispatcher) throws IOException {
+        this.readDispatcher = readDispatcher;
+
+        // Only start the ReplicaRequestCoordinator if this server is a REPLICA
+        if (config.getRole().equals(ServerRole.REPLICA)) {
+            this.createReplicaRequestCoordinator();
+            if (replicaRequestCoordinator != null) {
+                replicaRequestCoordinator.start();
+            }
+        }
+
         eventWatchdog.start();
+
         while (true) {
+
+            if (shutdownRequested) {
+                System.out.println("Shutdown signal received. Exiting the AddrServerNetworkManager main event loop.");
+                this.closeAllConnections();
+                return; // exit to calling code
+            }
 
             if (!eventWatchdog.isAlive()) {
                 System.err.println("Watchdog thread is not alive. Restarting...");
@@ -349,11 +391,18 @@ public class AddrServerNetworkManager {
                 eventWatchdog.start();
             }
 
-            if (shutdownRequested) {
-                System.out.println("Shutdown signal received. Exiting the AddrServerNetworkManager main event loop.");
-                this.closeAllConnections();
-                return; // exit to calling code
+            if (config.getRole().equals(ServerRole.REPLICA)) {
+                if (replicaRequestCoordinator != null && !replicaRequestCoordinator.isAlive()) {
+                    System.err.println("ReplicaRequestCoordinator thread is not alive. Restarting...");
+                    createReplicaRequestCoordinator();
+                    replicaRequestCoordinator.start();
+                }
             }
+            else {
+                // TODO - move this to the leader takeover logic
+                shutdownCoordinatorRequest();
+            }
+
 
             // Any thread calling this method blocks until an event occurs on a channel registered with the `selector`.
             selector.select();

@@ -384,6 +384,34 @@ public class PeerManager {
         return 0L;
     }
 
+    /**
+     * Retrieves the active {@link NIOMessageChannel} for the current Primary {@code AddressingServer}, if one exists.
+     * <p>
+     * This method searches the internal peer channel map to find the {@code NIOMessageChannel}
+     * associated with the server process whose {@code ServerRole} is {@code PRIMARY}.
+     * It first determines the primary server's PID using the known {@link AddrServerRecord}s,
+     * and then attempts to match it with an established network channel.
+     * </p>
+     *
+     * <p>
+     * If the primary server has not yet been registered or the connection is not established,
+     * this method returns {@code null}. This allows consumers (e.g. background sync threads)
+     * to delay execution until the primary becomes reachable.
+     * </p>
+     *
+     * @return the {@code NIOMessageChannel} tied to the current {@code PRIMARY} {@code AddressingServer},
+     *         or {@code null} if the primary has not yet been registered or is not connected.
+     */
+    public NIOMessageChannel getPrimaryNIOChannel() {
+        Long primaryPid = this.getPrimaryPID();
+        if (primaryPid != 0L) {
+            for (NIOMessageChannel ch : this.peerChannels.values()) {
+                if (ch.getServerPID().equals(primaryPid)) return ch;
+            }
+        }
+        return null;
+    }
+
 //    /**
 //     * Updates the provided {@link AddrServerRecord} with runtime information from the given socket connection and PID.
 //     * <p>

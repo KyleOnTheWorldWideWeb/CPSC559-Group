@@ -36,4 +36,7 @@ public class Roles {
      * Host PID, and HostAddress of an ACTIVE ChatServer with room to accept new clients.
      */
     public static final String CLIENT = "CLIENT";
+
+    // Preventing any possible instantiation of the utility class
+    private Roles() {}
 }

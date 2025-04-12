@@ -2,11 +2,10 @@ package io.github.cpsc559.team16.addressingserver;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
-import java.util.Collection;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
@@ -40,6 +39,24 @@ public class AddrServerReadDispatcher {
     private final ConnectionCleanupManager cleanupManager;
     private final ReplicaSyncCoordinator replicaCoordinator;
 
+    /**
+     * A fixed-size thread pool used to offload network I/O processing from the main selector loop.
+     * <p>
+     * This {@code ExecutorService} executes read and dispatch tasks asynchronously to prevent
+     * the main event loop from blocking during expensive operations such as deserialization,
+     * registration, or broadcast updates (multi-message streams).
+     * </p>
+     * <p>
+     * The pool size is typically based on the number of available CPU cores on the host system,
+     * but can be adjusted for high-throughput scenarios.
+     * </p>
+     */
+    private final ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());;
+
+    public void shutdownExecutorService() {
+       this.executorService.shutdownNow();
+    }
+
     public AddrServerReadDispatcher(AddressingServer server) {
         this.server = server;
         this.peerManager = server.getPeerManager();
@@ -48,7 +65,7 @@ public class AddrServerReadDispatcher {
         this.broadcastManager = server.getBroadcastManager();
         this.genMID = server.getMessageIDGenerator();
         this.cleanupManager = server.getCleanupManager();
-        this.replicaCoordinator = server.getReplicaCoordinator();
+        this.replicaCoordinator = server.getReplicaSyncCoordinator();
     }
 
     /**
@@ -267,13 +284,75 @@ public class AddrServerReadDispatcher {
     private void handleRequest(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> requestMessage) {
         switch (requestMessage.getSenderRole()) {
             case Roles.CHATSERVER -> {
-                if ("AllAddrServerInfo".equals(requestMessage.getObjectType())) {
-                    // server.sendAddrServerInfo(channel);
+                switch (requestMessage.getObjectType()) {
+                    case (RequestObjectTypes.ALL_SERVER_RECORDS) -> {
+                        executorService.submit(() -> {
+                            try {
+                                broadcastManager.sendAllRecordsToCS(this.getPID(), nioChannel,
+                                        this.server.getChatServerRegistry().getRecords(),
+                                        this.server.getAddrServerRegistry().getRecords());
+                            } catch (IOException e) {
+                                System.err.printf("IOException triggered while responding to ALL_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n", nioChannel.getServerPID());
+                            }
+                        });
+                    }
+                    case (RequestObjectTypes.CHAT_SERVER_RECORDS) -> {
+                        executorService.submit(() -> {
+                            try {
+                                broadcastManager.sendAllChatServerRecordsToCS(this.getPID(), nioChannel,
+                                        this.server.getChatServerRegistry().getRecords());
+                            } catch (IOException e) {
+                                System.err.printf("IOException triggered while responding to CHAT_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n", nioChannel.getServerPID());
+                            }
+                        });
+                    }
+                    case (RequestObjectTypes.ADDR_SERVER_RECORDS) -> {
+                        executorService.submit(() -> {
+                            try {
+                                broadcastManager.sendAllAddrServerRecordsToCS(this.getPID(), nioChannel,
+                                        this.server.getAddrServerRegistry().getRecords());
+                            } catch (IOException e) {
+                                System.err.printf("IOException triggered while responding to ADDR_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n", nioChannel.getServerPID());
+                            }
+                        });
+                    }
+                    default -> System.err.println("Unrecognized ObjectType for REQUEST: " + requestMessage.getObjectType());
                 }
             }
             case Roles.REPLICA -> {
-                if ("AllChatServerInfo".equals(requestMessage.getObjectType())) {
-                    // server.sendChatServerInfo(channel);
+                switch (requestMessage.getObjectType()) {
+                    case (RequestObjectTypes.ALL_SERVER_RECORDS) -> {
+                        executorService.submit(() -> {
+                            try {
+                                broadcastManager.sendAllRecordsToReplica(this.getPID(), nioChannel,
+                                        this.server.getChatServerRegistry().getRecords(),
+                                        this.server.getAddrServerRegistry().getRecords());
+                            } catch (IOException e) {
+                                System.err.printf("IOException triggered while responding to ALL_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n", nioChannel.getServerPID());
+                            }
+                        });
+                    }
+                    case (RequestObjectTypes.CHAT_SERVER_RECORDS) -> {
+                        executorService.submit(() -> {
+                            try {
+                                broadcastManager.sendAllChatServerRecordsToReplica(this.getPID(), nioChannel,
+                                        this.server.getChatServerRegistry().getRecords());
+                            } catch (IOException e) {
+                                System.err.printf("IOException triggered while responding to CHAT_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n", nioChannel.getServerPID());
+                            }
+                        });
+                    }
+                    case (RequestObjectTypes.ADDR_SERVER_RECORDS) -> {
+                        executorService.submit(() -> {
+                            try {
+                                broadcastManager.sendAllAddrServerRecordsToReplica(this.getPID(), nioChannel,
+                                        this.server.getAddrServerRegistry().getRecords());
+                            } catch (IOException e) {
+                                System.err.printf("IOException triggered while responding to ADDR_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n", nioChannel.getServerPID());
+                            }
+                        });
+                    }
+                    default -> System.err.println("Unrecognized ObjectType for REQUEST: " + requestMessage.getObjectType());
                 }
             }
             default -> System.err.println("Unrecognized sender role for REQUEST: " + requestMessage.getSenderRole());
