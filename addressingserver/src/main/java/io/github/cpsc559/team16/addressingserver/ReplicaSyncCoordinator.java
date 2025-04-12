@@ -163,7 +163,4 @@ public class ReplicaSyncCoordinator {
         }
     }
 
-    public void retryUnackedEvents() {
-        // Timer-driven retry logic
-    }
 }

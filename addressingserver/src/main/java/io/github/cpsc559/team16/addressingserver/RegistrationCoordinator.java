@@ -65,7 +65,7 @@ public class RegistrationCoordinator {
         this.peerManager = server.getPeerManager();
         this.chatServerManager = server.getChatServerManager();
         this.broadcastManager = server.getBroadcastManager();
-        this.replicaCoordinator = server.getReplicaCoordinator();
+        this.replicaCoordinator = server.getReplicaSyncCoordinator();
         this.cleanupManager = server.getCleanupManager();
         this.chatServerRegistry = server.getChatServerRegistry();
         this.addrServerRegistry = server.getAddrServerRegistry();
@@ -161,7 +161,7 @@ public class RegistrationCoordinator {
                                         ChatServerRecord record) {
         try {
             this.chatServerManager.registerServerSendACK(channel, nioChannel, primaryPID, newPID, record);
-            this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
+            this.broadcastManager.sendAllRecordsToCS(primaryPID, nioChannel,
                     this.chatServerRegistry.getRecords(),
                     this.addrServerRegistry.getRecords());
             this.broadcastManager.broadcastChatServerRecordToCS(primaryPID, record);
@@ -223,7 +223,7 @@ public class RegistrationCoordinator {
                     // An ACK.Registered containing the PID for the newly registered will already have been sent by the pendingEvent (see above).
                     // Once all ACKs received, send all the server records to the new chat server
                     try {
-                        this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
+                        this.broadcastManager.sendAllRecordsToCS(primaryPID, nioChannel,
                                 this.chatServerRegistry.getRecords(),
                                 this.addrServerRegistry.getRecords());
                         this.broadcastManager.broadcastChatServerRecordToCS(primaryPID, record);
@@ -284,7 +284,7 @@ public class RegistrationCoordinator {
                     // An ACK containing the PID for the newly registered replica will already have been sent by the pendingEvent (see above).
                     // Once all ACKs received, send all the server records to the new replica
                     try {
-                        this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
+                        this.broadcastManager.sendAllRecordsToReplica(primaryPID, nioChannel,
                                 this.chatServerRegistry.getRecords(),
                                 this.addrServerRegistry.getRecords());
                         this.broadcastManager.broadcastAddrServerRecordToCS(primaryPID, record);
@@ -327,7 +327,7 @@ public class RegistrationCoordinator {
                                            AddrServerRecord record) {
         try {
             this.peerManager.registerPeerSendACK(channel, nioChannel, primaryPID, newPID, record);
-            this.broadcastManager.sendAllRecordsToProcess(primaryPID, nioChannel,
+            this.broadcastManager.sendAllRecordsToReplica(primaryPID, nioChannel,
                     this.chatServerRegistry.getRecords(),
                     this.addrServerRegistry.getRecords());
             this.broadcastManager.broadcastAddrServerRecordToCS(primaryPID, record);

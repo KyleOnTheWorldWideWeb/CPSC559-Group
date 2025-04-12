@@ -46,4 +46,7 @@ public class AckObjectTypes {
 
     public static final String OK = "Ok";
 
+    // Preventing any possible instantiation of the utility class
+    private AckObjectTypes() {}
+
 }

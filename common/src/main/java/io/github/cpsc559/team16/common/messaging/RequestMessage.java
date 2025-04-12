@@ -69,4 +69,17 @@ public class RequestMessage<T> extends BaseAddrServerMessage<T> {
         super(messageID, MessageTypes.REQUEST, objectType, senderPID, senderRole, targetRole, payload);
     }
 
+    public static RequestMessage<Void> requestAllChatServerRecords(long messageID, long senderPID) {
+        return new RequestMessage<>(messageID, RequestObjectTypes.CHAT_SERVER_RECORDS, senderPID, Roles.REPLICA, Roles.PRIMARY, null);
+    }
+
+    public static RequestMessage<Void> requestAllAddrServerRecords(long messageID, long senderPID) {
+        return new RequestMessage<>(messageID, RequestObjectTypes.ADDR_SERVER_RECORDS, senderPID, Roles.REPLICA, Roles.PRIMARY, null);
+    }
+
+    public static RequestMessage<Void> requestAllServerRecords(long messageID, long senderPID) {
+        return new RequestMessage<>(messageID, RequestObjectTypes.ALL_SERVER_RECORDS, senderPID, Roles.REPLICA, Roles.PRIMARY, null);
+    }
+
+
 }

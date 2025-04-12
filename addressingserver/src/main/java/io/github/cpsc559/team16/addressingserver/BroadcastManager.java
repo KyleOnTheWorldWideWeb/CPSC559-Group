@@ -238,7 +238,7 @@ public class BroadcastManager {
      * @param primaryPID the PID of the primary server sending the updates.
      * @param nioChannel the channel over which to send the records.
      */
-    public void sendAllAddrServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
+    public void sendAllAddrServerRecordsToReplica(Long primaryPID, NIOMessageChannel nioChannel,
                                          Map<Long, AddrServerRecord> registry) throws IOException {
         for (AddrServerRecord record : registry.values()) {
             UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(primaryPID, record);
@@ -269,7 +269,7 @@ public class BroadcastManager {
      * @param nioChannel  the channel over which to send the records.
      * @param registry a {@code HashMap} containing all {@code ChatServerRecord} entries.
      */
-    public void sendAllChatServerRecords(Long primaryPID, NIOMessageChannel nioChannel,
+    public void sendAllChatServerRecordsToReplica(Long primaryPID, NIOMessageChannel nioChannel,
                                          Map<Long, ChatServerRecord> registry) throws IOException {
         for (ChatServerRecord record : registry.values()) {
             UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(primaryPID, record);
@@ -308,11 +308,101 @@ public class BroadcastManager {
      *                           keyed by their process IDs.
      * @throws IOException if an error occurs while sending any of the records.
      */
-    public void sendAllRecordsToProcess(Long primaryPID, NIOMessageChannel nioChannel,
+    public void sendAllRecordsToReplica(Long primaryPID, NIOMessageChannel nioChannel,
                                         Map<Long, ChatServerRecord> chatServerRegistry,
-                                        Map<Long, AddrServerRecord> addrServerRegistry ) throws IOException {
-        this.sendAllAddrServerRecords(primaryPID, nioChannel, addrServerRegistry);
-        this.sendAllChatServerRecords(primaryPID, nioChannel, chatServerRegistry);
+                                        Map<Long, AddrServerRecord> addrServerRegistry) throws IOException {
+        this.sendAllAddrServerRecordsToReplica(primaryPID, nioChannel, addrServerRegistry);
+        this.sendAllChatServerRecordsToReplica(primaryPID, nioChannel, chatServerRegistry);
+    }
+
+
+
+    /**
+     * Sends all currently known {@link AddrServerRecord} entries from the Primary
+     * to a newly registered {@code ChatServer}.
+     *
+     * <p>This ensures that the ChatServer is fully synchronized with the current
+     * AddressingServer topology known to the Primary.</p>
+     *
+     * <p><strong>Note:</strong> If an {@link IOException} occurs while sending,
+     * this method delegates channel cleanup to the {@code ConnectionCleanupManager}.
+     * It is assumed that an unrecoverable error means the channel should no longer be trusted.
+     * </p>
+     *
+     * @param primaryPID the PID of the Primary AddressingServer sending the updates.
+     * @param nioChannel the {@link NIOMessageChannel} over which records are sent.
+     * @param registry a {@code Map} of {@code AddrServerRecord} entries keyed by PID.
+     */
+    public void sendAllAddrServerRecordsToCS(Long primaryPID, NIOMessageChannel nioChannel,
+                                                  Map<Long, AddrServerRecord> registry) throws IOException {
+        for (AddrServerRecord record : registry.values()) {
+            UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToCS(primaryPID, record);
+            try {
+                nioChannel.sendMessage(message.toJson());
+            } catch (JsonProcessingException e) {
+                System.err.println("Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
+            } catch (IOException ioe) {
+                System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
+                throw ioe;
+            }
+        }
+        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
+    }
+
+    /**
+     * Sends all currently known {@link ChatServerRecord} entries from the Primary
+     * to a newly registered {@code ChatServer}.
+     *
+     * <p>This ensures that the ChatServer is fully synchronized with the current
+     * set of active ChatServers in the network.</p>
+     *
+     * <p><strong>Note:</strong> If an {@link IOException} occurs during sending,
+     * this method invokes the {@code ConnectionCleanupManager} to remove the
+     * broken connection. Since this method is only used for targeted record sync,
+     * cleanup is preferred over retry logic here.</p>
+     *
+     * @param primaryPID the PID of the Primary AddressingServer sending the updates.
+     * @param nioChannel the {@link NIOMessageChannel} used to send the updates.
+     * @param registry a {@code Map} of {@code ChatServerRecord} entries keyed by PID.
+     */
+    public void sendAllChatServerRecordsToCS(Long primaryPID, NIOMessageChannel nioChannel,
+                                                  Map<Long, ChatServerRecord> registry) throws IOException {
+        for (ChatServerRecord record : registry.values()) {
+            UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToCS(primaryPID, record);
+            try {
+                nioChannel.sendMessage(message.toJson());
+            } catch (JsonProcessingException e) {
+                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
+            } catch (IOException ioe) {
+                System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
+                throw ioe;
+            }
+        }
+        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
+    }
+
+    /**
+     * Sends all known {@link AddrServerRecord} and {@link ChatServerRecord} entries
+     * from the Primary to a newly registered {@code ChatServer}.
+     *
+     * <p>This method sequentially invokes {@link #sendAllAddrServerRecordsToCS} and
+     * {@link #sendAllChatServerRecordsToCS} to ensure full synchronization.</p>
+     *
+     * <p><strong>Note:</strong> If an error occurs during the sending of either set of records,
+     * it will be caught and logged internally. This method does not propagate exceptions
+     * upward or handle full synchronization retries. It assumes the calling component
+     * will decide whether recovery, retry, or channel cleanup is appropriate.</p>
+     *
+     * @param primaryPID the PID of the Primary AddressingServer sending the records.
+     * @param nioChannel the {@link NIOMessageChannel} used for the transmission.
+     * @param chatServerRegistry a map of all {@code ChatServerRecord} entries, keyed by PID.
+     * @param addrServerRegistry a map of all {@code AddrServerRecord} entries, keyed by PID.
+     */
+    public void sendAllRecordsToCS(Long primaryPID, NIOMessageChannel nioChannel,
+                                        Map<Long, ChatServerRecord> chatServerRegistry,
+                                        Map<Long, AddrServerRecord> addrServerRegistry) throws IOException {
+        this.sendAllAddrServerRecordsToCS(primaryPID, nioChannel, addrServerRegistry);
+        this.sendAllChatServerRecordsToCS(primaryPID, nioChannel, chatServerRegistry);
     }
 
 
