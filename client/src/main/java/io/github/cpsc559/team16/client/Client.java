@@ -283,6 +283,8 @@ public class Client {
      */
     private ClientLogin clientLogin = null;
 
+    private int invalidLoginAttempts = 0;
+
     /**
      * Constructs a new chat client with the specified configuration.
      * This constructor sets up the client with necessary information for connecting
@@ -387,6 +389,15 @@ public class Client {
         }
     }
 
+    /**
+     * Prompts the user for their username and password for authentication.
+     * This method uses the JLine library to create a command-line interface for
+     * user input.
+     * <p>
+     * 
+     * @return A {@link ClientLogin} object containing the username and password
+     *         entered by the user.
+     */
     private ClientLogin promptClientLogin() {
         username = "Anonymous"; // Default username
         String password = "1234"; // Default password
@@ -483,6 +494,19 @@ public class Client {
             // Extract the payload. It should be a String in the format
             // "pid:hostAddress:clientPort"
 
+            // Check if this is an invalid login attempt
+            if (ackMessage.getObjectType().equals(AckObjectTypes.INVALID_LOGIN)) {
+                System.out.println("Server failed to authenticate username/password pair.");
+                invalidLoginAttempts++;
+                if (invalidLoginAttempts >= 3) {
+                    System.out.println("Too many invalid login attempts. Exiting...");
+                    shutdown();
+                }
+                return registerWithAddressingServer();
+            }
+            invalidLoginAttempts = 0;
+
+
             if (ackMessage.getObjectType().equals(AckObjectTypes.HOSTADDRESS)) {
                 String payload = (String) ackMessage.getPayload();
                 if (payload == null || !payload.contains(":")) {
@@ -501,10 +525,6 @@ public class Client {
                 System.out.println("ACK message indicated there were no chat servers available.");
 
                 return null;
-            } else if (ackMessage.getObjectType().equals(AckObjectTypes.INVALID_LOGIN)) {
-                System.out.println("Server failed to authenticate (incorrect password).");
-
-                return registerWithAddressingServer();
             } else {
                 throw new IOException("Unexpected ACK message type: " + ackMessage.getObjectType());
             }
@@ -573,7 +593,7 @@ public class Client {
                 debug(DEBUG_BASIC, "Connection error: " + e.getMessage());
                 throw e;
             } catch (Exception e) {
-                System.err.println("Error parsing chat server address: " + e.getMessage());
+                System.err.println("Error: " + e.getMessage());
             }
         }
     }
