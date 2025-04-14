@@ -1,7 +1,8 @@
 package io.github.cpsc559.team16.common.messaging;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ClientLogin;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 
 /**
@@ -117,8 +118,8 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      *
      * @return A {@code RegisterMessage} containing a {@code String} payload for registering the client.
      */
-    public static RegisterMessage<String> fromClient() {
-        return new RegisterMessage<>(null, Roles.CLIENT, Roles.PRIMARY, null);
+    public static RegisterMessage<ClientLogin> fromClient(ClientLogin clientLogin) {
+        return new RegisterMessage<>(ObjectTypes.CLIENT_LOGIN, Roles.CLIENT, Roles.PRIMARY, clientLogin);
     }
 
 

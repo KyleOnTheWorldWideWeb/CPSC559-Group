@@ -29,6 +29,11 @@ public class ObjectTypes {
     public static final String CHAT_SERVER_RECORD = "ChatServerRecord";
 
     /**
+     * The object type for a ClientLogin object.
+     */
+    public static final String CLIENT_LOGIN = "ClientLogin";
+
+    /**
      * The object type for representing client count values.
      */
     public static final String CLIENT_COUNT = "ClientCount";
