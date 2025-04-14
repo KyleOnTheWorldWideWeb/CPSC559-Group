@@ -15,16 +15,17 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 
@@ -1522,7 +1523,7 @@ public class Client {
             debug(DEBUG_BASIC, "Error reading username, using default: Anonymous");
         }
         // Read the server configuration from environment variables
-        String serverAddress = System.getenv().getOrDefault("ADDRESS_HOST", "localhost");
+        String serverAddress = System.getenv().getOrDefault("ADDRESS_SERVER_IP", "localhost");
         int serverPort = Integer.parseInt(System.getenv().getOrDefault("SERVER_PORT", "49800"));
 
         debug(DEBUG_NORMAL, String.format("Client configuration - Username: %s, Server: %s:%d",

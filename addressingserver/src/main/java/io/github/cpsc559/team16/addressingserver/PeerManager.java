@@ -1,20 +1,23 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.dto.ServerRole;
-import io.github.cpsc559.team16.common.messaging.*;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ServerRole;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
+import io.github.cpsc559.team16.common.messaging.UpdateMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
  * Manages peer registration, update propagation, and persistent communication
@@ -345,9 +348,18 @@ public class PeerManager {
 
             NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
             peerChannels.put(channel, nioChannel);
-
+            String publicAddress = System.getenv("PUBLIC_ADDRESS");
+            // Add a fallback if the environment variable isn't set
+            if (publicAddress == null || publicAddress.isEmpty()) {
+                // Fallback to hostname/IP detection
+                InetAddress localHost = InetAddress.getLocalHost();
+                publicAddress = localHost.getHostAddress();
+                System.out.println("WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
+            } else {
+                System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
+            }
             RegisterMessage<AddrServerRecord> register =
-                    RegisterMessage.fromReplica(clientPort, peerPort, chatServerPort);
+                    RegisterMessage.fromReplica(publicAddress, clientPort, peerPort, chatServerPort);
             nioChannel.sendMessage(register.toJson());
 
             channel.configureBlocking(false);

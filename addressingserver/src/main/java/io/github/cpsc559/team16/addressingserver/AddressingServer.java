@@ -412,12 +412,23 @@ public class AddressingServer {
         config.setPID(pid); // Assign a process id to the primary
         genMID.setPID(pid); // Set the PID in the message ID generator (it needs this to generate unique network message ID's)
         System.out.println("PRIMARY AddressingServer .env host address: " + config.getHostAddress());
-        try {
-            System.out.println("PRIMARY AddressingServer runtime host address: " + InetAddress.getLocalHost().getHostAddress());
-        } catch (Exception e) {
-            System.err.println("Error reading host address: " + e.getMessage());
+        // try {
+        //     System.out.println("PRIMARY AddressingServer runtime host address: " + InetAddress.getLocalHost().getHostAddress());
+        // } catch (Exception e) {
+        //     System.err.println("Error reading host address: " + e.getMessage());
+        // }
+        String publicAddress = System.getenv("PUBLIC_ADDRESS");
+        // Add a fallback if the environment variable isn't set
+        if (publicAddress == null || publicAddress.isEmpty()) {
+            // Fallback to hostname/IP detection
+            InetAddress localHost = InetAddress.getLocalHost();
+            publicAddress = localHost.getHostAddress();
+
+        } else {
+            System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
         }
-        addrServerRegistry.registerAddrServer(pid, config.getHostAddress(),
+        System.out.println("PRIMARY AddressingServer .env public address: " + publicAddress);
+        addrServerRegistry.registerAddrServer(pid, publicAddress,
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort(), config.getRole());
     }
 
