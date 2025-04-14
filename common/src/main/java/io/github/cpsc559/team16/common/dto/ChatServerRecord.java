@@ -3,7 +3,6 @@ package io.github.cpsc559.team16.common.dto;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 
 /**
@@ -117,8 +116,8 @@ public class ChatServerRecord extends ServerRecord {
      */
     public void addClient() throws ChatServerFullException {
         if (isFull()) {
-            System.err.println("WARNING - Server FULL: " + " host: " + hostAddress + " reporting to Addressing Server.");
-            throw new ChatServerFullException("Server FULL: " + hostAddress +":" + clientPort);
+            System.err.println("WARNING - Server FULL: " + hostAddress + " reporting to Addressing Server.");
+            throw new ChatServerFullException("Server FULL: " + hostAddress + ":" + clientPort);
         }
         clientCount++;
         try {
@@ -229,13 +228,26 @@ public class ChatServerRecord extends ServerRecord {
         if (status == ServerStatus.INACTIVE) {
             clientCount = 0;
             status = ServerStatus.ACTIVE;
-            System.out.printf("Server with address: %s - is reactivated. Client count reset. host: %n", hostAddress);
+            System.out.printf("Server with address: %s - is reactivated. Client count reset.%n", hostAddress);
         } else {
             throw new IllegalStateException("Cannot mark server as ACTIVE unless previously INACTIVE.");
         }
     }
 
+    public void setPID(Long serverPID) {
+        super.setPID(serverPID);
+    }
 
-    public void setClientCount(int newClientCount) { this.clientCount = newClientCount; }
+    public void setClientCount(int newClientCount) {
+        this.clientCount = newClientCount;
+    }
+
+    public int getMaxClientCount() {
+        return maxClientCount;
+    }
+
+    public void setHostAddress(String hostAddress) {
+        super.setHostAddress(hostAddress);
+    }
 
 }
