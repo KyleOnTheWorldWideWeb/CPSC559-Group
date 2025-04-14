@@ -15,16 +15,18 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.cpsc559.team16.common.dto.ClientLogin;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 
@@ -274,6 +276,13 @@ public class Client {
      */
     private LineReader lineReader;
 
+
+    /**
+     * The client login information, including username and password.
+     * This is used for authentication with the server.
+     */
+    private ClientLogin clientLogin = null;
+
     /**
      * Constructs a new chat client with the specified configuration.
      * This constructor sets up the client with necessary information for connecting
@@ -296,9 +305,7 @@ public class Client {
      *                   with the
      *                   chat client.
      */
-    public Client(String username, String serverName, int serverPort, Terminal terminal, LineReader lineReader) {
-        debug(DEBUG_BASIC, "Initializing client for user: " + username);
-        this.username = username;
+    public Client(String serverName, int serverPort, Terminal terminal, LineReader lineReader) {
         this.address = serverName;
         this.addressPort = serverPort;
         this.terminal = terminal;
@@ -346,7 +353,6 @@ public class Client {
         terminate = false;
 
         try {
-            connect();
             // Initialize and start worker threads
             debug(DEBUG_DETAILED, "Creating client threads");
             inputThread = new InputThread(lineReader);
@@ -379,6 +385,36 @@ public class Client {
                 debug(DEBUG_NORMAL, "Error closing chat server: " + e.getMessage());
             }
         }
+    }
+
+    private ClientLogin promptClientLogin() {
+        username = "Anonymous"; // Default username
+        String password = "1234"; // Default password
+        try {
+            terminal = TerminalBuilder.builder().system(true).build();
+            lineReader = LineReaderBuilder.builder().terminal(terminal).build();
+
+            // Prompt the user for a username
+            System.out.print("Enter your username: ");
+            username = lineReader.readLine().trim();
+
+            // If no username is provided, fall back to "Anonymous"
+            if (username.isEmpty()) {
+                username = "Anonymous";
+            }
+
+            // Prompt the user for a password
+            System.out.print("Enter your password: ");
+            password = lineReader.readLine().trim();
+
+            // Clear the terminal after input
+            terminal.writer().print("\033[H\033[2J");
+            terminal.writer().flush();
+        } catch (Exception e) {
+            debug(DEBUG_BASIC, "Error reading username/password, using defaults (username='Anonymous', password='1234')");
+        }
+
+        return new ClientLogin(username, password);
     }
 
     /**
@@ -423,7 +459,12 @@ public class Client {
             // Create a REGISTER message for the client. Currently it doesn't send any
             // additional information,
             // but I'm guessing this is where we would do the token stuff??? - Aidan
-            RegisterMessage<String> regMsg = RegisterMessage.fromClient();
+
+            if (clientLogin == null) {
+                clientLogin = promptClientLogin();
+            }
+
+            RegisterMessage<ClientLogin> regMsg = RegisterMessage.fromClient(clientLogin);
             // Send the registration JSON message
             out.println(regMsg.toJson());
 
@@ -456,9 +497,16 @@ public class Client {
 
                 return substrings;
 
-            } else {
+            } else if (ackMessage.getObjectType().equals(AckObjectTypes.NOHOST)) {
                 System.out.println("ACK message indicated there were no chat servers available.");
+
                 return null;
+            } else if (ackMessage.getObjectType().equals(AckObjectTypes.INVALID_LOGIN)) {
+                System.out.println("Server failed to authenticate (incorrect password).");
+
+                return registerWithAddressingServer();
+            } else {
+                throw new IOException("Unexpected ACK message type: " + ackMessage.getObjectType());
             }
         }
     }
@@ -1502,34 +1550,15 @@ public class Client {
         // Initialize terminal for username input
         Terminal terminal = null;
         LineReader lineReader = null;
-        String username = "Anonymous"; // Default username
-        try {
-            terminal = TerminalBuilder.builder().system(true).build();
-            lineReader = LineReaderBuilder.builder().terminal(terminal).build();
 
-            // Prompt the user for a username
-            System.out.print("Enter your username: ");
-            username = lineReader.readLine().trim();
-
-            // If no username is provided, fall back to "Anonymous"
-            if (username.isEmpty()) {
-                username = "Anonymous";
-            }
-            // Clear the terminal after username input
-            terminal.writer().print("\033[H\033[2J");
-            terminal.writer().flush();
-        } catch (Exception e) {
-            debug(DEBUG_BASIC, "Error reading username, using default: Anonymous");
-        }
         // Read the server configuration from environment variables
         String serverAddress = System.getenv().getOrDefault("ADDRESS_HOST", "localhost");
         int serverPort = Integer.parseInt(System.getenv().getOrDefault("SERVER_PORT", "49800"));
 
-        debug(DEBUG_NORMAL, String.format("Client configuration - Username: %s, Server: %s:%d",
-                username, serverAddress, serverPort));
+        debug(DEBUG_NORMAL, String.format("New client configuration started - Server: %s:%d", serverAddress, serverPort));
 
         // Instantiate and run the client with the provided configuration
-        Client client = new Client(username, serverAddress, serverPort, terminal, lineReader);
+        Client client = new Client(serverAddress, serverPort, terminal, lineReader);
         client.run();
     }
 }
