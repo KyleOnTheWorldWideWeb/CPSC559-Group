@@ -100,8 +100,10 @@ public class RegistrationCoordinator {
     public void handleChatServerRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg) {
         Long primaryPID = server.getConfig().getPID();
         Long newPID = server.generatePID();
+        
         // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
         ChatServerRecord record = msg.safeCastPayload(ChatServerRecord.class);
+        record.setPID(newPID);
         // try {
         //     record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(ChatServerRecord.class), newPID);
         // } catch (IOException e) {
