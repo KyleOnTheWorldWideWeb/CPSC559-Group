@@ -1,17 +1,14 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.messaging.*;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
-import javax.management.relation.Role;
-import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.UpdateMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 public class ChatServerManager {
 
@@ -145,20 +142,18 @@ public class ChatServerManager {
      */
     public ChatServerRecord registerServer(SocketChannel socketChannel, NIOMessageChannel nioChannel, Long csPID,
                                            Long primaryPID, ChatServerRecord record) throws IOException {
-        InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
-        String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
+        // InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
+        // String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
 
         nioChannel.setServerPID(csPID);
         chatServerChannels.put(socketChannel, nioChannel);
-
-        record.setHostAddress(chatServerHostAddr);
         record.setPID(csPID);
         // Send all current records. This helps avoid race conditions.
         //this.sendAllChatServerRecords(primaryPID, nioChannel);
         // Add the new record - this might not be inserted quickly enough to call the sendAll method directly after.
         registry.putChatServerRecord(csPID, record);
 
-        System.out.println("ChatServer registered: " + chatServerHostAddr + " (PID: " + csPID + ")");
+        System.out.println("ChatServer registered: " + record.getHostAddress() + " (PID: " + csPID + ")");
 
         // WE SEND THE RECORD TO ALL SERVERS (THIS ONE INCLUDED) AFTER THIS METHOD RETURNS. NO NEED TO SEND IT NOW.
 
