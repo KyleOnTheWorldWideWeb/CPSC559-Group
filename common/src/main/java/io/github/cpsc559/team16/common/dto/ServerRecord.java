@@ -1,7 +1,6 @@
 package io.github.cpsc559.team16.common.dto;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 
 public abstract class ServerRecord {
@@ -16,7 +15,6 @@ public abstract class ServerRecord {
      */
     protected String hostAddress;
 
-    protected String publicAddress;
 
     /**
      * The port used for client connections.
@@ -33,14 +31,12 @@ public abstract class ServerRecord {
      *
      * @param processID   The unique identifier for this server process.
      * @param hostAddress The network address for the server.
-     * @param publicAddress The network address of the machine running the server.
      * @param peerPort    The port used for peer-to-peer communication with other processes.
      * @param clientPort  The port used for communication with client processes.
      */
-    protected ServerRecord(Long processID, String hostAddress, String publicAddress, int peerPort, int clientPort) {
+    protected ServerRecord(Long processID, String hostAddress, int peerPort, int clientPort) {
         this.pid = processID;
         this.hostAddress = hostAddress;
-        this.publicAddress = publicAddress;
         this.peerPort = peerPort;
         this.clientPort = clientPort;
     }
@@ -59,11 +55,11 @@ public abstract class ServerRecord {
      * @return the updated {@link ServerRecord} with corrected host address and assigned PID.
      * @throws IOException if the remote address cannot be resolved from the socket
      */
-    public static <T extends ServerRecord> T updateAddressFromSocket(SocketChannel socketChannel, T record, Long pid) throws IOException {
+    public static <T extends ServerRecord> T updateAddressFromSocket(SocketChannel socketChannel, T record, Long pid, String hostAddress) throws IOException {
         record.setPID(pid);
-        InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
-        String host = remoteAddress.getAddress().getHostAddress();
-        record.setHostAddress(host);
+        // InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
+        // String host = remoteAddress.getAddress().getHostAddress();
+        record.setHostAddress(hostAddress);
         return record;
     }
 
@@ -85,9 +81,6 @@ public abstract class ServerRecord {
         return this.hostAddress;
     }
 
-    public String getPublicAddress() {
-        return this.publicAddress;
-    }
 
     public int getPeerPort() {
         return this.peerPort;
@@ -106,9 +99,5 @@ public abstract class ServerRecord {
     public void setHostAddress(String hostAddress) {
         this.hostAddress = hostAddress;
     }
-    public void setPublicAddress(String publicAddress) {
-        this.publicAddress = publicAddress;
-    }
-
 
 }

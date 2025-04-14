@@ -569,9 +569,17 @@ public class ChatServer {
 
 //            BaseAddrServerMessage<ChatServerRecord> registrationMsg = new BaseAddrServerMessage<>(
 //                    "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
-
+            String publicAddress = System.getenv("PUBLIC_ADDRESS");
+            // Add a fallback if the environment variable isn't set
+            if (publicAddress == null || publicAddress.isEmpty()) {
+                InetAddress localHost = InetAddress.getLocalHost();
+                publicAddress = localHost.getHostAddress();
+                System.out.println("WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
+            } else {
+                System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
+            }
             // This creates a registration message and a properly formed chat server record all in one.
-            RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(CLIENT_PORT,
+            RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(publicAddress, CLIENT_PORT,
                     PEER_LISTEN_PORT,
                     ADDRESSING_SERVER_PORT,
                     MAX_CLIENTS);

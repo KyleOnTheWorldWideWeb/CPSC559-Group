@@ -90,10 +90,10 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      * @param maxClientCount   The server's maximum client capacity.
      * @return A {@code RegisterMessage} containing a {@code ChatServerRecord} payload.
      */
-    public static RegisterMessage<ChatServerRecord> fromChatServer(int clientPort, int peerPort, int addrServerPort,
+    public static RegisterMessage<ChatServerRecord> fromChatServer(String hostAddress, int clientPort, int peerPort, int addrServerPort,
                                                                    int maxClientCount) {
         ChatServerRecord record = new ChatServerRecord(
-                DEFAULT_PID, null, clientPort, peerPort, addrServerPort, maxClientCount);
+                DEFAULT_PID, hostAddress, clientPort, peerPort, addrServerPort, maxClientCount);
         return new RegisterMessage<>(ObjectTypes.CHAT_SERVER_RECORD, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
 
@@ -105,9 +105,9 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      * @param chatServerPort   Port used to receive chat server registrations.
      * @return A {@code RegisterMessage} containing an {@code AddrServerRecord} payload.
      */
-    public static RegisterMessage<AddrServerRecord> fromReplica(int clientPort, int peerPort, int chatServerPort) {
+    public static RegisterMessage<AddrServerRecord> fromReplica(String hostAddress, int clientPort, int peerPort, int chatServerPort) {
         AddrServerRecord record = new AddrServerRecord(
-                DEFAULT_PID, null, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
+                DEFAULT_PID, hostAddress, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
         return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
     }
 
