@@ -2,6 +2,7 @@ package io.github.cpsc559.team16.addressingserver;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.messaging.MessageIDGenerator;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.messaging.ServerFailureMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
@@ -10,6 +11,20 @@ import java.io.IOException;
 import java.nio.channels.SocketChannel;
 
 public class ConnectionCleanupManager {
+
+
+    /**
+     * The {@code MessageIDGenerator} instance used by this server to produce globally unique message IDs.
+     * <p>
+     * This generator ensures that every message requiring acknowledgment or ordering has a distinct identifier,
+     * which is critical for maintaining consistency guarantees (e.g., in replication or event tracking).
+     * </p>
+     * <p>
+     * The generator is initialized once per process and typically updated with the server's assigned PID
+     * after registration, ensuring message IDs are globally unique across all AddressingServer processes.
+     * </p>
+     */
+    private final MessageIDGenerator genMID;
 
     /**
      * The process responsible for managing interactions between the Primary
@@ -22,6 +37,19 @@ public class ConnectionCleanupManager {
     }
 
     /**
+     * Manages synchronization and state consistency between the PRIMARY and all registered REPLICA AddressingServers.
+     * <p>
+     * This coordinator encapsulates the logic needed to track acknowledgments, manage pending events,
+     * handle retry logic, and ensure that all state changes
+     * (e.g. new server registrations/removal, server updates, leadership changes)
+     * are safely replicated across the distributed network.
+     * </p>
+     */
+    private ReplicaSyncCoordinator replicaSyncCoordinator;
+
+
+
+    /**
      * The process responsible for managing interactions between the
      * {@code AddressingServer} and {@code ChatServer}'s
      */
@@ -32,10 +60,16 @@ public class ConnectionCleanupManager {
     }
 
     public ConnectionCleanupManager(PeerManager peerManager,
-                                    ChatServerManager chatServerManager) {
+                                    ChatServerManager chatServerManager, MessageIDGenerator genMID) {
+        this.genMID = genMID;
         this.peerManager = peerManager;
         this.chatServerManager = chatServerManager;
     }
+
+    public void setReplicaSyncCoordinator(ReplicaSyncCoordinator replicaSyncCoordinator) {
+        this.replicaSyncCoordinator = replicaSyncCoordinator;
+    }
+
 
     /**
      * Determines whether the specified {@link SocketChannel} is associated with a persistent server-to-server connection.
@@ -95,6 +129,7 @@ public class ConnectionCleanupManager {
             if (ch != null) {
                 Long pid = ch.getServerPID();
                 if (chatServerManager.getChannels().containsKey(channel)) {
+                    // Create Pending event here
                     chatServerManager.removeRemoteProcess(channel);
                     broadcastServerFailure(peerManager.getPrimaryPID(), pid, Roles.CHATSERVER);
                     this.chatServerManager.debugPrintAllServers();
