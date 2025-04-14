@@ -6,7 +6,6 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -16,25 +15,24 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
-import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 
 /**
  * The main ChatServer class implements a non-blocking I/O chat server that:
@@ -184,7 +182,8 @@ public class ChatServer {
      * Port used to accept connections from other peer chat servers.
      * Dynamically assigned at startup.
      */
-    private static final int PEER_LISTEN_PORT = getAvailablePort();
+    private static final int PEER_LISTEN_PORT = Integer.parseInt(
+    System.getenv().getOrDefault("CS_PEER_PORT", "2425"));
 
     /**
      * Map of connected peer servers, keyed by their PID.
