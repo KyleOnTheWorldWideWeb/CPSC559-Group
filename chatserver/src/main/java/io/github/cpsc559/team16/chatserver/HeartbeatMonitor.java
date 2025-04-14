@@ -99,6 +99,15 @@ public class HeartbeatMonitor implements Runnable {
                         if (ctx.missedPongs >= MAX_MISSED) {
                             try {
                                 debug(1, "Closing unresponsive peer " + peerID);
+
+                                // Get the addressing server handler from ChatServer's handler map
+                                AddressingServerHandler addressingHandler = (AddressingServerHandler) ChatServer
+                                        .getHandlerMap().get(ChatServer.ConnectionType.ADDRESSING_SERVER);
+                                if (addressingHandler != null) {
+                                    addressingHandler.notifyPeerCrash(peerID);
+                                    debug(1, "Notified addressing server about crashed peer " + peerID);
+                                }
+
                                 key.cancel();
                                 ctx.socketChannel.close();
                                 peerMap.remove(peerID);

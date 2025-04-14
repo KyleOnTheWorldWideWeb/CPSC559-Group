@@ -456,14 +456,14 @@ public class ChatServer {
      * </p>
      * <p>
      * The message is converted to a UTF-8 encoded JSON string and placed in the
-     * peer’s {@code writeQueue}.
+     * peer's {@code writeQueue}.
      * The selector interest ops are updated to include {@code OP_WRITE}, ensuring
      * that the message will be
      * transmitted on the next writable event.
      * </p>
      *
      * @param ctx the {@link ConnectionContext} of the connected peer server
-     * @param key the {@link SelectionKey} associated with the peer’s socket channel
+     * @param key the {@link SelectionKey} associated with the peer's socket channel
      */
     private static void requestChatLogFor(ConnectionContext ctx, SelectionKey key) {
         try {
@@ -554,7 +554,8 @@ public class ChatServer {
             ConnectionContext ctx = new ConnectionContext(channel);
             ctx.type = ConnectionType.ADDRESSING_SERVER;
 
-            // This creates a registration message and a properly formed chat server record all in one.
+            // This creates a registration message and a properly formed chat server record
+            // all in one.
             RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(CLIENT_PORT,
                     PEER_LISTEN_PORT,
                     ADDRESSING_SERVER_PORT,
@@ -674,7 +675,7 @@ public class ChatServer {
      * @param selector the {@link Selector} that manages all non-blocking channels
      *                 for this server
      * @param host     the IP address or hostname of the peer server
-     * @param port     the peer server’s listening port (typically the peer-to-peer
+     * @param port     the peer server's listening port (typically the peer-to-peer
      *                 port)
      * @param peerID   the unique process ID of the peer server, as assigned by the
      *                 Addressing Server
@@ -754,7 +755,7 @@ public class ChatServer {
      *
      * <h3>1. Reading and Decoding:</h3>
      * <ul>
-     * <li>Attempts to read data into the connection’s
+     * <li>Attempts to read data into the connection's
      * {@link ConnectionContext#readBuffer}.</li>
      * <li>If {@code -1} is returned (remote has closed the connection), it cleans
      * up the buffer and closes the connection.</li>
@@ -774,9 +775,9 @@ public class ChatServer {
      * <ul>
      * <li>Each complete JSON message is submitted to a thread in {@code workerPool}
      * for processing.</li>
-     * <li>The socket and key are validated to ensure they’re still active before
+     * <li>The socket and key are validated to ensure they're still active before
      * dispatching.</li>
-     * <li>If the message is from the Addressing Server, it’s deserialized using
+     * <li>If the message is from the Addressing Server, it's deserialized using
      * {@link MessageDeserializer} and passed to
      * {@link AddressingServerHandler}.</li>
      * <li>If the message is from a client or peer server, its type is determined
@@ -896,7 +897,7 @@ public class ChatServer {
      * writes may be enqueued by other threads.</li>
      * <li>Writes the first {@link ByteBuffer} in the queue to the socket using
      * {@link SocketChannel#write(ByteBuffer)}.</li>
-     * <li>If the buffer isn’t fully written (i.e., has remaining bytes), the method
+     * <li>If the buffer isn't fully written (i.e., has remaining bytes), the method
      * returns early so the selector
      * will retry later without removing the buffer.</li>
      * <li>If the write completes, the buffer is removed from the queue and the next
@@ -907,7 +908,7 @@ public class ChatServer {
      * <ul>
      * <li>When all buffers have been successfully written, the method clears
      * {@code OP_WRITE}
-     * from the key’s interest set to prevent unnecessary write readiness
+     * from the key's interest set to prevent unnecessary write readiness
      * checks.</li>
      * </ul>
      *
@@ -952,7 +953,7 @@ public class ChatServer {
      *
      * <h3>2. Peer Cleanup (Server Connections):</h3>
      * <ul>
-     * <li>If the connection belongs to a peer server, retrieves the peer’s context
+     * <li>If the connection belongs to a peer server, retrieves the peer's context
      * using its PID.</li>
      * <li>Attempts a reconnection via {@code attemptRecconnectingToPeert()},
      * passing the stored context.</li>
@@ -1014,7 +1015,7 @@ public class ChatServer {
      * <li>For each attempt:
      * <ul>
      * <li>Opens a new {@link SocketChannel} in non-blocking mode</li>
-     * <li>Connects to the peer’s last known address</li>
+     * <li>Connects to the peer's last known address</li>
      * <li>Creates a new {@link ConnectionContext} for the peer and registers it for
      * {@code OP_CONNECT}</li>
      * </ul>
@@ -1100,7 +1101,7 @@ public class ChatServer {
      */
     private static boolean isPortInUse(int port) {
         try (@SuppressWarnings("unused")
-             ServerSocket serverSocket = new ServerSocket(port)) {
+        ServerSocket serverSocket = new ServerSocket(port)) {
             // If we can bind to the port, it's available
             return false;
         } catch (IOException e) {
@@ -1167,6 +1168,15 @@ public class ChatServer {
     }
 
     /**
+     * Returns the map of connection types to their handlers.
+     *
+     * @return the handlerMap containing all registered connection handlers
+     */
+    public static Map<ConnectionType, ConnectionHandler> getHandlerMap() {
+        return handlerMap;
+    }
+
+    /**
      * Sends a heartbeat {@code PING} message to a connected peer server to verify
      * that the connection is still alive.
      * <p>
@@ -1183,7 +1193,7 @@ public class ChatServer {
      * and the key is valid. If not, the PING is skipped and a debug message is
      * logged.</li>
      * <li>Constructs a {@link ServerServerMessage} of type {@code PING}, with the
-     * current server’s PID as the sender
+     * current server's PID as the sender
      * and the target peer's PID as the recipient.</li>
      * <li>Serializes the message to a JSON string and appends it (along with a
      * newline) to the peer's {@code writeQueue}.</li>
