@@ -1,15 +1,16 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import java.io.IOException;
+import java.nio.channels.SocketChannel;
+import java.util.Map;
+
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ClientLogin;
 import io.github.cpsc559.team16.common.dto.ServerRecord;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
-import java.io.IOException;
-import java.nio.channels.SocketChannel;
-import java.util.Map;
 
 /**
  * Centralized coordinator for handling registration logic for both
@@ -302,6 +303,7 @@ public class RegistrationCoordinator {
      * Handles the full registration workflow for the first replica connecting to the primary {@code AddressingServer}.
      * <p>
      * This method:
+     * </p>
      * <ol>
      *     <li>Registers the replica with the {@link PeerManager}, sending an acknowledgment (ACK) back to confirm registration.</li>
      *     <li>Sends all known chat server and address server records from the primary to the new replica
@@ -394,5 +396,60 @@ public class RegistrationCoordinator {
         replicaCoordinator.addPendingEvent(messageID, event);
         // Broadcast the update to all current Replicas. Any NIOChannel with PID 0 (unregistered channels) will not be included.
         broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, event);
+    }
+
+    /**
+     * Handles the registration process for a newly connected {@link Client}.
+     * 
+     * <p>
+     * This method coordinates the following steps:
+     * </p>
+     * <ul>
+     *    <li>Validates the {@link ClientLogin} information received in the registration message.</li>
+     *   <li>Checks if the client already exists in the system.</li>
+     *   <li>If the client is new, it sends an acknowledgment message to the client.</li>
+     *   <li>Broadcasts the updated {@link ChatServerRecord} to all servers.</li>
+     * </ul>
+     * 
+     * <p>
+     * This ensures that the client is properly registered and that all servers are aware of the new client-count.
+     * </p>
+     * 
+     * @param channel
+     * @param nioChannel
+     * @param registerMessage
+     */
+    public void handleClientRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> registerMessage) {
+        try {
+            ClientLogin loginInfo = registerMessage.safeCastPayload(ClientLogin.class);
+
+            // Check if the login information is valid
+            if (loginInfo == null || loginInfo.getUsername() == null || loginInfo.getPassword() == null) {
+                System.err.println("Invalid ClientLogin message received. Registration aborted.");
+                return;
+            }
+            
+            // Check validity of the login attempt
+            if (!server.getClientManager().validateLoginAttempt(loginInfo)) {
+                System.out.printf("Client with username '%s' already exists. Invalid login attempt.%n", loginInfo.getUsername());
+                nioChannel.sendMessage(AckMessage.invalidLogin(server.getConfig().getPID()).toJson());
+                return;
+            }
+
+            // Attempt to register the client and get the updated ChatServerRecord of the associated ChatServer
+            ChatServerRecord updatedRecord = server.getClientManager().sendHostAck(server.getConfig().getPID(), nioChannel);
+
+            // If client was suggesfully registered, broadcast the updated record to all servers
+            if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
+                System.out.println("Client directed to an active host.");
+                Long pid = server.getConfig().getPID();;
+                broadcastManager.broadcastChatServerRecord(pid, updatedRecord); // Broadcast the updated (client count) record to all servers.
+                server.getChatServerRegistry().debugPrintServer(updatedRecord);
+            } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
+
+        } catch (IOException e) {
+            System.err.printf("IOException triggered while registering client.");
+            return;
+        }
     }
 }

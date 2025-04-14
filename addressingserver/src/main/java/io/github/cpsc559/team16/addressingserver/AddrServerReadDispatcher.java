@@ -5,13 +5,17 @@ import java.nio.channels.SocketChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
-import io.github.cpsc559.team16.common.messaging.*;
-
+import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
+import io.github.cpsc559.team16.common.messaging.MessageIDGenerator;
+import io.github.cpsc559.team16.common.messaging.MessageTypes;
+import io.github.cpsc559.team16.common.messaging.ObjectTypes;
+import io.github.cpsc559.team16.common.messaging.RequestObjectTypes;
+import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
@@ -185,13 +189,8 @@ public class AddrServerReadDispatcher {
         switch (registerMessage.getSenderRole()) {
             case Roles.CLIENT -> {
                 // WE CAN TUNE THE RESPONSE HERE. FOR NOW I WILL SIMPLY DO AN ACK WITH THE CHATSERVER info as - PID-IPADDRESS:PORTNUMBER
-                ChatServerRecord updatedRecord = this.clientManager.sendHostAck(server.getConfig().getPID(), nioChannel);
-                if (updatedRecord != null) {  // Broadcast ClientCountMessage to all servers.
-                    System.out.println("Client directed to an active host.");
-                    Long pid = this.getPID();
-                    this.broadcastManager.broadcastChatServerRecord(pid, updatedRecord); // Broadcast the updated (client count) record to all servers.
-                    this.server.getChatServerRegistry().debugPrintServer(updatedRecord);
-                } else { System.out.println("All ChatServer's are either FULL or INACTIVE"); }
+                System.out.println("Client registration message has been received.");
+                this.server.getRegistrationCoordinator().handleClientRegistration(channel, nioChannel, registerMessage);
             }
             case Roles.CHATSERVER -> {
                 System.out.println("ChatServer registration message has been received.");
