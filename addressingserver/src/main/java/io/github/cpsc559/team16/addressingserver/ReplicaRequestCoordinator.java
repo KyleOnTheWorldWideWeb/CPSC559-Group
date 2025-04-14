@@ -104,12 +104,12 @@ public class ReplicaRequestCoordinator extends Thread {
 
         while (running) {
             try {
-                if (requestManager.incrementSyncCounter()) {
+                if (requestManager.incrementSyncCounter()) {        // Update all records (Chat and Addr) every 6 cycles
                     requestManager.requestAllServerRecords(this.replicaPID);
                 }
-                else { requestManager.requestAllChatServerRecords(this.replicaPID);}
+                else { requestManager.requestAllChatServerRecords(this.replicaPID);} // update only chat server records every cycle
 
-                Thread.sleep(2000); // ~1 request every 20 seconds (can be adjusted)
+                Thread.sleep(20000); // ~1 request every 20 seconds (can be adjusted)
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 break;
