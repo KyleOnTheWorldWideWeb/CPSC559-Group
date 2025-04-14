@@ -3,6 +3,7 @@ package io.github.cpsc559.team16.common.dto;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
 import io.github.cpsc559.team16.common.exceptions.ChatServerFullException;
 
 /**
@@ -73,6 +74,7 @@ public class ChatServerRecord extends ServerRecord {
      *                       for the HashMap of ChatServerRecord records kept by
      *                       Addressing Servers.
      * @param hostAddress    The network (IP) address of the chat server.
+     * @param publicAddress  The public IP of the chat server machine.
      * @param clientPort     The port used for communication with client processes.
      * @param peerPort       The port used for peer-to-peer communication with other
      *                       chat servers.
@@ -85,6 +87,7 @@ public class ChatServerRecord extends ServerRecord {
     public ChatServerRecord(
             @JsonProperty("pid") Long serverID,
             @JsonProperty("hostAddress") String hostAddress,
+            @JsonProperty("publicAddress") String publicAddress,
             @JsonProperty("clientPort") int clientPort,
             @JsonProperty("peerPort") int peerPort,
             @JsonProperty("addrServerPort") int addrServerPort,
@@ -94,7 +97,7 @@ public class ChatServerRecord extends ServerRecord {
          * (consistent)
          * ChatServerRecord HashMap of records kept by Addressing Servers.
          */
-        super(serverID, hostAddress, peerPort, clientPort);
+        super(serverID, hostAddress, publicAddress, peerPort, clientPort);
         this.addrServerPort = addrServerPort;
         this.clientCount = 0;
         this.maxClientCount = maxClientCount;
@@ -116,8 +119,8 @@ public class ChatServerRecord extends ServerRecord {
      */
     public void addClient() throws ChatServerFullException {
         if (isFull()) {
-            System.err.println("WARNING - Server FULL: " + hostAddress + " reporting to Addressing Server.");
-            throw new ChatServerFullException("Server FULL: " + hostAddress + ":" + clientPort);
+            System.err.println("WARNING - Server FULL: " + "host: " + hostAddress + " public: "+ publicAddress + " reporting to Addressing Server.");
+            throw new ChatServerFullException("Server FULL: " + hostAddress + " public: "+ publicAddress + ":" + clientPort);
         }
         clientCount++;
         try {
@@ -228,7 +231,7 @@ public class ChatServerRecord extends ServerRecord {
         if (status == ServerStatus.INACTIVE) {
             clientCount = 0;
             status = ServerStatus.ACTIVE;
-            System.out.printf("Server with address: %s - is reactivated. Client count reset.%n", hostAddress);
+            System.out.printf("Server with address: %s - is reactivated. Client count reset. host: %n public: %n", hostAddress, publicAddress);
         } else {
             throw new IllegalStateException("Cannot mark server as ACTIVE unless previously INACTIVE.");
         }

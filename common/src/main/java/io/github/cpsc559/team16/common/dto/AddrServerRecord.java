@@ -30,6 +30,7 @@ public class AddrServerRecord extends ServerRecord {
      *
      * @param serverPID       The unique identifier (key) of the chat server. Needed for the HashMap of ChatServerRecord records kept by Addressing Servers.
      * @param hostAddress    The network (IP) address of the chat server.
+     * @param publicAddress  The machine IP address of the chat server.
      * @param clientPort     The port used for communication with client processes.
      * @param peerPort       The port used for peer-to-peer communication with other addressing servers.
      * @param chatServerPort The port used for communication with the chat servers
@@ -40,12 +41,13 @@ public class AddrServerRecord extends ServerRecord {
     public AddrServerRecord(
             @JsonProperty("pid") Long serverPID,
             @JsonProperty("hostAddress") String hostAddress,
+            @JsonProperty("publicAddress") String publicAddress,
             @JsonProperty("clientPort") int clientPort,
             @JsonProperty("peerPort") int peerPort,
             @JsonProperty("chatServerPort") int chatServerPort,
             @JsonProperty("role") ServerRole role
     ) {
-        super(serverPID, hostAddress, peerPort, clientPort);
+        super(serverPID, hostAddress, publicAddress, peerPort, clientPort);
         this.chatServerPort = chatServerPort;
         this.role = role;
     }

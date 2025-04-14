@@ -16,6 +16,8 @@ public abstract class ServerRecord {
      */
     protected String hostAddress;
 
+    protected String publicAddress;
+
     /**
      * The port used for client connections.
      */
@@ -31,12 +33,14 @@ public abstract class ServerRecord {
      *
      * @param processID   The unique identifier for this server process.
      * @param hostAddress The network address for the server.
+     * @param publicAddress The network address of the machine running the server.
      * @param peerPort    The port used for peer-to-peer communication with other processes.
      * @param clientPort  The port used for communication with client processes.
      */
-    protected ServerRecord(Long processID, String hostAddress, int peerPort, int clientPort) {
+    protected ServerRecord(Long processID, String hostAddress, String publicAddress, int peerPort, int clientPort) {
         this.pid = processID;
         this.hostAddress = hostAddress;
+        this.publicAddress = publicAddress;
         this.peerPort = peerPort;
         this.clientPort = clientPort;
     }
@@ -81,6 +85,10 @@ public abstract class ServerRecord {
         return this.hostAddress;
     }
 
+    public String getPublicAddress() {
+        return this.publicAddress;
+    }
+
     public int getPeerPort() {
         return this.peerPort;
     }
@@ -97,6 +105,9 @@ public abstract class ServerRecord {
 
     public void setHostAddress(String hostAddress) {
         this.hostAddress = hostAddress;
+    }
+    public void setPublicAddress(String publicAddress) {
+        this.publicAddress = publicAddress;
     }
 
 
