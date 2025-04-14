@@ -42,6 +42,9 @@ public class AckObjectTypes {
      */
     public static final String NOHOST = "NoHost";
 
+
+    public static final String INVALID_LOGIN = "InvalidLogin";
+
     public static final String DEMOTED = "Demoted";
 
     public static final String OK = "Ok";

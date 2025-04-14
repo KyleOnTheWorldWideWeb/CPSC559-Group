@@ -89,6 +89,20 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
         return new AckMessage<>(AckObjectTypes.NOHOST, senderPID, Roles.PRIMARY, Roles.CLIENT, "404 ChatServer Not Found — they ghosted you.");
     }
 
+    /**
+     * Creates an ACK message from the PRIMARY server directed to a CLIENT.
+     * <p>
+     * This factory method generates an {@code AckMessage} where the sender is identified as PRIMARY and the recipient as CLIENT.
+     * The acknowledgment type is hardcoded as {@code AckObjectTypes.INVALID_LOGIN}, and the payload contains the reason for failure.
+     * </p>
+     *
+     * @param senderPID the process ID of the PRIMARY server sending this message
+     * @return an {@code AckMessage} constructed with the specified parameters, ready to be sent from the PRIMARY to the CLIENT
+     */
+    public static AckMessage<String> invalidLogin(long senderPID) {
+        return new AckMessage<>(AckObjectTypes.INVALID_LOGIN, senderPID, Roles.PRIMARY, Roles.CLIENT, "Invalid login credentials.");
+    }
+
 
 
     /**
