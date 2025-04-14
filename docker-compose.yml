@@ -30,9 +30,9 @@ services:  # Defines the services (Docker containers) that will be run.
       - AS_REPLICA_PORT=49801
       - AS_CHATSERVER_PORT=49802
       - AS_NETWORK=chat_network
-      - AS_ROLE=PRIMARY
+      - AS_ROLE=BACKUP
       - HOST_ADDRESS=10.0.0.4
-      - PUBLIC_ADDRESS=10.0.0.4
+      - PUBLIC_ADDRESS=10.0.0.132
     ports: ["49800:49800", "49801:49801","49802:49802","5050:5050"]
     # network_mode: "host"
     networks:
@@ -70,9 +70,9 @@ services:  # Defines the services (Docker containers) that will be run.
       - CS_PORT=2424
       - CS_PEER_PORT=2425
       - CS_ADDRSERVER_PORT=49802
-      - HOST_ADDRESS=10.0.0.4
+      - HOST_ADDRESS=10.0.0.132
       - ADDRESS_SERVER_IP=10.0.0.4
-      - PUBLIC_ADDRESS=10.0.0.4
+      - PUBLIC_ADDRESS=10.0.0.132
     # network_mode: "host"
     networks:
       - chat_network
