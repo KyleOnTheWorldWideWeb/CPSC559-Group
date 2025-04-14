@@ -554,22 +554,6 @@ public class ChatServer {
             ConnectionContext ctx = new ConnectionContext(channel);
             ctx.type = ConnectionType.ADDRESSING_SERVER;
 
-
-            // NOTE: Use the factory methods in RegisterMessage for registering a process.
-            // These ensure all syntax is correct and help with bug tracking.
-
-            // Save registration payload in ctx (optional, in case needed later)
-//            ChatServerRecord record = new ChatServerRecord(
-//                    0L,
-//                    InetAddress.getLocalHost().getHostAddress(),
-//                    CLIENT_PORT,
-//                    PEER_LISTEN_PORT,
-//                    ADDRESSING_SERVER_PORT,
-//                    MAX_CLIENTS);
-
-//            BaseAddrServerMessage<ChatServerRecord> registrationMsg = new BaseAddrServerMessage<>(
-//                    "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
-
             // This creates a registration message and a properly formed chat server record all in one.
             RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(CLIENT_PORT,
                     PEER_LISTEN_PORT,

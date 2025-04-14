@@ -98,6 +98,25 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
     }
 
     /**
+     * Factory method for registering a ChatServer with the HostAddress declared.
+     *
+     * @param hostAddress      The network (IP) address of the address server.
+     * @param clientPort       The port used for client communication.
+     * @param peerPort         The port used for peer-to-peer chat server communication.
+     * @param addrServerPort   The port used to connect to the AddressingServer.
+     * @param maxClientCount   The server's maximum client capacity.
+     * @return A {@code RegisterMessage} containing a {@code ChatServerRecord} payload.
+     */
+    public static RegisterMessage<ChatServerRecord> fromChatServerWithAddress(String hostAddress, int clientPort, int peerPort, int addrServerPort,
+                                                                   int maxClientCount) {
+        ChatServerRecord record = new ChatServerRecord(
+                DEFAULT_PID, hostAddress, clientPort, peerPort, addrServerPort, maxClientCount);
+        return new RegisterMessage<>(ObjectTypes.CHAT_SERVER_RECORD, Roles.CHATSERVER, Roles.PRIMARY, record);
+    }
+
+
+
+    /**
      * Factory method for registering an AddressingServer replica.
      *
      * @param clientPort       Port used for client communication.
@@ -108,6 +127,21 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
     public static RegisterMessage<AddrServerRecord> fromReplica(int clientPort, int peerPort, int chatServerPort) {
         AddrServerRecord record = new AddrServerRecord(
                 DEFAULT_PID, null, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
+        return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
+    }
+
+    /**
+     * Factory method for registering an AddressingServer replica with the HostAddress declared.
+     *
+     * @param hostAddress      The network (IP) address of the address server.
+     * @param clientPort       Port used for client communication.
+     * @param peerPort         Port used for replica communication.
+     * @param chatServerPort   Port used to receive chat server registrations.
+     * @return A {@code RegisterMessage} containing an {@code AddrServerRecord} payload.
+     */
+    public static RegisterMessage<AddrServerRecord> fromReplicaWithAddress(String hostAddress, int clientPort, int peerPort, int chatServerPort) {
+        AddrServerRecord record = new AddrServerRecord(
+                DEFAULT_PID, hostAddress, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
         return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
     }
 

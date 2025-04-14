@@ -28,8 +28,8 @@ public class AddrServerRecord extends ServerRecord {
      * Constructs a new {@code AddrServerRecord} instance with the specified parameters, a default
      * {@code ACTIVE status} and a starting {@code clientCount} of zero.
      *
-     * @param serverPID       The unique identifier (key) of the chat server. Needed for the HashMap of ChatServerRecord records kept by Addressing Servers.
-     * @param hostAddress    The network (IP) address of the chat server.
+     * @param serverPID      The unique identifier (key) of the address server. Needed for the HashMap of AddrServerRecord records kept by Addressing Servers.
+     * @param hostAddress    The network (IP) address of the address server.
      * @param clientPort     The port used for communication with client processes.
      * @param peerPort       The port used for peer-to-peer communication with other addressing servers.
      * @param chatServerPort The port used for communication with the chat servers
