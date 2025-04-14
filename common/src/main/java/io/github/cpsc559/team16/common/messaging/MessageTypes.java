@@ -69,4 +69,7 @@ public class MessageTypes {
      * of a prior message (e.g., registration or update).
      */
     public static final String ACK = "ACK";
+
+    // Preventing any possible instantiation of the utility class
+    private MessageTypes() {}
 }

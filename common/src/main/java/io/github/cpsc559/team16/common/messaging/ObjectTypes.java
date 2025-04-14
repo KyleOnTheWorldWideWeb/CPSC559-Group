@@ -81,6 +81,9 @@ public class ObjectTypes {
     public static final String ELECTION_VOTE = "ElectionVote";
 
 
+    // Preventing any possible instantiation of the utility class
+    private ObjectTypes() {}
+
     /**
      * Maps known object types to their respective Java classes.
      *
@@ -107,7 +110,17 @@ public class ObjectTypes {
                     AckObjectTypes.DEMOTED,
                     AckObjectTypes.OK -> String.class;
 
-            /**
+
+            // Request types — Payloads are all strings (unless otherwise noted)
+            case    RequestObjectTypes.ADDR_SERVER_RECORDS,
+                    RequestObjectTypes.CHAT_SERVER_RECORDS,
+                    RequestObjectTypes.ALL_SERVER_RECORDS -> Void.class;
+
+            case    RequestObjectTypes.SINGLE_AS_RECORD,
+                    RequestObjectTypes.SINGLE_CS_RECORD-> Long.class;
+
+
+            /*
              * REGISTERED is the ACK response given by the Primary AddressingServer when a process is successfully registered
              * into the network - a unique process ID is generated, a record is created, stored and broadcasted to all other
              * servers in the network, and finally, a response is sent to the newly registered process with it's PID as the payload.

@@ -63,7 +63,7 @@ public class ChatServerRegistry {
             debugPrintInsertServerPID(record);
         }
         chatServerRecords.put(id, record);
-        debugPrintAllServers();
+        debugPrintServer(record);
     }
 
 

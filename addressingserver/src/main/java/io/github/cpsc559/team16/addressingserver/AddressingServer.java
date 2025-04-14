@@ -3,21 +3,21 @@ package io.github.cpsc559.team16.addressingserver;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.channels.SocketChannel; // Used for conditionals that don't rely on non-null checks
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
-import io.github.cpsc559.team16.common.messaging.AckMessage;
 import io.github.cpsc559.team16.common.messaging.MessageIDGenerator;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-import io.github.cpsc559.team16.common.utilities.ProcessUtils;
-
 
 
 public class AddressingServer {
+
+    // TODO - Need to change this to dynamic port retrieval
+    /**
+     * The port reserved for peer connections on the Primary Addressing server
+     */
+    private final static int PRIMARY_PEER_PORT = 49801;
 
     /**
      * Indicates whether the server has been instructed to restart. Typically used after an orphaned or failed
@@ -73,6 +73,67 @@ public class AddressingServer {
         return leaderElectionManager;
     }
 
+
+    /**
+     * Handles outbound synchronization requests sent from this {@code REPLICA} AddressingServer to the {@code PRIMARY}.
+     * <p>
+     * This component is responsible for constructing and sending specific request messages, such as those for
+     * {@link io.github.cpsc559.team16.common.dto.ChatServerRecord}s and {@link io.github.cpsc559.team16.common.dto.AddrServerRecord}s.
+     * </p>
+     * <p>
+     * It is only initialized when this process is running as a {@code REPLICA}. On {@code PRIMARY} instances, this field
+     * remains {@code null} and should not be accessed.
+     * </p>
+     * <p>
+     * The {@code ReplicaRequestManager} is provided to the {@link ReplicaRequestCoordinator} thread once a connection to the
+     * {@code PRIMARY} server has been established. It supports flexible sync logic, such as triggering full synchronization
+     * every N cycles and more frequent chat server syncs.
+     * </p>
+     */
+    private ReplicaRequestManager replicaRequestManager;
+
+    /**
+     * Sets the {@link ReplicaRequestManager} used by this AddressingServer.
+     * <p>
+     * This is typically invoked by the {@link ReplicaRequestCoordinator} once it has successfully
+     * established a connection to the Primary and initialized the manager instance.
+     * </p>
+     *
+     * @param replicaRequestManager the {@code ReplicaRequestManager} instance to store.
+     */
+    public void setReplicaRequestManager(ReplicaRequestManager replicaRequestManager) {
+        this.replicaRequestManager = replicaRequestManager;
+    }
+
+    public ReplicaRequestManager getReplicaRequestManager () { return this.replicaRequestManager; }
+
+    /**
+     * Background thread responsible for periodically requesting synchronization data from the {@code PRIMARY} server.
+     * <p>
+     * This thread is only active on {@code REPLICA} AddressingServers. It coordinates periodic sync requests to
+     * retrieve up-to-date {@link io.github.cpsc559.team16.common.dto.ChatServerRecord} and
+     * {@link io.github.cpsc559.team16.common.dto.AddrServerRecord} entries.
+     * </p>
+     * <p>
+     * The coordinator uses a {@link java.util.function.Supplier} to retrieve the latest {@link NIOMessageChannel}
+     * connected to the {@code PRIMARY}. If the channel is unavailable at startup (e.g., connection has not yet been
+     * established), it will wait and retry until the primary becomes reachable.
+     * </p>
+     * <p>
+     * Once a connection is active, the coordinator will:
+     * <ul>
+     *   <li>Send {@code ChatServerRecord} requests on a regular interval.</li>
+     *   <li>Send {@code AddrServerRecord} requests once every N cycles (default is 6).</li>
+     * </ul>
+     * This component is lifecycle-managed by the {@code AddrServerNetworkManager}, which starts and stops the thread
+     * alongside other internal systems.
+     * </p>
+     */
+    ReplicaRequestCoordinator replicaRequestCoordinator;
+
+    public ReplicaRequestCoordinator getReplicaRequestCoordinator () { return this.replicaRequestCoordinator; }
+
+
     /**
      * The process responsible for handling ping messages and managing the ping timeout.
      */
@@ -120,15 +181,15 @@ public class AddressingServer {
      * are safely replicated across the distributed network.
      * </p>
      */
-    private final ReplicaSyncCoordinator replicaCoordinator;
+    private final ReplicaSyncCoordinator replicaSyncCoordinator;
 
     /**
      * Returns the {@link ReplicaSyncCoordinator} responsible for managing strong consistency across AddressingServers.
      *
      * @return the {@code ReplicaSyncCoordinator} used by this AddressingServer instance.
      */
-    public ReplicaSyncCoordinator getReplicaCoordinator() {
-        return replicaCoordinator;
+    public ReplicaSyncCoordinator getReplicaSyncCoordinator() {
+        return replicaSyncCoordinator;
     }
 
     /**
@@ -232,6 +293,7 @@ public class AddressingServer {
      */
     private final MessageIDGenerator genMID;
 
+
     /**
      * Returns the {@link MessageIDGenerator} associated with this server.
      * <p>
@@ -327,11 +389,13 @@ public class AddressingServer {
         this.cleanupManager = new ConnectionCleanupManager(peerManager, chatServerManager);
         this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
 
-        this.replicaCoordinator = new ReplicaSyncCoordinator(peerManager, broadcastManager, cleanupManager);
+        this.replicaSyncCoordinator = new ReplicaSyncCoordinator(peerManager, broadcastManager, cleanupManager);
         this.registrationCoordinator = new RegistrationCoordinator(this);
 
         try {
-            this.networkManager = new AddrServerNetworkManager(cleanupManager, this.config, replicaCoordinator.getPendingEvents());
+            this.networkManager = new AddrServerNetworkManager(cleanupManager, this.config,
+                    replicaSyncCoordinator.getPendingEvents(),
+                    this::createReplicaRequestCoordinator);
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize network manager", e);
         }
@@ -358,6 +422,37 @@ public class AddressingServer {
     }
 
     /**
+     * Creates a new {@link ReplicaRequestCoordinator} instance for this AddressingServer.
+     * <p>
+     * This method is intended to be used by components (e.g., {@link AddrServerNetworkManager})
+     * that need to create or restart the {@code ReplicaRequestCoordinator} thread responsible
+     * for issuing periodic synchronization requests to the Primary AddressingServer.
+     * </p>
+     *
+     * <p>
+     * The returned thread will:
+     * <ul>
+     *   <li>Attempt to fetch the {@link NIOMessageChannel} associated with the Primary via {@link PeerManager}.</li>
+     *   <li>Instantiate a {@link ReplicaRequestManager} using the channel and the local {@link MessageIDGenerator}.</li>
+     *   <li>Publish the newly created {@code ReplicaRequestManager} to the internal field via a callback.</li>
+     * </ul>
+     * </p>
+     *
+     * @return a new, unstarted {@code ReplicaRequestCoordinator} thread configured for this AddressingServer instance.
+     */
+    public ReplicaRequestCoordinator createReplicaRequestCoordinator() {
+        this.replicaRequestCoordinator =  new ReplicaRequestCoordinator(
+                this.genMID,
+                this.config.getPID(),
+                this::setReplicaRequestManager, // Save reference to internal field
+                this.peerManager::getPrimaryNIOChannel
+        );
+        return this.replicaRequestCoordinator;
+    }
+
+
+
+    /**
      * Attempts to register this replica AddressingServer with the PRIMARY AddressingServer.
      * <p>
      * This method attempts to open a network connection to the PRIMARY and send a registration
@@ -382,7 +477,7 @@ public class AddressingServer {
      */
     public void registerReplicaAddrServer() throws IOException {
         Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
-                System.getenv("HOST_ADDRESS"), 49801,
+                System.getenv("HOST_ADDRESS"), PRIMARY_PEER_PORT,
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
 
         if (maybeChannel.isEmpty()) {
@@ -394,8 +489,9 @@ public class AddressingServer {
                 System.err.println("Retry sleep interrupted.");
             }
 
+            // TODO - Need to change this to dynamic port retrieval
             maybeChannel = peerManager.registerWithPrimary(
-                    System.getenv("HOST_ADDRESS"), 49801,
+                    System.getenv("HOST_ADDRESS"), PRIMARY_PEER_PORT,
                     config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
         }
 
