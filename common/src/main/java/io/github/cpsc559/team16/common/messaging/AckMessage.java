@@ -156,4 +156,17 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
         return new AckMessage<>(messagedID, AckObjectTypes.REPLICATED, senderPID, Roles.REPLICA, Roles.PRIMARY, eventReplicated);
     }
 
+
+    public static AckMessage<Long> replicaDeregistered(long senderPID, Long payload) {
+                return new AckMessage<>(AckObjectTypes.DEREGISTERED, senderPID, Roles.PRIMARY, Roles.REPLICA, payload);
+    }
+
+    public static AckMessage<Long> chatServerDeregistered(long senderPID, Long payload) {
+
+
+        return new AckMessage<>(AckObjectTypes.DEREGISTERED, senderPID, Roles.PRIMARY, Roles.CHATSERVER, payload);
+
+
+    }
+
 }

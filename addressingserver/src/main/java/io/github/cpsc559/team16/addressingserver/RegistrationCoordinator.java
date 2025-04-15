@@ -103,14 +103,14 @@ public class RegistrationCoordinator {
         
         // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
         ChatServerRecord record = msg.safeCastPayload(ChatServerRecord.class);
+//        try {
+//            record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(ChatServerRecord.class), newPID);
+//        } catch (IOException e) {
+//            System.err.printf("Failed to resolve remote address for ChatServer (PID: %d). Registration aborted.%n", newPID);
+//            cleanupManager.cleanupPersistentConnection(channel, true);
+//            return;
+//        }
         record.setPID(newPID);
-        // try {
-        //     record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(ChatServerRecord.class), newPID);
-        // } catch (IOException e) {
-        //     System.err.printf("Failed to resolve remote address for ChatServer (PID: %d). Registration aborted.%n", newPID);
-        //     cleanupManager.cleanupPersistentConnection(channel, true);
-        //     return;
-        // }
         // If there are no other Replica addressing servers, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerChatServerNoReplicasExist(primaryPID, newPID, channel, nioChannel, record);
@@ -370,13 +370,14 @@ public class RegistrationCoordinator {
         Long newPID = server.generatePID();
         // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
         AddrServerRecord record = msg.safeCastPayload(AddrServerRecord.class);
-        // try {
-        //     record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(AddrServerRecord.class), newPID);
-        // } catch (IOException e) {
-        //     System.err.printf("Failed to resolve remote address for replica (PID: %d). Registration aborted.%n", newPID);
-        //     cleanupManager.cleanupPersistentConnection(channel, true);
-        //     return;
-        // }
+//        try {
+//            record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(AddrServerRecord.class), newPID);
+//        } catch (IOException e) {
+//            System.err.printf("Failed to resolve remote address for replica (PID: %d). Registration aborted.%n", newPID);
+//            cleanupManager.cleanupPersistentConnection(channel, true);
+//            return;
+//        }
+        record.setPID(newPID);
         // If this is the first and only replica, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerFirstReplicaServer(primaryPID, newPID, channel, nioChannel, record);

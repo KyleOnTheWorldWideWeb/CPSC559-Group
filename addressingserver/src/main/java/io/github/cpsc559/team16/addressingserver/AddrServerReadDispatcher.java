@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import java.io.IOException;
+import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -146,17 +147,14 @@ public class AddrServerReadDispatcher {
         }
     }
 
-    // Example: In handleAck (or a new case for replication acknowledgments),
-    // delegate to replicationManager.
+
     private void handleReplicationAck(BaseAddrServerMessage<?> ackMessage) {
         // The payload is a boolean - True if the message this ACK is for was
         // successfully processed.
         if (ackMessage.safeCastPayload(Boolean.class)) {
-            System.out.println("Replicated ACK received, success? " + ackMessage.safeCastPayload(Boolean.class));
-            // The messageID of this ackMessage is the same unique message ID as the message
-            // that triggered it.
-            // This is how we know if a message sent has been successfully received and
-            // processed.
+            //System.out.println("Replicated ACK received, success? " + ackMessage.safeCastPayload(Boolean.class));
+            // The messageID of this ackMessage is the same unique message ID as the message that triggered it.
+            // This is how we know if a message sent has been successfully received and processed.
             Long eventID = ackMessage.getMessageID(); // adjust extraction as needed
             Long replicaPID = ackMessage.getSenderPID();
             System.out.printf("Primary has received ACK for message ID: %d - from Replica with PID: %d%n", eventID,
@@ -173,12 +171,11 @@ public class AddrServerReadDispatcher {
             if (senderChannel != null) {
                 this.server.getCleanupManager().cleanupPersistentConnection(senderChannel.getSocketChannel(), true);
             }
-        } else {
-            // TODO - Implement retries OR make the replica send a request, but that might
-            // not work, because how do we know it got the message
-            // the next time so we can send this response.
-            // Better solution is to create a new event that only includes the PID of the
-            // replica who failed to process the update.
+        }
+        else {
+            // We already handle retries with PendingEventWatchdog. This is here largely in case our code grew and we
+            // end up in the situation where we need to send an ACK indicating failure. Currently we don't do that, because
+            // there are no cases where a failure to process an update from the AddressingServer occurs/matters.
         }
     }
 
@@ -449,20 +446,54 @@ public class AddrServerReadDispatcher {
      * @param channel The channel from which the message originated.
      * @param message The received server failure message.
      */
-    private void handleServerFailure(SocketChannel channel, NIOMessageChannel nioChannel,
-            BaseAddrServerMessage<?> message) {
-        switch (message.getObjectType()) {
-            case ObjectTypes.ADDRSERVER_FAILURE -> {
-                Long failedPID = message.safeCastPayload(Long.class);
-                peerManager.removeFailedServer(failedPID);
-                this.server.getAddrServerRegistry().debugPrintAllServers();
-            }
-            case ObjectTypes.CHATSERVER_FAILURE -> {
-                Long failedPID = message.safeCastPayload(Long.class);
-                chatServerManager.removeFailedChatServer(failedPID);
-                this.server.getChatServerRegistry().debugPrintAllServers();
-            }
+    private void handleServerFailure(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
+        System.out.printf("Handling failure message. MsgType: %s | ObjectType: %s | MsgID: %d | SenderRole: %s | FailedPID: %d%n.",
+                message.getMsgType(), message.getObjectType(), message.getMessageID(), message.getSenderRole(), message.safeCastPayload(Long.class));
+        if (message.getSenderRole().equals(Roles.PRIMARY)) {
+            Long failedPID = message.safeCastPayload(Long.class);
+            System.out.println("Replica received ServerFailure message for network PID: " + failedPID);
+            this.replicaCoordinator.processFailureMessageSendAck(message, nioChannel,
+                    this.getPID(), this.cleanupManager, failedPID);
         }
+        else {
+            String serverType = message.getObjectType();
+            Long failedPID = message.safeCastPayload(Long.class);
+            if (serverType.equals(ObjectTypes.ADDRSERVER_FAILURE)) {
+                SocketChannel failedChannel = this.peerManager.getSocketChannelByPID(failedPID);
+                if (failedChannel != null) {
+                    // Sync state with replicas and then remove and broadcast to chat servers
+                    cleanupManager.cleanupPersistentConnection(failedChannel, true);
+                }
+                else {
+                    server.getAddrServerRegistry().removeRecordByKey(failedPID);
+                }
+            }
+            else if (serverType.equals(ObjectTypes.CHATSERVER_FAILURE)) {
+                SocketChannel failedChannel = this.chatServerManager.getChannelByPID(failedPID);
+                if (failedChannel != null) {
+                    // Sync state with replicas and then remove and broadcast to chat servers
+                    cleanupManager.cleanupPersistentConnection(failedChannel, true);
+                }
+                else {
+                    server.getChatServerRegistry().removeRecordByKey(failedPID);
+                }
+
+            }
+
+        }
+
+//        switch (message.getObjectType()) {
+//            case ObjectTypes.ADDRSERVER_FAILURE -> {
+//                Long failedPID = message.safeCastPayload(Long.class);
+//                this.replicaCoordinator.processFailureMessageSendAck(message, nioChannel,
+//                        this.getPID(), this.cleanupManager, failedPID);
+//            }
+//            case ObjectTypes.CHATSERVER_FAILURE -> {
+//                Long failedPID = message.safeCastPayload(Long.class);
+//                chatServerManager.removeFailedChatServer(failedPID);
+//                this.server.getChatServerRegistry().debugPrintAllServers();
+//            }
+//        }
     }
 
     /**
