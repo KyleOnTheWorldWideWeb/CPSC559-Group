@@ -1,0 +1,56 @@
+services:
+  addressingserver-primary:
+    image: addressingserver:latest
+    environment:
+      - DOCKER_HOST_IP=10.0.0.4
+      - AS_CLIENT_PORT=49800
+      - AS_REPLICA_PORT=49801
+      - AS_CHATSERVER_PORT=49802
+      - AS_NETWORK=overlay_chat_network
+      - PUBLIC_ADDRESS=10.0.0.4
+      - AS_ROLE=PRIMARY
+    ports:
+      - "49800:49800"
+      - "49801:49801"
+      - "49802:49802"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 3
+    networks:
+      - overlay_chat_network  
+
+  addressingserver-backup:
+    image: addressingserver:latest
+    # ports:
+    #   - "49800:49800"
+    #   - "49801:49801"
+    #   - "49802:49802"
+    environment:
+      - DOCKER_HOST_IP=10.0.0.4
+      - AS_CLIENT_PORT=49800
+      - AS_REPLICA_PORT=49801
+      - AS_CHATSERVER_PORT=49802
+      - AS_NETWORK=overlay_chat_network
+      - AS_ROLE=BACKUP
+      - HOST_ADDRESS=10.0.0.4
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 3
+    networks:
+      - overlay_chat_network  
+
+networks:
+  overlay_chat_network:
+    external: true
