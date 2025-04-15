@@ -135,6 +135,7 @@ public class PingManager implements Runnable {
 
             // Only proceed with pinging if the server is in replica mode.
             if (!isPrimary()) {
+                System.out.println("ROLE: REPLICA");
                 try (Selector selector = Selector.open()) {
                     // Reinitialize per-round maps (for new connection attempts).
                     channelPIDs = new HashMap<>();
@@ -218,8 +219,6 @@ public class PingManager implements Runnable {
                             timeoutThreshold = (long) (timeoutThreshold * marginFactor);
                             System.out.println("PingManager: Pinging peer: " + peer.getPID());
                             if (diff > timeoutThreshold) {
-                                System.out.println("PingManager: Missed ping from peer: " + peer.getPID());
-                                // Remove or flag the failed peer.
                                 // server.getPeerManager().removeFailedServer(peer.getPID());
                             }
                         }
@@ -228,7 +227,12 @@ public class PingManager implements Runnable {
                     System.err.println("PingManager: Error while pinging peers: " + e.getMessage());
                 }
             } else {
-                System.out.println("PingManager: This loop, I'm primary!");
+                System.out.println("ROLE: PRIMARY");
+                try {
+                    Thread.sleep(5000);
+                } catch (Exception e) {
+                    // ignore
+                }
             }
         }
     }
