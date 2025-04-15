@@ -70,7 +70,7 @@ public class ReplicaSyncCoordinator {
         PendingEvent event = pendingEvents.get(messageID);
         if (event != null) {
             // DEBUG
-            System.out.println("ACK received from network process with PID: " + recipientPID);
+            System.out.println("ACK received from network process with PID: " + recipientPID + " for message type: " + event.getMessageRequiringACK().getMsgType());
             event.removePendingRecipient(recipientPID);
             if (event.isComplete()) {
                 pendingEvents.remove(messageID);
@@ -83,6 +83,36 @@ public class ReplicaSyncCoordinator {
             }
         }
         return null; // no cleanup needed
+    }
+
+
+    public void processFailureMessageSendAck(BaseAddrServerMessage<?> failureMessage,
+                                               NIOMessageChannel nioChannel,
+                                               Long localPID,
+                                               ConnectionCleanupManager cleanupManager, Long failedPID) {
+        if (failureMessage.getMessageID() != 0) {
+            try {
+                System.out.println("Sending *ServerFailureMessage* 'Replicated' ACK to Primary for message ID: " + failureMessage.getMessageID());
+                nioChannel.sendMessage(AckMessage.replicated(
+                        failureMessage.getMessageID(), localPID, true).toJson());
+                if (failureMessage.getObjectType().equals(ObjectTypes.CHATSERVER_FAILURE)){
+                    this.cleanupManager.getChatServerManager().removeFailedChatServer(failedPID);
+                    this.cleanupManager.getChatServerManager().debugPrintAllServers();
+                }
+                else {
+                    this.peerManager.removeFailedServer(failedPID);
+                    this.peerManager.debugPrintAllServers();
+                }
+            } catch (JsonProcessingException e) {
+                System.err.printf(
+                        "Failed to serialize AckMessage<%s> for broadcast. Context: messageID=%d, senderPID=%d, senderRole=%s. Exception: %s%n",
+                        failureMessage.getObjectType(), failureMessage.getMessageID(), localPID, Roles.REPLICA, e.getMessage()
+                );
+            } catch (IOException ioe) {
+                System.err.println("Failed to send ACK for message ID: " + failureMessage.getMessageID());
+                cleanupManager.cleanupPersistentConnection(nioChannel.getSocketChannel(), true);
+            }
+        }
     }
 
     /**

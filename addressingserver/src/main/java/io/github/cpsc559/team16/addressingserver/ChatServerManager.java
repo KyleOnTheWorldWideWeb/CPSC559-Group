@@ -1,17 +1,14 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.messaging.*;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
-import javax.management.relation.Role;
-import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.UpdateMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 public class ChatServerManager {
 
@@ -54,15 +51,17 @@ public class ChatServerManager {
      *                <strong>NOTE:</strong> This method does not close the SocketChannel connection. It is up to the calling
      *                code to enact this behaviour.
      */
-    public void removeRemoteProcess(SocketChannel channel) {
-        // We already ensured that the key:value pair exists in the calling code AddrServerNetworkManager.cleanupPersistentConnection()
-        NIOMessageChannel ch = chatServerChannels.remove(channel);
-        Long pid = ch.getServerPID();
-        if (pid != 0L) {
-            this.registry.removeRecordByKey(pid);
-            System.out.println("Removed the network communication channels for the ChatServer with PID: " + pid);
-        } else {
-            System.err.println("Removed a NIOMessageChannel and SocketChannel connection for a ChatServer that had no ChatServerRecord. It's network PID was - " + pid);
+    private void removeRemoteProcess(SocketChannel channel) {
+        NIOMessageChannel ch = this.chatServerChannels.get(channel);
+        if (ch != null) {
+            Long pid = ch.getServerPID();
+            if (pid != 0L) {
+                this.registry.removeRecordByKey(pid);
+                System.out.println("Removed the network communication channels for the ChatServer with PID: " + pid);
+            } else {
+                System.err.println("Removed a NIOMessageChannel and SocketChannel connection for a ChatServer that had no ChatServerRecord. It's network PID was - " + pid);
+            }
+            this.chatServerChannels.remove(channel);
         }
     }
 
@@ -85,8 +84,7 @@ public class ChatServerManager {
         try {
             channelToRemove.close();
         } catch (IOException ignored) {
-        }
-        ;
+        };
     }
 
 
@@ -109,7 +107,7 @@ public class ChatServerManager {
                 return;
             }
         }
-        registry.removeRecordByKey(failedPID);
+        this.registry.removeRecordByKey(failedPID);
     }
 
 
@@ -145,20 +143,18 @@ public class ChatServerManager {
      */
     public ChatServerRecord registerServer(SocketChannel socketChannel, NIOMessageChannel nioChannel, Long csPID,
                                            Long primaryPID, ChatServerRecord record) throws IOException {
-        InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
-        String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
+        // InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
+        // String chatServerHostAddr = remoteAddress.getAddress().getHostAddress();
 
         nioChannel.setServerPID(csPID);
         chatServerChannels.put(socketChannel, nioChannel);
-
-        record.setHostAddress(chatServerHostAddr);
         record.setPID(csPID);
         // Send all current records. This helps avoid race conditions.
         //this.sendAllChatServerRecords(primaryPID, nioChannel);
         // Add the new record - this might not be inserted quickly enough to call the sendAll method directly after.
         registry.putChatServerRecord(csPID, record);
 
-        System.out.println("ChatServer registered: " + chatServerHostAddr + " (PID: " + csPID + ")");
+        System.out.println("ChatServer registered: " + record.getHostAddress() + " (PID: " + csPID + ")");
 
         // WE SEND THE RECORD TO ALL SERVERS (THIS ONE INCLUDED) AFTER THIS METHOD RETURNS. NO NEED TO SEND IT NOW.
 
@@ -229,5 +225,49 @@ public class ChatServerManager {
         // Send an ACK to notify the server it has been registered.
         nioChannel.sendMessage(AckMessage.chatServerRegistered(primaryPID, peerPID).toJson());
     }
+
+    /**
+     * Returns a concurrent map of all connected ChatServer channels that have been assigned a non-zero PID.
+     * <p>
+     * The map is keyed by the chat server's PID, with values being their corresponding {@link NIOMessageChannel}.
+     * Unregistered channels (PID == 0L) are excluded.
+     * </p>
+     *
+     * @return a {@link ConcurrentHashMap} of chat server PIDs to active {@link NIOMessageChannel}s.
+     */
+    public ConcurrentHashMap<Long, NIOMessageChannel> getRegisteredServerChannelMap() {
+        ConcurrentHashMap<Long, NIOMessageChannel> registered = new ConcurrentHashMap<>();
+        for (NIOMessageChannel ch : chatServerChannels.values()) {
+            Long pid = ch.getServerPID();
+            if (pid != 0L) {
+                registered.put(pid, ch);
+            }
+        }
+        return registered;
+    }
+
+
+    /**
+     * Retrieves the {@link SocketChannel} associated with a specific server PID.
+     * <p>
+     * This method iterates over the internal channel map and returns the first {@code SocketChannel}
+     * whose associated {@link NIOMessageChannel} has a matching {@code serverPID}. If no such entry
+     * is found, it returns {@code null}.
+     * </p>
+     *
+     * @param pid the process ID of the server to look for.
+     * @return the matching {@code SocketChannel}, or {@code null} if no match is found.
+     */
+    public SocketChannel getChannelByPID(Long pid) {
+        if (pid != null) {
+            for (Map.Entry<SocketChannel, NIOMessageChannel> entry : chatServerChannels.entrySet()) {
+                if (entry.getValue().getServerPID().equals(pid)) {
+                    return entry.getKey();
+                }
+            }
+        }
+        return null;
+    }
+
 
 }

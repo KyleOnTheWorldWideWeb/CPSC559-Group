@@ -1,15 +1,14 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ServerRecord;
-import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
+
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
  * Centralized coordinator for handling registration logic for both
@@ -101,7 +100,8 @@ public class RegistrationCoordinator {
     public void handleChatServerRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg) {
         Long primaryPID = server.getConfig().getPID();
         Long newPID = server.generatePID();
-        // Update the ChatServerRecord sent by the registering process before synchronizing with current Replicas
+        
+        // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
         ChatServerRecord record = msg.safeCastPayload(ChatServerRecord.class);
 //        try {
 //            record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(ChatServerRecord.class), newPID);
@@ -110,6 +110,7 @@ public class RegistrationCoordinator {
 //            cleanupManager.cleanupPersistentConnection(channel, true);
 //            return;
 //        }
+        record.setPID(newPID);
         // If there are no other Replica addressing servers, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerChatServerNoReplicasExist(primaryPID, newPID, channel, nioChannel, record);
@@ -367,7 +368,7 @@ public class RegistrationCoordinator {
 
         Long primaryPID = server.getConfig().getPID();
         Long newPID = server.generatePID();
-        // Retrieve the AddrServerRecord sent by the registering process before synchronizing with current Replicas
+        // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
         AddrServerRecord record = msg.safeCastPayload(AddrServerRecord.class);
 //        try {
 //            record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(AddrServerRecord.class), newPID);
@@ -376,6 +377,7 @@ public class RegistrationCoordinator {
 //            cleanupManager.cleanupPersistentConnection(channel, true);
 //            return;
 //        }
+        record.setPID(newPID);
         // If this is the first and only replica, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerFirstReplicaServer(primaryPID, newPID, channel, nioChannel, record);

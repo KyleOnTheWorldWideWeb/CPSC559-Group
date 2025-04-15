@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.chatserver;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
@@ -14,6 +15,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,13 +27,15 @@ import org.json.JSONObject;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 
 /**
  * The main ChatServer class implements a non-blocking I/O chat server that:
@@ -181,7 +185,8 @@ public class ChatServer {
      * Port used to accept connections from other peer chat servers.
      * Dynamically assigned at startup.
      */
-    private static final int PEER_LISTEN_PORT = getAvailablePort();
+    private static final int PEER_LISTEN_PORT = Integer.parseInt(
+            System.getenv().getOrDefault("CS_PEER_PORT", "2425"));
 
     /**
      * Map of connected peer servers, keyed by their PID.
@@ -551,9 +556,35 @@ public class ChatServer {
             ConnectionContext ctx = new ConnectionContext(channel);
             ctx.type = ConnectionType.ADDRESSING_SERVER;
 
+            // NOTE: Use the factory methods in RegisterMessage for registering a process.
+            // These ensure all syntax is correct and help with bug tracking.
+
+            // Save registration payload in ctx (optional, in case needed later)
+            // ChatServerRecord record = new ChatServerRecord(
+            // 0L,
+            // InetAddress.getLocalHost().getHostAddress(),
+            // CLIENT_PORT,
+            // PEER_LISTEN_PORT,
+            // ADDRESSING_SERVER_PORT,
+            // MAX_CLIENTS);
+
+            // BaseAddrServerMessage<ChatServerRecord> registrationMsg = new
+            // BaseAddrServerMessage<>(
+            // "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
+            String publicAddress = System.getenv("PUBLIC_ADDRESS");
+            // Add a fallback if the environment variable isn't set
+            if (publicAddress == null || publicAddress.isEmpty()) {
+                InetAddress localHost = InetAddress.getLocalHost();
+                publicAddress = localHost.getHostAddress();
+                System.out.println(
+                        "WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
+            } else {
+                System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
+            }
             // This creates a registration message and a properly formed chat server record
             // all in one.
-            RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(CLIENT_PORT,
+            RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(publicAddress,
+                    CLIENT_PORT,
                     PEER_LISTEN_PORT,
                     ADDRESSING_SERVER_PORT,
                     MAX_CLIENTS);
@@ -1147,7 +1178,25 @@ public class ChatServer {
                 ctx.type = ConnectionType.ADDRESSING_SERVER;
 
                 // Create a new registration message
+                String publicAddress = System.getenv("PUBLIC_ADDRESS");
+                // Add a fallback if the environment variable isn't set
+                if (publicAddress == null || publicAddress.isEmpty()) {
+                    try {
+                        InetAddress localHost = InetAddress.getLocalHost();
+                        publicAddress = localHost.getHostAddress();
+                        System.out.println(
+                                "WARNING: PUBLIC_ADDRESS not set in environment, using detected address: "
+                                        + publicAddress);
+                    } catch (IOException ioe) {
+                        publicAddress = "localhost";
+                        System.out.println("Failed to get local host address, using localhost");
+                    }
+                } else {
+                    System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
+                }
+
                 RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(
+                        publicAddress,
                         CLIENT_PORT,
                         PEER_LISTEN_PORT,
                         ADDRESSING_SERVER_PORT,

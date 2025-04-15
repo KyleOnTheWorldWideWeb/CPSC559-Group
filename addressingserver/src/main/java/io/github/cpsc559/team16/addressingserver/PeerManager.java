@@ -1,20 +1,23 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.dto.ServerRole;
-import io.github.cpsc559.team16.common.messaging.*;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ServerRole;
+import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
+import io.github.cpsc559.team16.common.messaging.UpdateMessage;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
  * Manages peer registration, update propagation, and persistent communication
@@ -95,6 +98,17 @@ public class PeerManager {
         return registered;
     }
 
+    public ConcurrentHashMap<Long, NIOMessageChannel> getRegisteredReplicaChannelMapNoFailedPID(Long failedPID) {
+        ConcurrentHashMap<Long, NIOMessageChannel> registered = new ConcurrentHashMap<>();
+        for (NIOMessageChannel ch : peerChannels.values()) {
+            Long pid = ch.getServerPID();
+            if (pid != 0L && pid != failedPID) {
+                registered.put(pid, ch);
+            }
+        }
+        return registered;
+    }
+
 
     /**
      * The registry containing all known {@code AddrServerRecord} entries,
@@ -145,19 +159,20 @@ public class PeerManager {
      * <strong>NOTE:</strong> This method does not close the {@code SocketChannel}; closing the channel is the responsibility
      * of the caller.
      */
-    public void removeRemoteProcess(SocketChannel channel) {
-        // We already ensured that the key:value pair exists in the calling code AddrServerNetworkManager.cleanupPersistentConnection()
-        NIOMessageChannel ch = peerChannels.remove(channel);
-        Long pid = ch.getServerPID();
-        if (pid != 0L) {
-            this.registry.removeRecordByKey(pid);
-            try {
-                System.out.printf("Successfully removed *communication channels* for Network Process with PID: %d " +
-                        "- and Host Address: %s%n", pid, channel.getRemoteAddress());
-            } catch (IOException ignore) {}
-
-        } else {
-            System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer with a PID = 0L that had no AddrServerRecord.");
+    private void removeRemoteProcess(SocketChannel channel) {
+        NIOMessageChannel ch = this.peerChannels.get(channel);
+        if (ch != null) {
+            Long pid = ch.getServerPID();
+            if (pid != 0L) {
+                this.registry.removeRecordByKey(pid);
+                try {
+                    System.out.printf("Successfully removed *communication channels* for Network Process with PID: %d " +
+                            "- and Host Address: %s%n", pid, channel.getRemoteAddress());
+                } catch (IOException ignore) {}
+            } else {
+                System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer with a PID = 0L that had no AddrServerRecord.");
+            }
+            this.peerChannels.remove(channel);
         }
     }
 
@@ -205,7 +220,7 @@ public class PeerManager {
                 return;
             }
         }
-        registry.removeRecordByKey(failedPID); // Remove the AddrServerRecord for the failed remote network process.
+        this.registry.removeRecordByKey(failedPID);
     }
 
     /**
@@ -345,9 +360,18 @@ public class PeerManager {
 
             NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
             peerChannels.put(channel, nioChannel);
-
+            String publicAddress = System.getenv("PUBLIC_ADDRESS");
+            // Add a fallback if the environment variable isn't set
+            if (publicAddress == null || publicAddress.isEmpty()) {
+                // Fallback to hostname/IP detection
+                InetAddress localHost = InetAddress.getLocalHost();
+                publicAddress = localHost.getHostAddress();
+                System.out.println("WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
+            } else {
+                System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
+            }
             RegisterMessage<AddrServerRecord> register =
-                    RegisterMessage.fromReplica(clientPort, peerPort, chatServerPort);
+                    RegisterMessage.fromReplica(publicAddress, clientPort, peerPort, chatServerPort);
             nioChannel.sendMessage(register.toJson());
 
             channel.configureBlocking(false);
@@ -411,6 +435,30 @@ public class PeerManager {
         }
         return null;
     }
+
+    /**
+     * Retrieves the {@link SocketChannel} associated with a specific server PID.
+     * <p>
+     * This method iterates over the internal channel map and returns the first {@code SocketChannel}
+     * whose associated {@link NIOMessageChannel} has a matching {@code serverPID}. If no such entry
+     * is found, it returns {@code null}.
+     * </p>
+     *
+     * @param pid the process ID of the server to look for.
+     * @return the matching {@code SocketChannel}, or {@code null} if no match is found.
+     */
+    public SocketChannel getSocketChannelByPID(Long pid) {
+        if (pid != null) {
+            for (Map.Entry<SocketChannel, NIOMessageChannel> entry : peerChannels.entrySet()) {
+                if (entry.getValue().getServerPID().equals(pid)) {
+                    return entry.getKey();
+                }
+            }
+        }
+        return null;
+    }
+
+
 
 //    /**
 //     * Updates the provided {@link AddrServerRecord} with runtime information from the given socket connection and PID.
