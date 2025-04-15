@@ -19,6 +19,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.cpsc559.team16.common.messaging.RegisterMessage;
+import io.github.cpsc559.team16.common.messaging.NotificationMessage;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -974,6 +975,10 @@ public class ChatServer {
         ConnectionContext ctx = (ConnectionContext) key.attachment();
         if (ctx.username != null) {
             ClientHandler.unregisterUsername(ctx.username);
+            // Notify addressing server about client disconnection
+            if (ctx.type == ConnectionType.CLIENT) {
+                notifyAddressingServerClientCount();
+            }
         }
 
         if (ctx.type == ConnectionType.SERVER) {
@@ -1424,6 +1429,66 @@ public class ChatServer {
 
     public static void setChatLog(ChatLog ChatLog) {
         chatLog = ChatLog;
+    }
+
+    /**
+     * Notifies the Addressing Server about the current client count.
+     * <p>
+     * This method should be called whenever the number of connected clients
+     * changes,
+     * such as when a client connects or disconnects. It creates and sends a
+     * {@code NOTIFICATION} message with the {@code CLIENT_COUNT} object type and
+     * the current count of registered usernames.
+     * </p>
+     * <p>
+     * The Addressing Server uses this information to maintain accurate records of
+     * server load for load balancing purposes.
+     * </p>
+     * 
+     * @return true if notification was sent successfully, false otherwise
+     */
+    public static boolean notifyAddressingServerClientCount() {
+        try {
+            debug(DEBUG_NORMAL, "Notifying Addressing Server about updated client count");
+
+            // Get current client count from ClientHandler
+            int currentClientCount = ClientHandler.getRegisteredUsernameCount();
+
+            // Create client count notification message
+            NotificationMessage<Integer> notification = NotificationMessage.clientCountNotification(
+                    ID, currentClientCount);
+
+            String json = notification.toJson() + "\n";
+
+            // Find the addressing server connection
+            for (SelectionKey key : selector.keys()) {
+                if (!key.isValid())
+                    continue;
+
+                ConnectionContext ctx = (ConnectionContext) key.attachment();
+                if (ctx != null && ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                    // Queue the message to be sent
+                    synchronized (ctx.writeQueue) {
+                        ctx.writeQueue
+                                .add(java.nio.ByteBuffer.wrap(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    }
+
+                    // Ensure OP_WRITE is set to trigger a write operation
+                    key.interestOps(key.interestOps() | java.nio.channels.SelectionKey.OP_WRITE);
+                    key.selector().wakeup();
+
+                    debug(DEBUG_BASIC, "Sent CLIENT_COUNT notification to Addressing Server: " + currentClientCount);
+                    return true;
+                }
+            }
+
+            debug(DEBUG_BASIC, "No connection to Addressing Server found to notify about client count");
+            return false;
+        } catch (Exception e) {
+            debug(DEBUG_BASIC, "Failed to notify Addressing Server about client count: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
 
 }
