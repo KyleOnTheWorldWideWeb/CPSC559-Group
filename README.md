@@ -45,3 +45,52 @@ ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1
 ```
 
 ## Setting environment variables
+- If you're running the primary address server:
+```bash
+PRIMARY_ADDRESS_SERVER_IP={insert-your-ipv4-here}
+PUBLIC_ADDRESS={insert-your-ipv4-here}
+AS_CLIENT_PORT=49800
+AS_REPLICA_PORT=49801
+AS_CHATSERVER_PORT=49802
+CS_PORT=2424
+CS_PEER_PORT=2425
+CS_ADDRSERVER_PORT=49802
+CLIENT_PORT=3000
+AS_ROLE=PRIMARY
+```
+- If you are running a backup address server you need to get the Primary address server IP from whoever is running the primary.
+```bash
+PRIMARY_ADDRESS_SERVER_IP={insert-primary-address-ip-here}
+PUBLIC_ADDRESS={insert-your-ipv4-here}
+AS_CLIENT_PORT=49800
+AS_REPLICA_PORT=49801
+AS_CHATSERVER_PORT=49802
+CS_PORT=2424
+CS_PEER_PORT=2425
+CS_ADDRSERVER_PORT=49802
+CLIENT_PORT=3000
+# Change your Role to BACKUP
+AS_ROLE=BACKUP 
+```
+
+# How to start this up
+- Addressing server
+  - First make sure the primary is running if you're not the primary.
+```bash
+docker compose --profile addressingserver up --build
+```
+- Chat Server
+```bash
+docker compose --profile chatserver up --build
+```
+- Client
+```bash
+docker compose --profile client create --build
+# After the build you need to run it like
+docker compose run --rm --service-ports client
+```
+# Make sure to close the containers down 
+For every container you run 
+```bash
+docker compose --profile {profile-you-have-running} down
+```
