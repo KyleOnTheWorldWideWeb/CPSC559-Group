@@ -20,7 +20,7 @@ public class AddrServerRecord extends ServerRecord {
      * </ul>
      *
      */
-    private final ServerRole role;
+    private ServerRole role;
 
 
 
@@ -50,6 +50,12 @@ public class AddrServerRecord extends ServerRecord {
         this.role = role;
     }
 
+
+    // --- Setters ---
+
+    public void setRole(ServerRole role) {
+        this.role = role;
+    }
 
 
 
