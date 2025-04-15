@@ -475,6 +475,7 @@ public class AddrServerReadDispatcher {
             } else if (serverType.equals(ObjectTypes.CHATSERVER_FAILURE)) {
                 SocketChannel failedChannel = this.chatServerManager.getChannelByPID(failedPID);
                 if (failedChannel != null) {
+                    System.out.println("going to cleanup");
                     // Sync state with replicas and then remove and broadcast to chat servers
                     cleanupManager.cleanupPersistentConnection(failedChannel, true);
                 } else {

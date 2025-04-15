@@ -68,7 +68,7 @@ public class ChatServer {
      * }</pre>
      * </p>
      */
-    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "2"));
+    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "5"));
 
     // Debug level constants
 
