@@ -108,9 +108,10 @@ public class RegistrationCoordinator {
         //     record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(ChatServerRecord.class), newPID);
         // } catch (IOException e) {
         //     System.err.printf("Failed to resolve remote address for ChatServer (PID: %d). Registration aborted.%n", newPID);
-        //     cleanupManager.cleanupPersistentConnection(channel, true);
+        //     cleanupManager .cleanupPersistentConnection(channel, true);
         //     return;
         // }
+        record.setPID(newPID);
         // If there are no other Replica addressing servers, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerChatServerNoReplicasExist(primaryPID, newPID, channel, nioChannel, record);
@@ -365,7 +366,6 @@ public class RegistrationCoordinator {
      */
     public void handleReplicaRegistration(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg)
     {
-
         Long primaryPID = server.getConfig().getPID();
         Long newPID = server.generatePID();
         // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
@@ -377,6 +377,7 @@ public class RegistrationCoordinator {
         //     cleanupManager.cleanupPersistentConnection(channel, true);
         //     return;
         // }
+        record.setPID(newPID);
         // If this is the first and only replica, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerFirstReplicaServer(primaryPID, newPID, channel, nioChannel, record);
