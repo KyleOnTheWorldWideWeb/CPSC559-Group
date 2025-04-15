@@ -1,21 +1,25 @@
 package io.github.cpsc559.team16.addressingserver;
 
 // For thread management
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-import io.github.cpsc559.team16.common.messaging.*;
-
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.channels.*;
-import java.util.Iterator;
-import java.util.function.Supplier;
-
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
+import io.github.cpsc559.team16.common.messaging.MessageTypes;
+import io.github.cpsc559.team16.common.messaging.Roles;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
  * Manages the network interactions for the AddressingServer.
@@ -427,6 +431,7 @@ public class AddrServerNetworkManager {
 
         while (true) {
 
+
             if (shutdownRequested) {
                 System.out.println("Shutdown signal received. Exiting the AddrServerNetworkManager main event loop.");
                 this.closeAllConnections();
@@ -447,7 +452,7 @@ public class AddrServerNetworkManager {
                 }
             } else {
                 // TODO - move this to the leader takeover logic
-                shutdownCoordinatorRequest();
+                // shutdownCoordinatorRequest();
             }
 
             // Any thread calling this method blocks until an event occurs on a channel
@@ -482,7 +487,7 @@ public class AddrServerNetworkManager {
                             }
                             channel.close();
                         } catch (IOException e) {
-                            System.err.println("Failed to respond to health check ping: " + e.getMessage());
+                            System.err.println("Failed to respond to ping: " + e.getMessage());
                         }
                         continue;
                     }
@@ -515,6 +520,13 @@ public class AddrServerNetworkManager {
                             if (message == null || (!message.getMsgType().equals(MessageTypes.REGISTER) &&
                                     !message.getMsgType().equals(MessageTypes.ELECTION))) {
                                 System.err.println("Rejected: initial message must be REGISTER or ELECTION.");
+                                channel.close();
+                                key.cancel();
+                                continue;
+                            }
+
+                            if (message.getMsgType().equals(MessageTypes.ELECTION)) {
+                                readDispatcher.dispatchMsgType(channel, nioChannel, message);
                                 channel.close();
                                 key.cancel();
                                 continue;
