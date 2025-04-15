@@ -100,8 +100,6 @@ public class LeaderElectionManager {
      */
     private boolean midElection = false;
 
-    // private final OutgoingMessageDispatcher outgoingDispatcher;  // Previously used outbound dispatcher.
-
     //==========================================================================
     // Constructors and Election State Management
     //==========================================================================
@@ -144,16 +142,6 @@ public class LeaderElectionManager {
         this.config = server.getConfig();
         this.peerManager = server.getPeerManager();
         this.running = false;
-
-        // OutgoingMessageDispatcher initialization commented out.
-        // try {
-        //     outgoingDispatcher = new OutgoingMessageDispatcher();
-        //     Thread dispatcherThread = new Thread(outgoingDispatcher, "OutgoingMessageDispatcher");
-        //     dispatcherThread.setDaemon(true);
-        //     dispatcherThread.start();
-        // } catch (IOException e) {
-        //     throw new RuntimeException("Failed to initialize OutgoingMessageDispatcher", e);
-        // }
     }
 
     //==========================================================================
@@ -188,7 +176,6 @@ public class LeaderElectionManager {
             }
         }).start();
 
-        System.out.println("LEM: passed election message to handler");
     }
 
     //==========================================================================
@@ -367,6 +354,7 @@ public class LeaderElectionManager {
         for (Long peerPID : server.getAddrServerRegistry().getRecords().keySet()) {
             if (!peerPID.equals(config.getPID())) {
                 sendTo(leaderMessage, peerPID);
+                server.getAddrServerRegistry().getRecords().remove(peerPID);
                 System.out.println("LEM: Sent leader message to peer with PID " + peerPID);
             }
         }
@@ -410,7 +398,7 @@ public class LeaderElectionManager {
         } else {
             System.out.println("Must register with new primary.");
             try {
-                server.registerReplicaAddrServer();
+                server.requestRestart();
             } catch (Exception e) {
                 System.err.println("Failed to register with new primary: " + e.getMessage());
             }
