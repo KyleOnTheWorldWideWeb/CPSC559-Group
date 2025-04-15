@@ -134,105 +134,97 @@ public class PingManager implements Runnable {
             }
 
             // Only proceed with pinging if the server is in replica mode.
-            if (!isPrimary()) {
-                System.out.println("ROLE: REPLICA");
-                try (Selector selector = Selector.open()) {
-                    // Reinitialize per-round maps (for new connection attempts).
-                    channelPIDs = new HashMap<>();
-                    pingStartTimes = new HashMap<>();
+            System.out.println("ROLE: REPLICA");
+            try (Selector selector = Selector.open()) {
+                // Reinitialize per-round maps (for new connection attempts).
+                channelPIDs = new HashMap<>();
+                pingStartTimes = new HashMap<>();
 
-                    // Collect all peers except self.
-                    ArrayList<AddrServerRecord> peers = new ArrayList<>();
-                    for (AddrServerRecord peer : server.getAddrServerRegistry().getRecords().values()) {
-                        if (!peer.getPID().equals(config.getPID())) {
-                            peers.add(peer);
-                        }
+                // Collect all peers except self.
+                ArrayList<AddrServerRecord> peers = new ArrayList<>();
+                for (AddrServerRecord peer : server.getAddrServerRegistry().getRecords().values()) {
+                    if (!peer.getPID().equals(config.getPID())) {
+                        peers.add(peer);
                     }
+                }
 
-                    // For each peer, open a non-blocking connection and record the start time.
-                    for (AddrServerRecord peer : peers) {
-                        SocketChannel channel = SocketChannel.open();
-                        channel.configureBlocking(false);
-                        channel.connect(new InetSocketAddress(peer.getHostAddress(), 5050));
-                        // Register only for connection events.
-                        channel.register(selector, SelectionKey.OP_CONNECT);
-                        // Record the start time of this connection attempt.
-                        pingStartTimes.put(channel, System.currentTimeMillis());
-                        // Initialize last ping time for the peer if not already set.
-                        lastPingFromPID.putIfAbsent(peer.getPID(), new Date());
-                        // Remember which channel belongs to which peer.
-                        channelPIDs.put(channel, peer.getPID());
-                    }
+                // For each peer, open a non-blocking connection and record the start time.
+                for (AddrServerRecord peer : peers) {
+                    SocketChannel channel = SocketChannel.open();
+                    channel.configureBlocking(false);
+                    channel.connect(new InetSocketAddress(peer.getHostAddress(), 5050));
+                    // Register only for connection events.
+                    channel.register(selector, SelectionKey.OP_CONNECT);
+                    // Record the start time of this connection attempt.
+                    pingStartTimes.put(channel, System.currentTimeMillis());
+                    // Initialize last ping time for the peer if not already set.
+                    lastPingFromPID.putIfAbsent(peer.getPID(), new Date());
+                    // Remember which channel belongs to which peer.
+                    channelPIDs.put(channel, peer.getPID());
+                }
 
-                    // Wait for connection events, with a maximum wait time set to safeDefaultRTT.
-                    selector.select(safeDefaultRTT);
-                    Iterator<SelectionKey> keyIterator = selector.selectedKeys().iterator();
+                // Wait for connection events, with a maximum wait time set to safeDefaultRTT.
+                selector.select(safeDefaultRTT);
+                Iterator<SelectionKey> keyIterator = selector.selectedKeys().iterator();
 
-                    while (keyIterator.hasNext()) {
-                        SelectionKey key = keyIterator.next();
-                        keyIterator.remove();
+                while (keyIterator.hasNext()) {
+                    SelectionKey key = keyIterator.next();
+                    keyIterator.remove();
 
-                        if (key.isConnectable()) {
-                            SocketChannel ch = (SocketChannel) key.channel();
-                            if (ch.isConnectionPending()) {
-                                try {
-                                    ch.finishConnect();
-                                    long finishTime = System.currentTimeMillis();
-                                    // Compute sample RTT as the difference between finish and start times.
-                                    Long startTime = pingStartTimes.get(ch);
-                                    if (startTime != null) {
-                                        long sampleRTT = finishTime - startTime;
-                                        Long peerPID = channelPIDs.get(ch);
-                                        // Retrieve any previous RTT estimate.
-                                        Long previousEstimated = estimatedRTTPerPeer.get(peerPID);
-                                        long newEstimated;
-                                        if (previousEstimated == null) {
-                                            // For the first sample, take the raw measurement.
-                                            newEstimated = sampleRTT;
-                                        } else {
-                                            // Update the EMA estimate.
-                                            newEstimated = (long)(alpha * sampleRTT + (1 - alpha) * previousEstimated);
-                                        }
-                                        // Store the updated RTT estimate.
-                                        estimatedRTTPerPeer.put(peerPID, newEstimated);
+                    if (key.isConnectable()) {
+                        SocketChannel ch = (SocketChannel) key.channel();
+                        if (ch.isConnectionPending()) {
+                            try {
+                                ch.finishConnect();
+                                long finishTime = System.currentTimeMillis();
+                                // Compute sample RTT as the difference between finish and start times.
+                                Long startTime = pingStartTimes.get(ch);
+                                if (startTime != null) {
+                                    long sampleRTT = finishTime - startTime;
+                                    Long peerPID = channelPIDs.get(ch);
+                                    // Retrieve any previous RTT estimate.
+                                    Long previousEstimated = estimatedRTTPerPeer.get(peerPID);
+                                    long newEstimated;
+                                    if (previousEstimated == null) {
+                                        // For the first sample, take the raw measurement.
+                                        newEstimated = sampleRTT;
+                                    } else {
+                                        // Update the EMA estimate.
+                                        newEstimated = (long)(alpha * sampleRTT + (1 - alpha) * previousEstimated);
                                     }
-                                    // Update the last successful ping (pong) time for this peer.
-                                    lastPingFromPID.put(channelPIDs.get(ch), new Date());
-                                } catch (IOException e) {
-                                    System.err.println("PingManager: Failed to finish connection for a peer: " + e.getMessage());
-                                    key.cancel();
+                                    // Store the updated RTT estimate.
+                                    estimatedRTTPerPeer.put(peerPID, newEstimated);
                                 }
+                                // Update the last successful ping (pong) time for this peer.
+                                lastPingFromPID.put(channelPIDs.get(ch), new Date());
+                            } catch (IOException e) {
+                                System.err.println("PingManager: Failed to finish connection for a peer: " + e.getMessage());
+                                key.cancel();
                             }
                         }
                     }
+                }
 
-                    // For each peer, determine if the elapsed time since the last ping exceeds the threshold.
-                    Date now = new Date();
-                    for (AddrServerRecord peer : peers) {
-                        Date lastPing = lastPingFromPID.get(peer.getPID());
-                        if (lastPing != null) {
-                            long diff = now.getTime() - lastPing.getTime();
-                            // Get the current estimated RTT; if none exists, use the safe default.
-                            long estimatedRTT = estimatedRTTPerPeer.getOrDefault(peer.getPID(), (long) safeDefaultRTT);
-                            // Compute the timeout threshold using the safe default as a lower bound.
-                            long timeoutThreshold = Math.max(estimatedRTT, safeDefaultRTT);
-                            timeoutThreshold = (long) (timeoutThreshold * marginFactor);
-                            System.out.println("PingManager: Pinging peer: " + peer.getPID());
-                            if (diff > timeoutThreshold) {
-                                // server.getPeerManager().removeFailedServer(peer.getPID());
-                            }
+                // For each peer, determine if the elapsed time since the last ping exceeds the threshold.
+                Date now = new Date();
+                for (AddrServerRecord peer : peers) {
+                    Date lastPing = lastPingFromPID.get(peer.getPID());
+                    if (lastPing != null) {
+                        long diff = now.getTime() - lastPing.getTime();
+                        // Get the current estimated RTT; if none exists, use the safe default.
+                        long estimatedRTT = estimatedRTTPerPeer.getOrDefault(peer.getPID(), (long) safeDefaultRTT);
+                        // Compute the timeout threshold using the safe default as a lower bound.
+                        long timeoutThreshold = Math.max(estimatedRTT, safeDefaultRTT);
+                        timeoutThreshold = (long) (timeoutThreshold * marginFactor);
+                        System.out.println("PingManager: Pinging peer: " + peer.getPID());
+                        if (diff > timeoutThreshold) {
+                            // server.getPeerManager().removeFailedServer(peer.getPID());
+                            // This instead throws a timeout elsewhere, which will trigger removal of the peer
                         }
                     }
-                } catch (IOException e) {
-                    System.err.println("PingManager: Error while pinging peers: " + e.getMessage());
                 }
-            } else {
-                System.out.println("ROLE: PRIMARY");
-                try {
-                    Thread.sleep(5000);
-                } catch (Exception e) {
-                    // ignore
-                }
+            } catch (IOException e) {
+                System.err.println("PingManager: Error while pinging peers: " + e.getMessage());
             }
         }
     }
