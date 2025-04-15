@@ -216,15 +216,11 @@ public class PingManager implements Runnable {
                             // Compute the timeout threshold using the safe default as a lower bound.
                             long timeoutThreshold = Math.max(estimatedRTT, safeDefaultRTT);
                             timeoutThreshold = (long) (timeoutThreshold * marginFactor);
-                            System.out.println("PingManager: Peer " + peer.getPID() +
-                                               " | Last ping: " + lastPing +
-                                               " | Elapsed: " + diff + " ms" +
-                                               " | Estimated RTT: " + estimatedRTT + " ms" +
-                                               " | Timeout threshold: " + timeoutThreshold + " ms");
+                            System.out.println("PingManager: Pinging peer: " + peer.getPID());
                             if (diff > timeoutThreshold) {
                                 System.out.println("PingManager: Missed ping from peer: " + peer.getPID());
                                 // Remove or flag the failed peer.
-                                server.getPeerManager().removeFailedServer(peer.getPID());
+                                // server.getPeerManager().removeFailedServer(peer.getPID());
                             }
                         }
                     }
