@@ -18,7 +18,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentHashMap;
 
+import io.github.cpsc559.team16.common.messaging.RegisterMessage;
+import io.github.cpsc559.team16.common.messaging.NotificationMessage;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -65,7 +68,7 @@ public class ChatServer {
      * }</pre>
      * </p>
      */
-    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "2"));
+    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "5"));
 
     // Debug level constants
 
@@ -183,7 +186,7 @@ public class ChatServer {
      * Dynamically assigned at startup.
      */
     private static final int PEER_LISTEN_PORT = Integer.parseInt(
-    System.getenv().getOrDefault("CS_PEER_PORT", "2425"));
+            System.getenv().getOrDefault("CS_PEER_PORT", "2425"));
 
     /**
      * Map of connected peer servers, keyed by their PID.
@@ -455,14 +458,14 @@ public class ChatServer {
      * </p>
      * <p>
      * The message is converted to a UTF-8 encoded JSON string and placed in the
-     * peer’s {@code writeQueue}.
+     * peer's {@code writeQueue}.
      * The selector interest ops are updated to include {@code OP_WRITE}, ensuring
      * that the message will be
      * transmitted on the next writable event.
      * </p>
      *
      * @param ctx the {@link ConnectionContext} of the connected peer server
-     * @param key the {@link SelectionKey} associated with the peer’s socket channel
+     * @param key the {@link SelectionKey} associated with the peer's socket channel
      */
     private static void requestChatLogFor(ConnectionContext ctx, SelectionKey key) {
         try {
@@ -553,32 +556,35 @@ public class ChatServer {
             ConnectionContext ctx = new ConnectionContext(channel);
             ctx.type = ConnectionType.ADDRESSING_SERVER;
 
-
             // NOTE: Use the factory methods in RegisterMessage for registering a process.
             // These ensure all syntax is correct and help with bug tracking.
 
             // Save registration payload in ctx (optional, in case needed later)
-//            ChatServerRecord record = new ChatServerRecord(
-//                    0L,
-//                    InetAddress.getLocalHost().getHostAddress(),
-//                    CLIENT_PORT,
-//                    PEER_LISTEN_PORT,
-//                    ADDRESSING_SERVER_PORT,
-//                    MAX_CLIENTS);
+            // ChatServerRecord record = new ChatServerRecord(
+            // 0L,
+            // InetAddress.getLocalHost().getHostAddress(),
+            // CLIENT_PORT,
+            // PEER_LISTEN_PORT,
+            // ADDRESSING_SERVER_PORT,
+            // MAX_CLIENTS);
 
-//            BaseAddrServerMessage<ChatServerRecord> registrationMsg = new BaseAddrServerMessage<>(
-//                    "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
+            // BaseAddrServerMessage<ChatServerRecord> registrationMsg = new
+            // BaseAddrServerMessage<>(
+            // "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
             String publicAddress = System.getenv("PUBLIC_ADDRESS");
             // Add a fallback if the environment variable isn't set
             if (publicAddress == null || publicAddress.isEmpty()) {
                 InetAddress localHost = InetAddress.getLocalHost();
                 publicAddress = localHost.getHostAddress();
-                System.out.println("WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
+                System.out.println(
+                        "WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
             } else {
                 System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
             }
-            // This creates a registration message and a properly formed chat server record all in one.
-            RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(publicAddress, CLIENT_PORT,
+            // This creates a registration message and a properly formed chat server record
+            // all in one.
+            RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(publicAddress,
+                    CLIENT_PORT,
                     PEER_LISTEN_PORT,
                     ADDRESSING_SERVER_PORT,
                     MAX_CLIENTS);
@@ -697,7 +703,7 @@ public class ChatServer {
      * @param selector the {@link Selector} that manages all non-blocking channels
      *                 for this server
      * @param host     the IP address or hostname of the peer server
-     * @param port     the peer server’s listening port (typically the peer-to-peer
+     * @param port     the peer server's listening port (typically the peer-to-peer
      *                 port)
      * @param peerID   the unique process ID of the peer server, as assigned by the
      *                 Addressing Server
@@ -777,7 +783,7 @@ public class ChatServer {
      *
      * <h3>1. Reading and Decoding:</h3>
      * <ul>
-     * <li>Attempts to read data into the connection’s
+     * <li>Attempts to read data into the connection's
      * {@link ConnectionContext#readBuffer}.</li>
      * <li>If {@code -1} is returned (remote has closed the connection), it cleans
      * up the buffer and closes the connection.</li>
@@ -797,9 +803,9 @@ public class ChatServer {
      * <ul>
      * <li>Each complete JSON message is submitted to a thread in {@code workerPool}
      * for processing.</li>
-     * <li>The socket and key are validated to ensure they’re still active before
+     * <li>The socket and key are validated to ensure they're still active before
      * dispatching.</li>
-     * <li>If the message is from the Addressing Server, it’s deserialized using
+     * <li>If the message is from the Addressing Server, it's deserialized using
      * {@link MessageDeserializer} and passed to
      * {@link AddressingServerHandler}.</li>
      * <li>If the message is from a client or peer server, its type is determined
@@ -919,7 +925,7 @@ public class ChatServer {
      * writes may be enqueued by other threads.</li>
      * <li>Writes the first {@link ByteBuffer} in the queue to the socket using
      * {@link SocketChannel#write(ByteBuffer)}.</li>
-     * <li>If the buffer isn’t fully written (i.e., has remaining bytes), the method
+     * <li>If the buffer isn't fully written (i.e., has remaining bytes), the method
      * returns early so the selector
      * will retry later without removing the buffer.</li>
      * <li>If the write completes, the buffer is removed from the queue and the next
@@ -930,7 +936,7 @@ public class ChatServer {
      * <ul>
      * <li>When all buffers have been successfully written, the method clears
      * {@code OP_WRITE}
-     * from the key’s interest set to prevent unnecessary write readiness
+     * from the key's interest set to prevent unnecessary write readiness
      * checks.</li>
      * </ul>
      *
@@ -975,7 +981,7 @@ public class ChatServer {
      *
      * <h3>2. Peer Cleanup (Server Connections):</h3>
      * <ul>
-     * <li>If the connection belongs to a peer server, retrieves the peer’s context
+     * <li>If the connection belongs to a peer server, retrieves the peer's context
      * using its PID.</li>
      * <li>Attempts a reconnection via {@code attemptRecconnectingToPeert()},
      * passing the stored context.</li>
@@ -1000,14 +1006,33 @@ public class ChatServer {
         ConnectionContext ctx = (ConnectionContext) key.attachment();
         if (ctx.username != null) {
             ClientHandler.unregisterUsername(ctx.username);
+            // Notify addressing server about client disconnection
+            if (ctx.type == ConnectionType.CLIENT) {
+                notifyAddressingServerClientCount();
+            }
         }
 
         if (ctx.type == ConnectionType.SERVER) {
             ConnectionContext lostCtx = connectedPeers.get(ctx.peerID);
-            attemptRecconnectingToPeer(lostCtx); // pass full ctx
-            connectedPeers.remove(ctx.peerID);
+            int peerId = ctx.peerID;
 
+            // Try reconnection first
+            attemptRecconnectingToPeer(lostCtx);
+            connectedPeers.remove(peerId);
+
+            // Then notify addressing server about the disconnection
+            // Only do this if reconnection fails or after reconnection attempts
+            if (handlerMap.get(ConnectionType.ADDRESSING_SERVER) != null) {
+                ((AddressingServerHandler) handlerMap.get(ConnectionType.ADDRESSING_SERVER))
+                        .notifyPeerCrash(peerId);
+                debug(DEBUG_BASIC, "Notified addressing server about disconnected peer " + peerId);
+            }
+        } else if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
+            debug(DEBUG_BASIC, "Lost connection to Addressing Server. Attempting to reconnect...");
+            // Start a reconnection attempt to the addressing server
+            attemptReconnectingToAddressingServer();
         }
+
         try {
             SocketAddress remoteAddr = socketChannel.getRemoteAddress();
             debug(DEBUG_NORMAL, "Closing connection to " + remoteAddr);
@@ -1037,7 +1062,7 @@ public class ChatServer {
      * <li>For each attempt:
      * <ul>
      * <li>Opens a new {@link SocketChannel} in non-blocking mode</li>
-     * <li>Connects to the peer’s last known address</li>
+     * <li>Connects to the peer's last known address</li>
      * <li>Creates a new {@link ConnectionContext} for the peer and registers it for
      * {@code OP_CONNECT}</li>
      * </ul>
@@ -1054,11 +1079,12 @@ public class ChatServer {
      *
      * @param lostCtx the previous {@link ConnectionContext} of the peer that was
      *                disconnected
+     * @return true if reconnection was successful, false otherwise
      */
-    private static void attemptRecconnectingToPeer(ConnectionContext lostCtx) {
+    private static boolean attemptRecconnectingToPeer(ConnectionContext lostCtx) {
         if (lostCtx == null || lostCtx.host == null) {
             debug(DEBUG_NORMAL, "No known host/port for lost peer.");
-            return;
+            return false;
         }
 
         int peerID = lostCtx.peerID;
@@ -1083,7 +1109,7 @@ public class ChatServer {
 
                 peerChannel.register(selector, SelectionKey.OP_CONNECT, newCtx);
                 debug(DEBUG_BASIC, "Reconnection initiated to peer PID=" + peerID);
-                return;
+                return true;
             } catch (IOException e) {
                 debug(DEBUG_NORMAL, "Reconnection attempt " + attempt + " failed: " + e.getMessage());
                 try {
@@ -1097,6 +1123,136 @@ public class ChatServer {
         }
 
         debug(DEBUG_BASIC, "All reconnection attempts failed for peer PID=" + peerID);
+        return false;
+    }
+
+    /**
+     * Attempts to reconnect to the Addressing Server after a connection failure.
+     * <p>
+     * This method is triggered when a connection to the Addressing Server is lost
+     * due to
+     * network failure, shutdown, or other I/O issues. It tries to re-establish
+     * a connection to the Addressing Server and register this chat server again.
+     * </p>
+     *
+     * <h3>Reconnection Strategy:</h3>
+     * <ul>
+     * <li>Performs up to 10 reconnection attempts, spaced 3 seconds apart.</li>
+     * <li>For each attempt:
+     * <ul>
+     * <li>Opens a new {@link SocketChannel} in non-blocking mode</li>
+     * <li>Connects to the Addressing Server's known address</li>
+     * <li>Creates a new {@link ConnectionContext} and registers it for
+     * {@code OP_CONNECT}</li>
+     * <li>Sends a REGISTER message to re-establish this chat server's presence</li>
+     * </ul>
+     * </li>
+     * <li>If all attempts fail, a message is logged and the server continues
+     * operating
+     * with existing peer connections, but new client connections will not be
+     * possible.</li>
+     * </ul>
+     */
+    private static void attemptReconnectingToAddressingServer() {
+        debug(DEBUG_BASIC, "Attempting reconnection to Addressing Server...");
+
+        // First, check if we already have any active addressing server connections
+        if (hasExistingAddressingServerConnection()) {
+            debug(DEBUG_BASIC, "An existing Addressing Server connection was found. Aborting reconnection attempt.");
+            return;
+        }
+
+        final int MAX_RETRIES = 10;
+        final int RETRY_DELAY_MS = 3000;
+
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                debug(DEBUG_NORMAL, "Addressing Server reconnection attempt " + attempt);
+
+                // Create a new connection to the addressing server
+                SocketChannel channel = SocketChannel.open();
+                channel.configureBlocking(false);
+                channel.connect(new InetSocketAddress(ADDRESSING_SERVER_HOST, ADDRESSING_SERVER_PORT));
+
+                ConnectionContext ctx = new ConnectionContext(channel);
+                ctx.type = ConnectionType.ADDRESSING_SERVER;
+
+                // Create a new registration message
+                String publicAddress = System.getenv("PUBLIC_ADDRESS");
+                // Add a fallback if the environment variable isn't set
+                if (publicAddress == null || publicAddress.isEmpty()) {
+                    try {
+                        InetAddress localHost = InetAddress.getLocalHost();
+                        publicAddress = localHost.getHostAddress();
+                        System.out.println(
+                                "WARNING: PUBLIC_ADDRESS not set in environment, using detected address: "
+                                        + publicAddress);
+                    } catch (IOException ioe) {
+                        publicAddress = "localhost";
+                        System.out.println("Failed to get local host address, using localhost");
+                    }
+                } else {
+                    System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
+                }
+
+                RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(
+                        publicAddress,
+                        CLIENT_PORT,
+                        PEER_LISTEN_PORT,
+                        ADDRESSING_SERVER_PORT,
+                        MAX_CLIENTS);
+
+                String json = registrationMsg.toJson() + "\n";
+                ctx.writeQueue.add(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
+
+                channel.register(selector, SelectionKey.OP_CONNECT, ctx);
+                debug(DEBUG_BASIC, "Reconnection attempt to Addressing Server initiated");
+
+                // Wake up the selector to process this connection immediately
+                selector.wakeup();
+                return;
+            } catch (IOException e) {
+                debug(DEBUG_NORMAL, "Reconnection attempt " + attempt + " failed: " + e.getMessage());
+                try {
+                    Thread.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    debug(DEBUG_NORMAL, "Reconnection retry sleep interrupted");
+                    break;
+                }
+            }
+        }
+
+        debug(DEBUG_BASIC,
+                "All reconnection attempts to Addressing Server failed. The Chat Server will continue to operate but may have limited functionality.");
+    }
+
+    /**
+     * Checks if there are any existing connections to the Addressing Server.
+     * <p>
+     * This method prevents creating duplicate connections to the Addressing Server,
+     * which could cause conflicting PIDs and state inconsistencies.
+     * </p>
+     * 
+     * @return true if an existing addressing server connection is found, false
+     *         otherwise
+     */
+    private static boolean hasExistingAddressingServerConnection() {
+        for (SelectionKey key : selector.keys()) {
+            if (!key.isValid())
+                continue;
+
+            Object attachment = key.attachment();
+            if (attachment instanceof ConnectionContext) {
+                ConnectionContext ctx = (ConnectionContext) attachment;
+
+                if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                    debug(DEBUG_DETAILED, "Found existing Addressing Server connection.");
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -1123,7 +1279,7 @@ public class ChatServer {
      */
     private static boolean isPortInUse(int port) {
         try (@SuppressWarnings("unused")
-             ServerSocket serverSocket = new ServerSocket(port)) {
+        ServerSocket serverSocket = new ServerSocket(port)) {
             // If we can bind to the port, it's available
             return false;
         } catch (IOException e) {
@@ -1190,6 +1346,15 @@ public class ChatServer {
     }
 
     /**
+     * Returns the map of connection types to their handlers.
+     *
+     * @return the handlerMap containing all registered connection handlers
+     */
+    public static Map<ConnectionType, ConnectionHandler> getHandlerMap() {
+        return handlerMap;
+    }
+
+    /**
      * Sends a heartbeat {@code PING} message to a connected peer server to verify
      * that the connection is still alive.
      * <p>
@@ -1206,7 +1371,7 @@ public class ChatServer {
      * and the key is valid. If not, the PING is skipped and a debug message is
      * logged.</li>
      * <li>Constructs a {@link ServerServerMessage} of type {@code PING}, with the
-     * current server’s PID as the sender
+     * current server's PID as the sender
      * and the target peer's PID as the recipient.</li>
      * <li>Serializes the message to a JSON string and appends it (along with a
      * newline) to the peer's {@code writeQueue}.</li>
@@ -1313,6 +1478,66 @@ public class ChatServer {
 
     public static void setChatLog(ChatLog ChatLog) {
         chatLog = ChatLog;
+    }
+
+    /**
+     * Notifies the Addressing Server about the current client count.
+     * <p>
+     * This method should be called whenever the number of connected clients
+     * changes,
+     * such as when a client connects or disconnects. It creates and sends a
+     * {@code NOTIFICATION} message with the {@code CLIENT_COUNT} object type and
+     * the current count of registered usernames.
+     * </p>
+     * <p>
+     * The Addressing Server uses this information to maintain accurate records of
+     * server load for load balancing purposes.
+     * </p>
+     * 
+     * @return true if notification was sent successfully, false otherwise
+     */
+    public static boolean notifyAddressingServerClientCount() {
+        try {
+            debug(DEBUG_NORMAL, "Notifying Addressing Server about updated client count");
+
+            // Get current client count from ClientHandler
+            int currentClientCount = ClientHandler.getRegisteredUsernameCount();
+
+            // Create client count notification message
+            NotificationMessage<Integer> notification = NotificationMessage.clientCountNotification(
+                    ID, currentClientCount);
+
+            String json = notification.toJson() + "\n";
+
+            // Find the addressing server connection
+            for (SelectionKey key : selector.keys()) {
+                if (!key.isValid())
+                    continue;
+
+                ConnectionContext ctx = (ConnectionContext) key.attachment();
+                if (ctx != null && ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                    // Queue the message to be sent
+                    synchronized (ctx.writeQueue) {
+                        ctx.writeQueue
+                                .add(java.nio.ByteBuffer.wrap(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    }
+
+                    // Ensure OP_WRITE is set to trigger a write operation
+                    key.interestOps(key.interestOps() | java.nio.channels.SelectionKey.OP_WRITE);
+                    key.selector().wakeup();
+
+                    debug(DEBUG_BASIC, "Sent CLIENT_COUNT notification to Addressing Server: " + currentClientCount);
+                    return true;
+                }
+            }
+
+            debug(DEBUG_BASIC, "No connection to Addressing Server found to notify about client count");
+            return false;
+        } catch (Exception e) {
+            debug(DEBUG_BASIC, "Failed to notify Addressing Server about client count: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
 
 }

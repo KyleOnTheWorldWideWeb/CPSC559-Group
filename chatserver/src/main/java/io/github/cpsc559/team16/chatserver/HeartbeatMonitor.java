@@ -99,6 +99,9 @@ public class HeartbeatMonitor implements Runnable {
                         if (ctx.missedPongs >= MAX_MISSED) {
                             try {
                                 debug(1, "Closing unresponsive peer " + peerID);
+
+                                // Don't notify addressing server here, let ChatServer.closeConnection handle it
+
                                 key.cancel();
                                 ctx.socketChannel.close();
                                 peerMap.remove(peerID);

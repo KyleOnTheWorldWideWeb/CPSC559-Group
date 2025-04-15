@@ -13,6 +13,10 @@ import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.MessageTypes;
+import io.github.cpsc559.team16.common.messaging.ServerFailureMessage;
+import io.github.cpsc559.team16.common.messaging.Roles;
+import io.github.cpsc559.team16.common.messaging.ObjectTypes;
 
 /**
  * Handles all incoming messages from the Addressing Server.
@@ -101,6 +105,8 @@ class AddressingServerHandler implements ConnectionHandler {
                 handleAck(message, ctx, key);
             } else if ("UPDATE".equalsIgnoreCase(type) && "ChatServerRecord".equalsIgnoreCase(objectType)) {
                 handleUpdate(message, ctx, key);
+            } else if (MessageTypes.SERVERFAILURE.equals(type) && ObjectTypes.CHATSERVER_FAILURE.equals(objectType)) {
+                handleServerFailure(message, ctx, key);
             } else {
                 debug(DEBUG_NORMAL, "[ADDR_SERVER] Unhandled message — type: " + type + ", objectType: " + objectType);
             }
@@ -114,7 +120,7 @@ class AddressingServerHandler implements ConnectionHandler {
     /**
      * Handles registration acknowledgment (ACK) messages from the Addressing
      * Server.
-     * Sets the server’s assigned PID, initializes the local chat log, and signals
+     * Sets the server's assigned PID, initializes the local chat log, and signals
      * registration success.
      *
      * @param message the ACK message containing the assigned PID
@@ -124,8 +130,10 @@ class AddressingServerHandler implements ConnectionHandler {
     private void handleAck(BaseAddrServerMessage<?> message, ConnectionContext ctx, SelectionKey key) {
         debug(DEBUG_NORMAL, "[ADDR_SERVER] Handling ACK...");
 
-        try { // NOTE: Please try to use the AckObjectTypes and MessageTypes and ObjectTypes declared in the Messaging module
-            // This helps ensure there are no runtime errors due to syntax errors. It also helps with readability IMO.
+        try { // NOTE: Please try to use the AckObjectTypes and MessageTypes and ObjectTypes
+              // declared in the Messaging module
+              // This helps ensure there are no runtime errors due to syntax errors. It also
+              // helps with readability IMO.
             if (!AckObjectTypes.REGISTERED.equals(message.getObjectType())) {
                 debug(DEBUG_BASIC, "[ADDR_SERVER] Ignoring ACK with objectType: " + message.getObjectType());
                 return;
@@ -194,6 +202,124 @@ class AddressingServerHandler implements ConnectionHandler {
 
         } catch (Exception e) {
             debug(DEBUG_BASIC, "[ADDR_SERVER] Failed to handle UPDATE: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Processes server failure notifications received from the Addressing Server.
+     * <p>
+     * This method handles SERVERFAILURE messages with object type
+     * CHATSERVER_FAILURE, which
+     * are sent by the Addressing Server when a chat server has been detected as
+     * failed.
+     * It extracts the failed peer's PID from the message payload and removes it
+     * from
+     * the local peer connections.
+     * </p>
+     *
+     * @param message the SERVERFAILURE message containing the failed peer's PID
+     * @param ctx     connection context
+     * @param key     NIO selector key
+     */
+    private void handleServerFailure(BaseAddrServerMessage<?> message, ConnectionContext ctx, SelectionKey key) {
+        debug(DEBUG_NORMAL, "[ADDR_SERVER] Handling SERVERFAILURE for CHATSERVER_FAILURE...");
+
+        try {
+            Long failedPeerPID = message.safeCastPayload(Long.class);
+            if (failedPeerPID == null) {
+                debug(DEBUG_BASIC, "[ADDR_SERVER] Failed to extract PID from SERVERFAILURE message");
+                return;
+            }
+
+            int failedPeerId = failedPeerPID.intValue();
+
+            // Remove the failed peer from our connected peers
+            if (ChatServer.getConnectedPeers().containsKey(failedPeerId)) {
+                debug(DEBUG_BASIC, "[ADDR_SERVER] Removing failed peer with ID: " + failedPeerId);
+                ChatServer.getConnectedPeers().remove(failedPeerId);
+
+                // If there's an active connection to this peer, close it
+                for (SelectionKey peerKey : ChatServer.getSelector().keys()) {
+                    if (!peerKey.isValid())
+                        continue;
+
+                    ConnectionContext peerCtx = (ConnectionContext) peerKey.attachment();
+                    if (peerCtx != null && peerCtx.type == ChatServer.ConnectionType.SERVER
+                            && peerCtx.peerID == failedPeerId) {
+                        debug(DEBUG_NORMAL, "[ADDR_SERVER] Closing connection to failed peer: " + failedPeerId);
+                        try {
+                            peerKey.cancel();
+                            peerKey.channel().close();
+                        } catch (Exception e) {
+                            debug(DEBUG_BASIC, "[ADDR_SERVER] Error closing peer connection: " + e.getMessage());
+                        }
+                        break;
+                    }
+                }
+            } else {
+                debug(DEBUG_NORMAL, "[ADDR_SERVER] No connection found for failed peer ID: " + failedPeerId);
+            }
+
+        } catch (Exception e) {
+            debug(DEBUG_BASIC, "[ADDR_SERVER] Failed to handle SERVERFAILURE: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Notifies the Addressing Server about a peer server crash.
+     * <p>
+     * This method is called when a peer is detected as unresponsive or has
+     * disconnected unexpectedly.
+     * It sends a message to the Addressing Server indicating which peer has
+     * crashed, so that the
+     * Addressing Server can update its registry and potentially notify other peers.
+     * </p>
+     *
+     * @param crashedPeerId the ID of the peer that has crashed
+     */
+    public void notifyPeerCrash(int crashedPeerId) {
+        try {
+            debug(DEBUG_NORMAL, "[ADDR_SERVER] Preparing crash notification for peer ID: " + crashedPeerId);
+
+            // Create a Standardized ServerFailureMessage using the factory method
+            ServerFailureMessage<Long> crashMessage = ServerFailureMessage.chatServerFailed(
+                    ChatServer.getID(), // Sender PID
+                    Roles.CHATSERVER, // Sender Role
+                    Roles.PRIMARY, // Target Role
+                    (long) crashedPeerId // Failed Peer ID (cast to Long)
+            );
+
+            String json = crashMessage.toJson() + "\n";
+
+            // Find the addressing server connection
+            for (SelectionKey key : ChatServer.getSelector().keys()) {
+                if (!key.isValid())
+                    continue;
+
+                ConnectionContext ctx = (ConnectionContext) key.attachment();
+                if (ctx != null && ctx.type == ChatServer.ConnectionType.ADDRESSING_SERVER) {
+                    // Queue the message to be sent
+                    synchronized (ctx.writeQueue) {
+                        ctx.writeQueue
+                                .add(java.nio.ByteBuffer.wrap(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    }
+
+                    // Ensure OP_WRITE is set to trigger a write operation
+                    key.interestOps(key.interestOps() | java.nio.channels.SelectionKey.OP_WRITE);
+                    key.selector().wakeup();
+
+                    debug(DEBUG_BASIC, "[ADDR_SERVER] Sent SERVERFAILURE message for peer " + crashedPeerId
+                            + " to Addressing Server");
+                    return;
+                }
+            }
+
+            debug(DEBUG_BASIC, "[ADDR_SERVER] No connection to Addressing Server found to notify about crashed peer");
+        } catch (Exception e) {
+            debug(DEBUG_BASIC,
+                    "[ADDR_SERVER] Failed to notify Addressing Server about crashed peer: " + e.getMessage());
             e.printStackTrace();
         }
     }

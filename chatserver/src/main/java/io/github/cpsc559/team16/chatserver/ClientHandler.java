@@ -161,7 +161,7 @@ class ClientHandler implements ConnectionHandler {
      * avoid reprocessing.</li>
      * <li>Valid messages are:
      * <ul>
-     * <li>Appended to the server’s {@link ChatLog}</li>
+     * <li>Appended to the server's {@link ChatLog}</li>
      * <li>Broadcast to all connected clients</li>
      * <li>Gossiped to one closest peer for propagation</li>
      * <li>Message ID is cached to prevent future duplication</li>
@@ -172,7 +172,7 @@ class ClientHandler implements ConnectionHandler {
      * @param message the incoming message object, expected to be of type
      *                {@link ClientServerMessage}
      * @param ctx     the connection context for the client
-     * @param key     the selector key associated with the client’s socket channel
+     * @param key     the selector key associated with the client's socket channel
      */
 
     public void handle(BaseMessage message, ConnectionContext ctx, SelectionKey key) {
@@ -201,6 +201,9 @@ class ClientHandler implements ConnectionHandler {
                 debug(DEBUG_BASIC, "[REGISTER] User registered: " + desiredUsername);
                 WriteUtils.enqueueResponse(ctx, key, msg.toJson() + "\n");
                 key.selector().wakeup();
+
+                // Notify addressing server about new client connection
+                ChatServer.notifyAddressingServerClientCount();
                 return;
 
             } catch (IOException e) {
@@ -326,15 +329,28 @@ class ClientHandler implements ConnectionHandler {
     }
 
     /**
+     * Returns the current count of registered usernames (active clients).
+     * <p>
+     * This method is used to monitor server load and report client counts to
+     * the Addressing Server for load balancing purposes.
+     * </p>
+     *
+     * @return the number of currently registered clients
+     */
+    public static int getRegisteredUsernameCount() {
+        return registeredUsernames.size();
+    }
+
+    /**
      * Sends an error message to the client with the given message content.
      * <p>
      * Constructs a {@link ClientServerMessage} with the sender set to the server,
      * recipient set to the client, a dummy ID of {@code -1}, and the error message
-     * prefixed with {@code ERROR:}. The message’s command is explicitly set to
+     * prefixed with {@code ERROR:}. The message's command is explicitly set to
      * {@code ERROR}.
      * </p>
      * <p>
-     * The message is serialized to JSON, added to the client’s write queue,
+     * The message is serialized to JSON, added to the client's write queue,
      * and the selector is woken up to ensure it is sent promptly.
      * </p>
      *
@@ -361,7 +377,7 @@ class ClientHandler implements ConnectionHandler {
      * <p>
      * This method is used to propagate client messages across the server network by
      * forwarding
-     * them to a subset of peer servers selected as the “closest” based on PID
+     * them to a subset of peer servers selected as the "closest" based on PID
      * ordering.
      * It supports partial replication to reduce network overhead while maintaining
      * redundancy.
@@ -373,7 +389,7 @@ class ClientHandler implements ConnectionHandler {
      * servers.</li>
      * <li>Uses {@link #getValidatedClosestPeers(int)} to select up to {@code n}
      * closest peers.</li>
-     * <li>Iterates through the selector keys to find each peer’s
+     * <li>Iterates through the selector keys to find each peer's
      * {@link SelectionKey} and confirms the channel is open.</li>
      * <li>For each valid target, the message is serialized and added to its write
      * queue via {@link WriteUtils#enqueueResponse}.</li>
@@ -382,7 +398,7 @@ class ClientHandler implements ConnectionHandler {
      * </ul>
      *
      * <p>
-     * If a peer’s connection context or selector key is missing or invalid, that
+     * If a peer's connection context or selector key is missing or invalid, that
      * peer is skipped.
      * This function tolerates transient failures and does not retry failed gossip
      * attempts.
@@ -427,7 +443,7 @@ class ClientHandler implements ConnectionHandler {
      * refreshing the cached list.
      * <p>
      * The method selects {@code n} closest peer servers based on the current
-     * server’s Process ID (PID).
+     * server's Process ID (PID).
      * It uses a cached list of closest peers for performance but will refresh the
      * cache if:
      * <ul>
@@ -445,8 +461,8 @@ class ClientHandler implements ConnectionHandler {
      * <li>Checks if the cache needs to be refreshed based on the TTL or changes in
      * the connected peers.</li>
      * <li>If refresh is needed, creates a new list of peers, sorts them by PID, and
-     * adds the current server’s PID.</li>
-     * <li>Excludes the server’s own PID from the list and selects up to {@code n}
+     * adds the current server's PID.</li>
+     * <li>Excludes the server's own PID from the list and selects up to {@code n}
      * closest peers.</li>
      * <li>Updates the cache and records the timestamp of the last refresh.</li>
      * <li>If the cache is valid, returns the cached list of closest peers.</li>

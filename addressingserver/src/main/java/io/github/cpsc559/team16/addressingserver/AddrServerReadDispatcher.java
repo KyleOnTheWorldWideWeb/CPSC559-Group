@@ -147,14 +147,16 @@ public class AddrServerReadDispatcher {
         }
     }
 
-
     private void handleReplicationAck(BaseAddrServerMessage<?> ackMessage) {
         // The payload is a boolean - True if the message this ACK is for was
         // successfully processed.
         if (ackMessage.safeCastPayload(Boolean.class)) {
-            //System.out.println("Replicated ACK received, success? " + ackMessage.safeCastPayload(Boolean.class));
-            // The messageID of this ackMessage is the same unique message ID as the message that triggered it.
-            // This is how we know if a message sent has been successfully received and processed.
+            // System.out.println("Replicated ACK received, success? " +
+            // ackMessage.safeCastPayload(Boolean.class));
+            // The messageID of this ackMessage is the same unique message ID as the message
+            // that triggered it.
+            // This is how we know if a message sent has been successfully received and
+            // processed.
             Long eventID = ackMessage.getMessageID(); // adjust extraction as needed
             Long replicaPID = ackMessage.getSenderPID();
             System.out.printf("Primary has received ACK for message ID: %d - from Replica with PID: %d%n", eventID,
@@ -171,11 +173,13 @@ public class AddrServerReadDispatcher {
             if (senderChannel != null) {
                 this.server.getCleanupManager().cleanupPersistentConnection(senderChannel.getSocketChannel(), true);
             }
-        }
-        else {
-            // We already handle retries with PendingEventWatchdog. This is here largely in case our code grew and we
-            // end up in the situation where we need to send an ACK indicating failure. Currently we don't do that, because
-            // there are no cases where a failure to process an update from the AddressingServer occurs/matters.
+        } else {
+            // We already handle retries with PendingEventWatchdog. This is here largely in
+            // case our code grew and we
+            // end up in the situation where we need to send an ACK indicating failure.
+            // Currently we don't do that, because
+            // there are no cases where a failure to process an update from the
+            // AddressingServer occurs/matters.
         }
     }
 
@@ -446,16 +450,18 @@ public class AddrServerReadDispatcher {
      * @param channel The channel from which the message originated.
      * @param message The received server failure message.
      */
-    private void handleServerFailure(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        System.out.printf("Handling failure message. MsgType: %s | ObjectType: %s | MsgID: %d | SenderRole: %s | FailedPID: %d%n.",
-                message.getMsgType(), message.getObjectType(), message.getMessageID(), message.getSenderRole(), message.safeCastPayload(Long.class));
+    private void handleServerFailure(SocketChannel channel, NIOMessageChannel nioChannel,
+            BaseAddrServerMessage<?> message) {
+        System.out.printf(
+                "Handling failure message. MsgType: %s | ObjectType: %s | MsgID: %d | SenderRole: %s | FailedPID: %d%n.",
+                message.getMsgType(), message.getObjectType(), message.getMessageID(), message.getSenderRole(),
+                message.safeCastPayload(Long.class));
         if (message.getSenderRole().equals(Roles.PRIMARY)) {
             Long failedPID = message.safeCastPayload(Long.class);
             System.out.println("Replica received ServerFailure message for network PID: " + failedPID);
             this.replicaCoordinator.processFailureMessageSendAck(message, nioChannel,
                     this.getPID(), this.cleanupManager, failedPID);
-        }
-        else {
+        } else {
             String serverType = message.getObjectType();
             Long failedPID = message.safeCastPayload(Long.class);
             if (serverType.equals(ObjectTypes.ADDRSERVER_FAILURE)) {
@@ -463,18 +469,16 @@ public class AddrServerReadDispatcher {
                 if (failedChannel != null) {
                     // Sync state with replicas and then remove and broadcast to chat servers
                     cleanupManager.cleanupPersistentConnection(failedChannel, true);
-                }
-                else {
+                } else {
                     server.getAddrServerRegistry().removeRecordByKey(failedPID);
                 }
-            }
-            else if (serverType.equals(ObjectTypes.CHATSERVER_FAILURE)) {
+            } else if (serverType.equals(ObjectTypes.CHATSERVER_FAILURE)) {
                 SocketChannel failedChannel = this.chatServerManager.getChannelByPID(failedPID);
                 if (failedChannel != null) {
+                    System.out.println("going to cleanup");
                     // Sync state with replicas and then remove and broadcast to chat servers
                     cleanupManager.cleanupPersistentConnection(failedChannel, true);
-                }
-                else {
+                } else {
                     server.getChatServerRegistry().removeRecordByKey(failedPID);
                 }
 
@@ -482,18 +486,18 @@ public class AddrServerReadDispatcher {
 
         }
 
-//        switch (message.getObjectType()) {
-//            case ObjectTypes.ADDRSERVER_FAILURE -> {
-//                Long failedPID = message.safeCastPayload(Long.class);
-//                this.replicaCoordinator.processFailureMessageSendAck(message, nioChannel,
-//                        this.getPID(), this.cleanupManager, failedPID);
-//            }
-//            case ObjectTypes.CHATSERVER_FAILURE -> {
-//                Long failedPID = message.safeCastPayload(Long.class);
-//                chatServerManager.removeFailedChatServer(failedPID);
-//                this.server.getChatServerRegistry().debugPrintAllServers();
-//            }
-//        }
+        // switch (message.getObjectType()) {
+        // case ObjectTypes.ADDRSERVER_FAILURE -> {
+        // Long failedPID = message.safeCastPayload(Long.class);
+        // this.replicaCoordinator.processFailureMessageSendAck(message, nioChannel,
+        // this.getPID(), this.cleanupManager, failedPID);
+        // }
+        // case ObjectTypes.CHATSERVER_FAILURE -> {
+        // Long failedPID = message.safeCastPayload(Long.class);
+        // chatServerManager.removeFailedChatServer(failedPID);
+        // this.server.getChatServerRegistry().debugPrintAllServers();
+        // }
+        // }
     }
 
     /**
@@ -507,6 +511,30 @@ public class AddrServerReadDispatcher {
         switch (message.getObjectType()) {
             case ObjectTypes.ELECTION_VOTE -> {
 
+            }
+            case ObjectTypes.CLIENT_COUNT -> {
+                try {
+                    // Get data directly from the BaseAddrServerMessage without casting to
+                    // NotificationMessage
+                    long chatServerId = message.getSenderPID();
+                    Integer clientCount = message.safeCastPayload(Integer.class);
+
+                    // Update the client count in the registry
+                    synchronized (server.getChatServerRegistry()) {
+                        ChatServerRecord record = server.getChatServerRegistry().getRecords().get(chatServerId);
+                        if (record != null) {
+                            record.setClientCount(clientCount);
+                            System.out.println("Updated client count for " + chatServerId + " to " + clientCount);
+                            // Broadcast the updated record to all connected AddressingServers
+                            broadcastManager.broadcastChatServerRecord(this.getPID(), record);
+                        } else {
+                            System.err.println("Received client count update for unknown chat server: " + chatServerId);
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error processing CLIENT_COUNT notification: " + e.getMessage());
+                    e.printStackTrace();
+                }
             }
             default -> System.err.println("Unknown notification message received and ignored.");
         }
