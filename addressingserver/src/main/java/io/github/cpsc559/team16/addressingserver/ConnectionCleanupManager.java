@@ -133,11 +133,14 @@ public class ConnectionCleanupManager {
                     if (chatServerManager.getChannels().containsKey(channel)) {
                         // Create Pending event here
                         // Get the list of all NIOMessage channels for registered peers (non-zero PID)
-                        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
+                        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMapNoFailedPID(failedPID);
+                        for(Long pid : replicaChannelMap.keySet()) {
+                            System.out.println("PID for the PendingEvent replica = " + pid);
+                        }
                         // Create unique message ID that will be used to track ACK messages as well as the pending event.
                         long messageID = genMID.nextID();
                         // Create a new event that will trigger once all ACKs for synchronizing state have been received
-                        ServerFailureMessage<Long> msg = this.getFailureMessage(primaryPID, failedPID, Roles.CHATSERVER);
+                        ServerFailureMessage<Long> msg = this.getFailureMessage(messageID, primaryPID, failedPID, Roles.CHATSERVER);
                         // Create a new event that will trigger once all ACKs for synchronizing state have been received.
                         PendingEvent event = this.createChatServerDeregistrationEvent(
                                 msg, channel, replicaChannelMap, primaryPID, failedPID, Roles.CHATSERVER);
@@ -150,11 +153,14 @@ public class ConnectionCleanupManager {
 
                         // Create Pending event here
                         // Get the list of all NIOMessage channels for registered peers (non-zero PID)
-                        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
+                        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMapNoFailedPID(failedPID);
                         // Create unique message ID that will be used to track ACK messages as well as the pending event.
                         long messageID = genMID.nextID();
                         // Create a new event that will trigger once all ACKs for synchronizing state have been received
-                        ServerFailureMessage<Long> msg = this.getFailureMessage(primaryPID, failedPID, Roles.REPLICA);
+                        ServerFailureMessage<Long> msg = this.getFailureMessage(messageID, primaryPID, failedPID, Roles.REPLICA);
+                        for(Long pid : replicaChannelMap.keySet()) {
+                            System.out.println("PID for the PendingEvent replica = " + pid);
+                        }
                         // Create a new event that will trigger once all ACKs for synchronizing state have been received.
                         PendingEvent event = this.createReplicaDeregistrationEvent(
                                 msg, channel, replicaChannelMap, primaryPID, failedPID, Roles.REPLICA);
@@ -208,11 +214,14 @@ public class ConnectionCleanupManager {
                     if (chatServerManager.getChannels().containsKey(channel)) {
                         // Create Pending event here
                         // Get the list of all NIOMessage channels for registered peers (non-zero PID)
-                        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
+                        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMapNoFailedPID(failedPID);
+                        for(Long pid : replicaChannelMap.keySet()) {
+                            System.out.println("PID for the PendingEvent replica = " + pid);
+                        }
                         // Create unique message ID that will be used to track ACK messages as well as the pending event.
                         long messageID = genMID.nextID();
                         // Create a new event that will trigger once all ACKs for synchronizing state have been received
-                        ServerFailureMessage<Long> msg = this.getFailureMessage(primaryPID, failedPID, Roles.CHATSERVER);
+                        ServerFailureMessage<Long> msg = this.getFailureMessage(messageID, primaryPID, failedPID, Roles.CHATSERVER);
                         // Create a new event that will trigger once all ACKs for synchronizing state have been received.
                         PendingEvent event = this.createChatServerDeregistrationEvent(
                                         msg, channel, replicaChannelMap, primaryPID, failedPID, Roles.CHATSERVER);
@@ -225,11 +234,14 @@ public class ConnectionCleanupManager {
 
                         // Create Pending event here
                         // Get the list of all NIOMessage channels for registered peers (non-zero PID)
-                        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
+                        Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMapNoFailedPID(failedPID);
+                        for(Long pid : replicaChannelMap.keySet()) {
+                            System.out.println("PID for the PendingEvent replica = " + pid);
+                        }
                         // Create unique message ID that will be used to track ACK messages as well as the pending event.
                         long messageID = genMID.nextID();
                         // Create a new event that will trigger once all ACKs for synchronizing state have been received
-                        ServerFailureMessage<Long> msg = this.getFailureMessage(primaryPID, failedPID, Roles.REPLICA);
+                        ServerFailureMessage<Long> msg = this.getFailureMessage(messageID, primaryPID, failedPID, Roles.REPLICA);
                         // Create a new event that will trigger once all ACKs for synchronizing state have been received.
                         PendingEvent event = this.createReplicaDeregistrationEvent(
                                 msg, channel, replicaChannelMap, primaryPID, failedPID, Roles.REPLICA);
@@ -258,13 +270,13 @@ public class ConnectionCleanupManager {
     }
 
 
-    private ServerFailureMessage<Long> getFailureMessage(Long senderPID, Long failedPID, String failedServerRole) {
+    private ServerFailureMessage<Long> getFailureMessage(Long messageID, Long senderPID, Long failedPID, String failedServerRole) {
         // Create the message with the proper {@code ObjectType} so the receiver knows which kind of record/connection to remove.
         ServerFailureMessage<Long> message;
         if (failedServerRole.equals(Roles.CHATSERVER)) {
-            message = ServerFailureMessage.chatServerFailed(senderPID, Roles.PRIMARY, failedServerRole, failedPID);
+            message = ServerFailureMessage.chatServerFailed(messageID, senderPID, Roles.PRIMARY, failedServerRole, failedPID);
         } else {    // It's an addressing server (REPLICA or PRIMARY)
-            message = ServerFailureMessage.addrServerFailed(senderPID, Roles.PRIMARY, failedServerRole, failedPID);
+            message = ServerFailureMessage.addrServerFailed(messageID, senderPID, Roles.PRIMARY, failedServerRole, failedPID);
         }
         return message;
     }
@@ -299,7 +311,9 @@ public class ConnectionCleanupManager {
         }
         // Send the message to each addressing server in the network. If a failure occurs, handle removing the process appropriately.
         for (NIOMessageChannel nioChannel : peerManager.getChannels().values()) {
+            if (nioChannel.getServerPID().equals(failedPID)) continue;
             try {
+                System.out.println("Sending failure message to replica with PID: " + nioChannel.getServerPID());
                 nioChannel.sendMessage(jsonMessage);
             } catch (IOException ioe) {
                 System.err.printf("Failed to send ServerFailureMessage<%s> on peer channel (remote PID: %s): %s%n",
@@ -344,6 +358,7 @@ public class ConnectionCleanupManager {
         }
         // Send the message to each chat server in the network. If a failure occurs, handle removing the process appropriately.
         for (NIOMessageChannel nioChannel : chatServerManager.getChannels().values()) {
+            if (nioChannel.getServerPID().equals(failedPID)) continue;
             try {
                 nioChannel.sendMessage(jsonMessage);
             } catch (IOException ioe) {

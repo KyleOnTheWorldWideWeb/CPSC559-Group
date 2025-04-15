@@ -109,10 +109,8 @@ public class ChatServerManager {
                 removeProcessCloseConnection(channel);
                 return;
             }
-            else {
-                this.registry.removeRecordByKey(failedPID);
-            }
         }
+        this.registry.removeRecordByKey(failedPID);
     }
 
 
@@ -252,5 +250,29 @@ public class ChatServerManager {
         }
         return registered;
     }
+
+
+    /**
+     * Retrieves the {@link SocketChannel} associated with a specific server PID.
+     * <p>
+     * This method iterates over the internal channel map and returns the first {@code SocketChannel}
+     * whose associated {@link NIOMessageChannel} has a matching {@code serverPID}. If no such entry
+     * is found, it returns {@code null}.
+     * </p>
+     *
+     * @param pid the process ID of the server to look for.
+     * @return the matching {@code SocketChannel}, or {@code null} if no match is found.
+     */
+    public SocketChannel getChannelByPID(Long pid) {
+        if (pid != null) {
+            for (Map.Entry<SocketChannel, NIOMessageChannel> entry : chatServerChannels.entrySet()) {
+                if (entry.getValue().getServerPID().equals(pid)) {
+                    return entry.getKey();
+                }
+            }
+        }
+        return null;
+    }
+
 
 }

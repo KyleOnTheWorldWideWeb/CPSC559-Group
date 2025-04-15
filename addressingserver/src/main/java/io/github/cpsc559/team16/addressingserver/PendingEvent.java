@@ -57,6 +57,15 @@ public class PendingEvent {
     /** The time this {@code PendingEvent} was created (used for timeout tracking). */
     private final long creationTime;
 
+    private long lastRetryTime;
+
+    public void updateLastRetryTime() {
+        this.lastRetryTime = System.currentTimeMillis();
+    }
+    public long getLastRetryTime() {
+        return lastRetryTime;
+    }
+
 
     /**
      * Constructs a {@code PendingEvent} without requiring a broadcast message.
@@ -76,6 +85,7 @@ public class PendingEvent {
         this.requestChannel = requestChannel;
         this.onComplete = onComplete;
         this.creationTime = System.currentTimeMillis();
+        this.lastRetryTime = System.currentTimeMillis();
         this.maxIterations = maxIterations;
         this.requestMessageID = requestMessageID;
     }
@@ -97,6 +107,7 @@ public class PendingEvent {
         this.requestChannel = null;
         this.onComplete = onComplete;
         this.creationTime = System.currentTimeMillis();
+        this.lastRetryTime = System.currentTimeMillis();
         this.maxIterations = maxIterations;
         this.requestMessageID = 0L;
     }

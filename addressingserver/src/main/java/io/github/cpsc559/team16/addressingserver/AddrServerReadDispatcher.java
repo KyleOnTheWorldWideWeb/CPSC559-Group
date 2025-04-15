@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import java.io.IOException;
+import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -123,11 +124,10 @@ public class AddrServerReadDispatcher {
     }
 
 
-    // Example: In handleAck (or a new case for replication acknowledgments), delegate to replicationManager.
     private void handleReplicationAck(BaseAddrServerMessage<?> ackMessage) {
         // The payload is a boolean - True if the message this ACK is for was successfully processed.
         if (ackMessage.safeCastPayload(Boolean.class)) {
-            System.out.println("Replicated ACK received, success? " + ackMessage.safeCastPayload(Boolean.class));
+            //System.out.println("Replicated ACK received, success? " + ackMessage.safeCastPayload(Boolean.class));
             // The messageID of this ackMessage is the same unique message ID as the message that triggered it.
             // This is how we know if a message sent has been successfully received and processed.
             Long eventID = ackMessage.getMessageID(); // adjust extraction as needed
@@ -378,9 +378,41 @@ public class AddrServerReadDispatcher {
      * @param message The received server failure message.
      */
     private void handleServerFailure(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
-        Long failedPID = message.safeCastPayload(Long.class);
-        this.replicaCoordinator.processFailureMessageSendAck(message, nioChannel,
-                this.getPID(), this.cleanupManager, failedPID);
+        System.out.printf("Handling failure message. MsgType: %s | ObjectType: %s | MsgID: %d | SenderRole: %s | FailedPID: %d%n.",
+                message.getMsgType(), message.getObjectType(), message.getMessageID(), message.getSenderRole(), message.safeCastPayload(Long.class));
+        if (message.getSenderRole().equals(Roles.PRIMARY)) {
+            Long failedPID = message.safeCastPayload(Long.class);
+            System.out.println("Replica received ServerFailure message for network PID: " + failedPID);
+            this.replicaCoordinator.processFailureMessageSendAck(message, nioChannel,
+                    this.getPID(), this.cleanupManager, failedPID);
+        }
+        else {
+            String serverType = message.getObjectType();
+            Long failedPID = message.safeCastPayload(Long.class);
+            if (serverType.equals(ObjectTypes.ADDRSERVER_FAILURE)) {
+                SocketChannel failedChannel = this.peerManager.getSocketChannelByPID(failedPID);
+                if (failedChannel != null) {
+                    // Sync state with replicas and then remove and broadcast to chat servers
+                    cleanupManager.cleanupPersistentConnection(failedChannel, true);
+                }
+                else {
+                    server.getAddrServerRegistry().removeRecordByKey(failedPID);
+                }
+            }
+            else if (serverType.equals(ObjectTypes.CHATSERVER_FAILURE)) {
+                SocketChannel failedChannel = this.chatServerManager.getChannelByPID(failedPID);
+                if (failedChannel != null) {
+                    // Sync state with replicas and then remove and broadcast to chat servers
+                    cleanupManager.cleanupPersistentConnection(failedChannel, true);
+                }
+                else {
+                    server.getChatServerRegistry().removeRecordByKey(failedPID);
+                }
+
+            }
+
+        }
+
 //        switch (message.getObjectType()) {
 //            case ObjectTypes.ADDRSERVER_FAILURE -> {
 //                Long failedPID = message.safeCastPayload(Long.class);

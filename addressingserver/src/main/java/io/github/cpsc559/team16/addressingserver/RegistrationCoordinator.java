@@ -110,6 +110,7 @@ public class RegistrationCoordinator {
 //            cleanupManager.cleanupPersistentConnection(channel, true);
 //            return;
 //        }
+        record.setPID(newPID);
         // If there are no other Replica addressing servers, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerChatServerNoReplicasExist(primaryPID, newPID, channel, nioChannel, record);
@@ -376,6 +377,7 @@ public class RegistrationCoordinator {
 //            cleanupManager.cleanupPersistentConnection(channel, true);
 //            return;
 //        }
+        record.setPID(newPID);
         // If this is the first and only replica, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerFirstReplicaServer(primaryPID, newPID, channel, nioChannel, record);

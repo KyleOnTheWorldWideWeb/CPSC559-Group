@@ -70,7 +70,7 @@ public class ReplicaSyncCoordinator {
         PendingEvent event = pendingEvents.get(messageID);
         if (event != null) {
             // DEBUG
-            System.out.println("ACK received from network process with PID: " + recipientPID);
+            System.out.println("ACK received from network process with PID: " + recipientPID + " for message type: " + event.getMessageRequiringACK().getMsgType());
             event.removePendingRecipient(recipientPID);
             if (event.isComplete()) {
                 pendingEvents.remove(messageID);

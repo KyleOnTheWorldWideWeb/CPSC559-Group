@@ -95,6 +95,17 @@ public class PeerManager {
         return registered;
     }
 
+    public ConcurrentHashMap<Long, NIOMessageChannel> getRegisteredReplicaChannelMapNoFailedPID(Long failedPID) {
+        ConcurrentHashMap<Long, NIOMessageChannel> registered = new ConcurrentHashMap<>();
+        for (NIOMessageChannel ch : peerChannels.values()) {
+            Long pid = ch.getServerPID();
+            if (pid != 0L && pid != failedPID) {
+                registered.put(pid, ch);
+            }
+        }
+        return registered;
+    }
+
 
     /**
      * The registry containing all known {@code AddrServerRecord} entries,
@@ -205,10 +216,8 @@ public class PeerManager {
                 removeProcessCloseConnection(channel);
                 return;
             }
-            else {
-                this.registry.removeRecordByKey(failedPID);
-            }
         }
+        this.registry.removeRecordByKey(failedPID);
     }
 
     /**
@@ -414,6 +423,30 @@ public class PeerManager {
         }
         return null;
     }
+
+    /**
+     * Retrieves the {@link SocketChannel} associated with a specific server PID.
+     * <p>
+     * This method iterates over the internal channel map and returns the first {@code SocketChannel}
+     * whose associated {@link NIOMessageChannel} has a matching {@code serverPID}. If no such entry
+     * is found, it returns {@code null}.
+     * </p>
+     *
+     * @param pid the process ID of the server to look for.
+     * @return the matching {@code SocketChannel}, or {@code null} if no match is found.
+     */
+    public SocketChannel getSocketChannelByPID(Long pid) {
+        if (pid != null) {
+            for (Map.Entry<SocketChannel, NIOMessageChannel> entry : peerChannels.entrySet()) {
+                if (entry.getValue().getServerPID().equals(pid)) {
+                    return entry.getKey();
+                }
+            }
+        }
+        return null;
+    }
+
+
 
 //    /**
 //     * Updates the provided {@link AddrServerRecord} with runtime information from the given socket connection and PID.
