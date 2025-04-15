@@ -17,7 +17,19 @@ public class AddressingServer {
     /**
      * The port reserved for peer connections on the Primary Addressing server
      */
-    private final static int PRIMARY_PEER_PORT = 49801;
+    private static int PRIMARY_PEER_PORT;
+
+    public void setPrimaryPeerPort(int port) {
+        PRIMARY_PEER_PORT = port;
+    }
+
+    /**
+     * The address of the Primary Addressing server
+     */
+    private static String PRIMARY_HOST_ADDRESS;
+    public void setPrimaryHostAddress(String address) {
+        PRIMARY_HOST_ADDRESS = address;
+    }
 
     /**
      * Indicates whether the server has been instructed to restart. Typically used after an orphaned or failed
@@ -42,6 +54,7 @@ public class AddressingServer {
      */
     public void requestRestart() {
         this.restartRequested = true;
+        shutdown();
     }
 
     /**
@@ -281,6 +294,15 @@ public class AddressingServer {
     private final AddrServerNetworkManager networkManager;
 
     /**
+     * Retrieves the AddrServerNetworkManager instance for this AddressingServer.
+     *
+     * @return the AddrServerNetworkManager used for network operations.
+     */
+    public AddrServerNetworkManager getNetworkManager() {
+        return networkManager;
+    }
+
+    /**
      * The {@code MessageIDGenerator} instance used by this server to produce globally unique message IDs.
      * <p>
      * This generator ensures that every message requiring acknowledgment or ordering has a distinct identifier,
@@ -383,8 +405,8 @@ public class AddressingServer {
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
         this.clientManager = new ClientManager(chatServerRegistry);
 
-        this.addrServerRegistry = new AddrServerRegistry();
-        this.peerManager = new PeerManager(addrServerRegistry);
+        this.addrServerRegistry = new AddrServerRegistry(this);
+        this.peerManager = new PeerManager(this);
 
         this.cleanupManager = new ConnectionCleanupManager(peerManager, chatServerManager, genMID);
         this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
@@ -490,7 +512,7 @@ public class AddressingServer {
      */
     public void registerReplicaAddrServer() throws IOException {
         Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
-                System.getenv("HOST_ADDRESS"), PRIMARY_PEER_PORT,
+                PRIMARY_HOST_ADDRESS, PRIMARY_PEER_PORT,
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
 
         if (maybeChannel.isEmpty()) {
@@ -504,7 +526,7 @@ public class AddressingServer {
 
             // TODO - Need to change this to dynamic port retrieval
             maybeChannel = peerManager.registerWithPrimary(
-                    System.getenv("HOST_ADDRESS"), PRIMARY_PEER_PORT,
+                    PRIMARY_HOST_ADDRESS, PRIMARY_PEER_PORT,
                     config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
         }
 
@@ -530,8 +552,8 @@ public class AddressingServer {
      * <p><a href="https://youtu.be/6ug6Bbc6diA?si=Empv4R9Wg6kdo1lD">"We do what we must, because we can"</a></p>
      */
     public void shutdown() {
-            networkManager.closeAllConnections();
-            pingManager.shutdown();
+        networkManager.requestShutdown();
+        pingManager.shutdown();
     }
 
 
@@ -543,6 +565,8 @@ public class AddressingServer {
      * </p>
      */
     public void start() throws IOException {
+        // new Thread(() -> pingManager.run()).start();
+
         networkManager.openListenerChannels(config.getClientPort(),
                 config.getReplicaPort(), config.getChatServerPort());
 
@@ -561,6 +585,9 @@ public class AddressingServer {
             System.err.println(e.getMessage());
         }
 
+        PRIMARY_PEER_PORT = Integer.parseInt(System.getenv("PRIMARY_PEER_PORT"));
+        PRIMARY_HOST_ADDRESS = System.getenv("HOST_ADDRESS");
+
         // Track whether this is the first time the loop has occurred.
         boolean firstIteration = true;
 
@@ -578,10 +605,12 @@ public class AddressingServer {
                     // TODO - retrieve the address of the primary addressing server from the Domain A record
                     server.registerReplicaAddrServer();
                 }
-//                // TODO - A thread(s) must be spun up for this method call.
-//                //  Since this invocation causes an infinite loop, the main thread will get hung up.
-//                //  And the Replica won't enter the main event loop and function as intended.
-//                //server.getPingManager().run();
+               // TODO - A thread(s) must be spun up for this method call.
+               //  Since this invocation causes an infinite loop, the main thread will get hung up.
+               //  And the Replica won't enter the main event loop and function as intended.
+                System.out.println("AddressingServer: Starting PingManager...");
+                new Thread(() -> server.getPingManager().run()).start();
+                System.out.println("AddressingServer: Started PingManager...");
 
                 try {
                     server.start();         // blocks in main event loop of AddrServerNetworkManager
@@ -596,7 +625,6 @@ public class AddressingServer {
                 }
 
                 System.out.println("Restart requested. Reinitializing as REPLICA...");
-                server.shutdown();
 
             } catch (IOException ioe) {
                 System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());

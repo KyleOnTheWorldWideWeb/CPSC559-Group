@@ -1,21 +1,25 @@
 package io.github.cpsc559.team16.addressingserver;
 
 // For thread management
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
-import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
-import io.github.cpsc559.team16.common.messaging.*;
-
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.channels.*;
-import java.util.Iterator;
-import java.util.function.Supplier;
-
+import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
+import io.github.cpsc559.team16.common.messaging.MessageTypes;
+import io.github.cpsc559.team16.common.messaging.Roles;
+import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
  * Manages the network interactions for the AddressingServer.
@@ -427,6 +431,7 @@ public class AddrServerNetworkManager {
 
         while (true) {
 
+            
             if (shutdownRequested) {
                 System.out.println("Shutdown signal received. Exiting the AddrServerNetworkManager main event loop.");
                 this.closeAllConnections();
@@ -445,172 +450,181 @@ public class AddrServerNetworkManager {
                     createReplicaRequestCoordinator();
                     replicaRequestCoordinator.start();
                 }
-            } else {
-                // TODO - move this to the leader takeover logic
-                shutdownCoordinatorRequest();
             }
 
-            // Any thread calling this method blocks until an event occurs on a channel
-            // registered with the `selector`.
-            selector.select();
+            try {
 
-            // Iterate through all keys (channels) that are "ready" for an I/O operation.
-            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+                // Any thread calling this method blocks until an event occurs on a channel
+                // registered with the `selector`.
+                selector.select(5000);
 
-            while (keys.hasNext()) {
-                SelectionKey key = keys.next();
-                keys.remove();
+                // Iterate through all keys (channels) that are "ready" for an I/O operation.
+                Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
 
-                if (!key.isValid())
-                    continue;
+                while (keys.hasNext()) {
+                    SelectionKey key = keys.next();
+                    keys.remove();
 
-                if (key.isAcceptable()) {
-                    ServerSocketChannel listenerSC = (ServerSocketChannel) key.channel();
-                    SocketChannel channel = listenerSC.accept();
-
-                    if (channel == null)
+                    if (!key.isValid())
                         continue;
 
-                    channel.configureBlocking(false); // switched to non-blocking
+                    if (key.isAcceptable()) {
+                        ServerSocketChannel listenerSC = (ServerSocketChannel) key.channel();
+                        SocketChannel channel = listenerSC.accept();
 
-                    if (listenerSC.equals(healthCheckListenerChannel)) {
-                        try {
-                            String response = this.config.getPID() + "\n";
-                            ByteBuffer buffer = ByteBuffer.wrap(response.getBytes());
-                            while (buffer.hasRemaining()) {
-                                channel.write(buffer);
+                        if (channel == null)
+                            continue;
+
+                        channel.configureBlocking(false); // switched to non-blocking
+
+                        if (listenerSC.equals(healthCheckListenerChannel)) {
+                            try {
+                                String response = this.config.getPID() + "\n";
+                                ByteBuffer buffer = ByteBuffer.wrap(response.getBytes());
+                                while (buffer.hasRemaining()) {
+                                    channel.write(buffer);
+                                }
+                                channel.close();
+                            } catch (IOException e) {
+                                System.err.println("Failed to respond to ping: " + e.getMessage());
                             }
-                            channel.close();
-                        } catch (IOException e) {
-                            System.err.println("Failed to respond to health check ping: " + e.getMessage());
+                            continue;
                         }
-                        continue;
+
+                        NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
+                        channel.register(selector, SelectionKey.OP_READ, nioChannel); // attach nioChannel for handshake
+                        selector.wakeup(); // ensure the selector sees the new registration
                     }
 
-                    NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
-                    channel.register(selector, SelectionKey.OP_READ, nioChannel); // attach nioChannel for handshake
-                    selector.wakeup(); // ensure the selector sees the new registration
-                }
+                    else if (key.isReadable()) {
+                        SocketChannel channel = (SocketChannel) key.channel();
 
-                else if (key.isReadable()) {
-                    SocketChannel channel = (SocketChannel) key.channel();
+                        Object attachment = key.attachment();
+                        NIOMessageChannel nioChannel;
 
-                    Object attachment = key.attachment();
-                    NIOMessageChannel nioChannel;
-
-                    // Case 1: this is a new connection in handshake phase (not persistent yet)
-                    if (attachment instanceof NIOMessageChannel) {
-                        nioChannel = (NIOMessageChannel) attachment;
-                        try {
-                            String firstMsg = nioChannel.receiveMessage();
-
-                            if (firstMsg == null) {
-                                System.err.println("Connection dropped: no initial message received.");
-                                channel.close();
-                                key.cancel();
-                                continue;
-                            }
-
-                            BaseAddrServerMessage<?> message = deserializeMessage(firstMsg);
-                            if (message == null || (!message.getMsgType().equals(MessageTypes.REGISTER) &&
-                                    !message.getMsgType().equals(MessageTypes.ELECTION))) {
-                                System.err.println("Rejected: initial message must be REGISTER or ELECTION.");
-                                channel.close();
-                                key.cancel();
-                                continue;
-                            }
-
-                            if (message.getSenderRole().equals(Roles.CHATSERVER)) {
-                                openPersistentChannel(channel); // will register with selector
-                                cleanupManager.getChatServerManager().getChannels().put(channel, nioChannel);
-                            } else if (message.getSenderRole().equals(Roles.REPLICA)) {
-                                openPersistentChannel(channel);
-                                cleanupManager.getPeerManager().getChannels().put(channel, nioChannel);
-                            }
-
+                        // Case 1: this is a new connection in handshake phase (not persistent yet)
+                        if (attachment instanceof NIOMessageChannel) {
+                            nioChannel = (NIOMessageChannel) attachment;
                             try {
-                                readDispatcher.handleRegistration(channel, nioChannel, message);
-                                if (!cleanupManager.isPersistentConnection(channel)) {
+                                String firstMsg = nioChannel.receiveMessage();
+
+                                if (firstMsg == null) {
+                                    System.err.println("Connection dropped: no initial message received.");
                                     channel.close();
                                     key.cancel();
+                                    continue;
                                 }
-                            } catch (ConnectionClosedException cce) {
-                                if (cleanupManager.isPersistentConnection(channel)) {
-                                    cleanupManager.cleanupPersistentConnection(channel, true);
-                                } else {
+
+                                BaseAddrServerMessage<?> message = deserializeMessage(firstMsg);
+                                if (message == null || (!message.getMsgType().equals(MessageTypes.REGISTER) &&
+                                        !message.getMsgType().equals(MessageTypes.ELECTION))) {
+                                    System.err.println("Rejected: initial message must be REGISTER or ELECTION.");
                                     channel.close();
                                     key.cancel();
+                                    continue;
                                 }
-                            } catch (Exception e) {
-                                if (cleanupManager.isPersistentConnection(channel)) {
-                                    cleanupManager.cleanupPersistentConnection(channel, false);
-                                } else {
+
+                                if (message.getMsgType().equals(MessageTypes.ELECTION)) {
+                                    readDispatcher.dispatchMsgType(channel, nioChannel, message);
                                     channel.close();
                                     key.cancel();
+                                    continue;
                                 }
+
+                                if (message.getSenderRole().equals(Roles.CHATSERVER)) {
+                                    openPersistentChannel(channel); // will register with selector
+                                    cleanupManager.getChatServerManager().getChannels().put(channel, nioChannel);
+                                } else if (message.getSenderRole().equals(Roles.REPLICA)) {
+                                    openPersistentChannel(channel);
+                                    cleanupManager.getPeerManager().getChannels().put(channel, nioChannel);
+                                }
+
+                                try {
+                                    readDispatcher.handleRegistration(channel, nioChannel, message);
+                                    if (!cleanupManager.isPersistentConnection(channel)) {
+                                        channel.close();
+                                        key.cancel();
+                                    }
+                                } catch (ConnectionClosedException cce) {
+                                    if (cleanupManager.isPersistentConnection(channel)) {
+                                        cleanupManager.cleanupPersistentConnection(channel, true);
+                                    } else {
+                                        channel.close();
+                                        key.cancel();
+                                    }
+                                } catch (Exception e) {
+                                    if (cleanupManager.isPersistentConnection(channel)) {
+                                        cleanupManager.cleanupPersistentConnection(channel, false);
+                                    } else {
+                                        channel.close();
+                                        key.cancel();
+                                    }
+                                }
+
+                            } catch (IOException ioe) {
+                                System.err.println("IOException during handshake: " + ioe.getMessage());
+                                try {
+                                    channel.close();
+                                } catch (IOException ignored) {
+                                }
+                                key.cancel();
                             }
 
-                        } catch (IOException ioe) {
-                            System.err.println("IOException during handshake: " + ioe.getMessage());
+                            continue; // skip rest — this wasn't a persistent read
+                        }
+
+                        // Case 2: persistent connection
+                        nioChannel = cleanupManager.getKnownPersistentChannel(channel);
+                        if (nioChannel == null) {
+                            try {
+                                System.err.printf(
+                                        "No persistent NIO channel found for SocketChannel %s. Closing channel.\n",
+                                        channel.getRemoteAddress());
+                            } catch (IOException e) {
+                                System.err.println("No persistent NIO channel found (remote address unavailable).");
+                            }
+                            key.cancel();
                             try {
                                 channel.close();
                             } catch (IOException ignored) {
                             }
-                            key.cancel();
+                            continue;
                         }
 
-                        continue; // skip rest — this wasn't a persistent read
-                    }
+                        // Temporarily disable OP_READ to avoid re-triggering
+                        key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
 
-                    // Case 2: persistent connection
-                    nioChannel = cleanupManager.getKnownPersistentChannel(channel);
-                    if (nioChannel == null) {
                         try {
-                            System.err.printf(
-                                    "No persistent NIO channel found for SocketChannel %s. Closing channel.\n",
-                                    channel.getRemoteAddress());
-                        } catch (IOException e) {
-                            System.err.println("No persistent NIO channel found (remote address unavailable).");
-                        }
-                        key.cancel();
-                        try {
-                            channel.close();
-                        } catch (IOException ignored) {
-                        }
-                        continue;
-                    }
+                            readDispatcher.dispatch(channel, nioChannel);
 
-                    // Temporarily disable OP_READ to avoid re-triggering
-                    key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
+                            if (key.isValid()) {
+                                key.interestOps(key.interestOps() | SelectionKey.OP_READ);
+                                selector.wakeup(); // ensure changes are picked up
+                            }
 
-                    try {
-                        readDispatcher.dispatch(channel, nioChannel);
-
-                        if (key.isValid()) {
-                            key.interestOps(key.interestOps() | SelectionKey.OP_READ);
-                            selector.wakeup(); // ensure changes are picked up
+                        } catch (ConnectionClosedException cce) {
+                            try {
+                                System.err.printf("ConnectionClosedException on channel %s (interestOps=%d): %s\n",
+                                        channel.getRemoteAddress(), key.interestOps(), cce.getMessage());
+                            } catch (IOException e) {
+                                System.err.printf("ConnectionClosedException on unknown channel: %s\n", cce.getMessage());
+                            }
+                            cleanupManager.cleanupPersistentConnection(channel, true);
+                        } catch (IOException ioe) {
+                            try {
+                                System.err.printf("IOException on channel %s (interestOps=%d): %s\n",
+                                        channel.getRemoteAddress(), key.interestOps(), ioe.getMessage());
+                            } catch (IOException e) {
+                                System.err.printf("IOException on unknown channel: %s\n", ioe.getMessage());
+                            }
+                            cleanupManager.cleanupPersistentConnection(channel, false);
                         }
-
-                    } catch (ConnectionClosedException cce) {
-                        try {
-                            System.err.printf("ConnectionClosedException on channel %s (interestOps=%d): %s\n",
-                                    channel.getRemoteAddress(), key.interestOps(), cce.getMessage());
-                        } catch (IOException e) {
-                            System.err.printf("ConnectionClosedException on unknown channel: %s\n", cce.getMessage());
-                        }
-                        cleanupManager.cleanupPersistentConnection(channel, true);
-                    } catch (IOException ioe) {
-                        try {
-                            System.err.printf("IOException on channel %s (interestOps=%d): %s\n",
-                                    channel.getRemoteAddress(), key.interestOps(), ioe.getMessage());
-                        } catch (IOException e) {
-                            System.err.printf("IOException on unknown channel: %s\n", ioe.getMessage());
-                        }
-                        cleanupManager.cleanupPersistentConnection(channel, false);
                     }
                 }
+            } catch (Exception e) {
+                System.err.println("Exception in main event loop: " + e.getMessage());
+                e.printStackTrace();
             }
-
         }
     }
 }
