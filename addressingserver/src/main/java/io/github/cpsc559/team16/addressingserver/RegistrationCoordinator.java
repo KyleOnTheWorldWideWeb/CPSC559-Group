@@ -103,6 +103,13 @@ public class RegistrationCoordinator {
         
         // Update the AddrServerRecord sent by the registering process before synchronizing with current Replicas
         ChatServerRecord record = msg.safeCastPayload(ChatServerRecord.class);
+//        try {
+//            record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(ChatServerRecord.class), newPID);
+//        } catch (IOException e) {
+//            System.err.printf("Failed to resolve remote address for ChatServer (PID: %d). Registration aborted.%n", newPID);
+//            cleanupManager.cleanupPersistentConnection(channel, true);
+//            return;
+//        }
         record.setPID(newPID);
         // try {
         //     record = ServerRecord.updateAddressFromSocket(channel, msg.safeCastPayload(ChatServerRecord.class), newPID);

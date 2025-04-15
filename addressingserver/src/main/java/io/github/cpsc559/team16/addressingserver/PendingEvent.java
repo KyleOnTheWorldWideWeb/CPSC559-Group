@@ -57,32 +57,15 @@ public class PendingEvent {
     /** The time this {@code PendingEvent} was created (used for timeout tracking). */
     private final long creationTime;
 
-    /**
-     * Constructs a {@code PendingEvent} with a full set of parameters, including the original broadcast message.
-     *
-     * @param deferredResponseMessage the response to send once all ACKs are received
-     * @param recipients              the initial map of expected recipient PIDs to their channels
-     * @param messageRequiringACK     the message sent to all recipients
-     * @param requestChannel          the channel to reply to once the event is complete
-     * @param onComplete              an optional callback to invoke after response is sent
-     * @param maxIterations           the maximum number of retry attempts before failure
-     * @param requestMessageID        the message ID from the message that made the request causing this event to be created.
-     */
-    public PendingEvent(BaseAddrServerMessage<?> deferredResponseMessage,
-                        Map<Long, NIOMessageChannel> recipients,
-                        BaseAddrServerMessage<?> messageRequiringACK,
-                        NIOMessageChannel requestChannel,
-                        CompletionCallback onComplete,
-                        int maxIterations, Long requestMessageID) {
-        this.deferredResponseMessage = deferredResponseMessage;
-        this.pendingRecipients = recipients;
-        this.messageRequiringACK = messageRequiringACK;
-        this.requestChannel = requestChannel;
-        this.onComplete = onComplete;
-        this.creationTime = System.currentTimeMillis();
-        this.maxIterations = maxIterations;
-        this.requestMessageID = requestMessageID;
+    private long lastRetryTime;
+
+    public void updateLastRetryTime() {
+        this.lastRetryTime = System.currentTimeMillis();
     }
+    public long getLastRetryTime() {
+        return lastRetryTime;
+    }
+
 
     /**
      * Constructs a {@code PendingEvent} without requiring a broadcast message.
@@ -102,13 +85,32 @@ public class PendingEvent {
         this.requestChannel = requestChannel;
         this.onComplete = onComplete;
         this.creationTime = System.currentTimeMillis();
+        this.lastRetryTime = System.currentTimeMillis();
         this.maxIterations = maxIterations;
         this.requestMessageID = requestMessageID;
     }
 
-
-
-
+    /**
+     * Constructs a {@code PendingEvent} without requiring a broadcast message.
+     *
+     * @param messageRequiringACK     the original message that required an ACK
+     * @param recipients              the initial map of expected recipient PIDs to their channels
+     * @param onComplete              an optional callback to invoke after response is sent
+     * @param maxIterations           the maximum number of retry attempts before failure
+     */
+    public PendingEvent(BaseAddrServerMessage<?> messageRequiringACK,
+                        Map<Long, NIOMessageChannel> recipients, int maxIterations,
+                        CompletionCallback onComplete) {
+        this.messageRequiringACK = messageRequiringACK;
+        this.deferredResponseMessage = null;
+        this.pendingRecipients = recipients;
+        this.requestChannel = null;
+        this.onComplete = onComplete;
+        this.creationTime = System.currentTimeMillis();
+        this.lastRetryTime = System.currentTimeMillis();
+        this.maxIterations = maxIterations;
+        this.requestMessageID = 0L;
+    }
 
     /**
      * Sends the final deferred response message to the requester and runs any follow-up actions.
@@ -116,17 +118,28 @@ public class PendingEvent {
      * @throws IOException if sending the message fails
      */
     public void respondToRequester() throws IOException {
-        try {
-            String json = deferredResponseMessage.toJson();
-            requestChannel.sendMessage(json);
-            if (onComplete != null) {
-                onComplete.run();
+        if (deferredResponseMessage != null) {
+            try {
+                String json = deferredResponseMessage.toJson();
+                requestChannel.sendMessage(json);
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+            } catch (JsonProcessingException j) {
+                System.err.println("Failed to serialize PendingEvent: " + this.deferredResponseMessage);
+            } catch (IOException e) {
+                System.err.println("Failed to respond to requester with PID: " + requestChannel.getServerPID());
+                throw e;
             }
-        } catch (JsonProcessingException j) {
-            System.err.println("Failed to serialize PendingEvent: " + this.deferredResponseMessage);
-        } catch (IOException e) {
-            System.err.println("Failed to respond to requester with PID: " + requestChannel.getServerPID());
-            throw e;
+        }
+        else {
+            if (onComplete != null) {
+                try {
+                    onComplete.run();
+                } catch (IOException e) {
+                    System.err.println("Failed during pending event post ACK execution.");
+                }
+            }
         }
     }
 

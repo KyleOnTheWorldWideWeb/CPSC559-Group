@@ -408,11 +408,13 @@ public class AddressingServer {
         this.addrServerRegistry = new AddrServerRegistry(this);
         this.peerManager = new PeerManager(this);
 
-        this.cleanupManager = new ConnectionCleanupManager(peerManager, chatServerManager);
+        this.cleanupManager = new ConnectionCleanupManager(peerManager, chatServerManager, genMID);
         this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
 
         this.replicaSyncCoordinator = new ReplicaSyncCoordinator(peerManager, broadcastManager, cleanupManager);
+        this.cleanupManager.setReplicaCoordinator(replicaSyncCoordinator);
         this.registrationCoordinator = new RegistrationCoordinator(this);
+
 
         try {
             this.networkManager = new AddrServerNetworkManager(cleanupManager, this.config,

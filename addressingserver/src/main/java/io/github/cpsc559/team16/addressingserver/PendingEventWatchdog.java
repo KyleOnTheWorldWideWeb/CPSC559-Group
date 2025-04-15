@@ -105,8 +105,8 @@ public class PendingEventWatchdog extends Thread {
                     continue;
                 }
 
-                if (System.currentTimeMillis() - event.getCreationTime() < retryTimeoutMillis) {
-                    continue; // Not yet time to retry
+                if (System.currentTimeMillis() - event.getLastRetryTime() < retryTimeoutMillis) {
+                    continue; // Still within timeout window, skip for now
                 }
 
                 // False is returned if the maximum number of (message retry) iterations has been reached.
@@ -117,9 +117,12 @@ public class PendingEventWatchdog extends Thread {
                             cleanupManager.cleanupPersistentConnectionNIO(delinquentChannel, true);
                         }
                     }
-                    // Notify the process that we have failed to process their request.
+                    // Respond to the request now that delinquent processes have been expunged from the network
                     try {
-                        event.respondToRequesterFailure();
+                        // I'm not sure why I thought this counted as a failure
+                        // it doesn't - we just remove the non-ACKing processes and proceed
+                        //event.respondToRequesterFailure();
+                        event.respondToRequester();
                     } catch (IOException e) {
                         cleanupManager.cleanupPersistentConnectionNIO(event.getRequestChannel(), true);
                     }
@@ -131,6 +134,7 @@ public class PendingEventWatchdog extends Thread {
                 // be processed and linked to this event.
                 Iterator<Map.Entry<Long, NIOMessageChannel>> recipientIterator = event.getPendingRecipients().entrySet().iterator();
                 while (recipientIterator.hasNext()) {
+                    event.updateLastRetryTime();
                     Map.Entry<Long, NIOMessageChannel> recipient = recipientIterator.next();
                     NIOMessageChannel unresponsiveChannel = recipient.getValue();
                     try {
@@ -146,10 +150,7 @@ public class PendingEventWatchdog extends Thread {
                         event.removePendingRecipient(unresponsiveChannel.getServerPID());
                     }
                 }
-
-
             }
-
             try {
                 Thread.sleep(checkIntervalMillis);
             } catch (InterruptedException ignored) {

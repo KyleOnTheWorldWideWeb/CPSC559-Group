@@ -251,7 +251,7 @@ public class BroadcastManager {
                 throw ioe;
             }
         }
-        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
+        System.out.println("Done sending all AddrServerRecords to REPLICA with PID: " + nioChannel.getServerPID());
     }
 
     /**
@@ -282,7 +282,7 @@ public class BroadcastManager {
                 throw ioe;
             }
         }
-        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
+        System.out.println("Done sending all ChatServerRecords to REPLICA with PID: " + nioChannel.getServerPID());
     }
 
 
@@ -346,7 +346,7 @@ public class BroadcastManager {
                 throw ioe;
             }
         }
-        System.out.println("Done sending all AddrServerRecords to newly registered REPLICA.");
+        System.out.println("Done sending all AddrServerRecords to CHATSERVER with PID: " + nioChannel.getServerPID());
     }
 
     /**
@@ -378,7 +378,7 @@ public class BroadcastManager {
                 throw ioe;
             }
         }
-        System.out.println("Done sending all ChatServerRecords to newly registered REPLICA.");
+        System.out.println("Done sending all ChatServerRecords to CHATSERVER with PID: " + nioChannel.getServerPID());
     }
 
     /**

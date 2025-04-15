@@ -15,16 +15,24 @@ public class AckObjectTypes {
 
 
     /**
+     * Used to send an acknowledgement to a ChatServer or AddressingServer process that
+     * it has been registered in the distributed network.
+     */
+    public static final String REGISTERED = "Registered";
+
+    /**
+     * Used to send an acknowledgement to a ChatServer or AddressingServer process that
+     * it has been deregistered in the distributed network.
+     */
+    public static final String DEREGISTERED = "Deregistered";
+
+    /**
      * Used to send an acknowledgment from a Replica to the Primary AddressingServer process
      * that it has received a message and updated its state.
      */
     public static final String REPLICATED = "Replicated";
 
-    /**
-     * Used to send an acknowledgement to a ChatServer or AddressingServer process that
-     * it has been registered in the distributed network.
-     */
-    public static final String REGISTERED = "Registered";
+
     /**
      * Used to send an acknowledgement to a Client containing the host address of a chat-server
      * that is {@code ACTIVE} and accepting new clients - i.e. activeClients < maxClientCount.
