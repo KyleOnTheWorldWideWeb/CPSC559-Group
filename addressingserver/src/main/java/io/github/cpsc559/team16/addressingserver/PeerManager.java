@@ -145,19 +145,20 @@ public class PeerManager {
      * <strong>NOTE:</strong> This method does not close the {@code SocketChannel}; closing the channel is the responsibility
      * of the caller.
      */
-    public void removeRemoteProcess(SocketChannel channel) {
-        // We already ensured that the key:value pair exists in the calling code AddrServerNetworkManager.cleanupPersistentConnection()
-        NIOMessageChannel ch = peerChannels.remove(channel);
-        Long pid = ch.getServerPID();
-        if (pid != 0L) {
-            this.registry.removeRecordByKey(pid);
-            try {
-                System.out.printf("Successfully removed *communication channels* for Network Process with PID: %d " +
-                        "- and Host Address: %s%n", pid, channel.getRemoteAddress());
-            } catch (IOException ignore) {}
-
-        } else {
-            System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer with a PID = 0L that had no AddrServerRecord.");
+    private void removeRemoteProcess(SocketChannel channel) {
+        NIOMessageChannel ch = this.peerChannels.get(channel);
+        if (ch != null) {
+            Long pid = ch.getServerPID();
+            if (pid != 0L) {
+                this.registry.removeRecordByKey(pid);
+                try {
+                    System.out.printf("Successfully removed *communication channels* for Network Process with PID: %d " +
+                            "- and Host Address: %s%n", pid, channel.getRemoteAddress());
+                } catch (IOException ignore) {}
+            } else {
+                System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer with a PID = 0L that had no AddrServerRecord.");
+            }
+            this.peerChannels.remove(channel);
         }
     }
 
@@ -204,8 +205,10 @@ public class PeerManager {
                 removeProcessCloseConnection(channel);
                 return;
             }
+            else {
+                this.registry.removeRecordByKey(failedPID);
+            }
         }
-        registry.removeRecordByKey(failedPID); // Remove the AddrServerRecord for the failed remote network process.
     }
 
     /**

@@ -117,9 +117,12 @@ public class PendingEventWatchdog extends Thread {
                             cleanupManager.cleanupPersistentConnectionNIO(delinquentChannel, true);
                         }
                     }
-                    // Notify the process that we have failed to process their request.
+                    // Respond to the request now that delinquent processes have been expunged from the network
                     try {
-                        event.respondToRequesterFailure();
+                        // I'm not sure why I thought this counted as a failure
+                        // it doesn't - we just remove the non-ACKing processes and proceed
+                        //event.respondToRequesterFailure();
+                        event.respondToRequester();
                     } catch (IOException e) {
                         cleanupManager.cleanupPersistentConnectionNIO(event.getRequestChannel(), true);
                     }
