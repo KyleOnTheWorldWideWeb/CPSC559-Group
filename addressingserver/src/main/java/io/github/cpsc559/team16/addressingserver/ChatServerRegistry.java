@@ -1,11 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-
-import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 
 public class ChatServerRegistry {
 
@@ -156,8 +154,9 @@ public class ChatServerRegistry {
     public void createChatServerRecord(Long serverPID, String chatHostAddress, int addrServerPort, int chatClientPort,
                                         int chatPeerPort, int maxClientCount) {
         try {
-            ChatServerRecord newServer = new ChatServerRecord(serverPID, chatHostAddress, addrServerPort,
-                    chatPeerPort, chatClientPort, maxClientCount);
+            ChatServerRecord newServer = new ChatServerRecord(serverPID, chatHostAddress,  chatClientPort, chatPeerPort, addrServerPort,
+                    maxClientCount);
+
             // Check if the key already existed (should be null for a new key)
             ChatServerRecord previous = this.chatServerRecords.put(serverPID, newServer);
 

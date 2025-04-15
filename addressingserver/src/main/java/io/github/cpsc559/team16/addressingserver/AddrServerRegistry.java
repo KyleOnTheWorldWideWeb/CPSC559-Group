@@ -1,14 +1,12 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.dto.ServerRole;
-
-
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ServerRole;
 
 public class AddrServerRegistry {
 

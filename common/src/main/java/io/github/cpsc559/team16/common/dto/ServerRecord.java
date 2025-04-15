@@ -1,7 +1,6 @@
 package io.github.cpsc559.team16.common.dto;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 
 public abstract class ServerRecord {
@@ -15,6 +14,7 @@ public abstract class ServerRecord {
      * The network address of this server.
      */
     protected String hostAddress;
+
 
     /**
      * The port used for client connections.
@@ -55,11 +55,11 @@ public abstract class ServerRecord {
      * @return the updated {@link ServerRecord} with corrected host address and assigned PID.
      * @throws IOException if the remote address cannot be resolved from the socket
      */
-    public static <T extends ServerRecord> T updateAddressFromSocket(SocketChannel socketChannel, T record, Long pid) throws IOException {
+    public static <T extends ServerRecord> T updateAddressFromSocket(SocketChannel socketChannel, T record, Long pid, String hostAddress) throws IOException {
         record.setPID(pid);
-        InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
-        String host = remoteAddress.getAddress().getHostAddress();
-        record.setHostAddress(host);
+        // InetSocketAddress remoteAddress = (InetSocketAddress) socketChannel.getRemoteAddress();
+        // String host = remoteAddress.getAddress().getHostAddress();
+        record.setHostAddress(hostAddress);
         return record;
     }
 
@@ -81,6 +81,7 @@ public abstract class ServerRecord {
         return this.hostAddress;
     }
 
+
     public int getPeerPort() {
         return this.peerPort;
     }
@@ -98,6 +99,5 @@ public abstract class ServerRecord {
     public void setHostAddress(String hostAddress) {
         this.hostAddress = hostAddress;
     }
-
 
 }
