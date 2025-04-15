@@ -395,6 +395,10 @@ public class LeaderElectionManager {
         if (newLeaderPID.equals(config.getPID())) {
             System.out.println("This AddressingServer is now the PRIMARY.");
             config.setRole(ServerRole.PRIMARY);
+
+            AddrServerRecord newLeader = server.getAddrServerRegistry().getRecords().get(config.getPID());
+
+            server.getBroadcastManager().broadcastAddrServerRecordToCS(config.getPID(), newLeader);
         } else {
             System.out.println("Must register with new primary.");
             try {
