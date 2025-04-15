@@ -30,9 +30,10 @@ messages remain encrypted end-to-end and are never stored in plaintext.
 # SETUP
   ### **How To Configure this Docker-compose.yml for Primary Addressing Server**
 - First, retrieve your ipv4 address.
-- WINDOWS: (TODO: verify this on a windows machine)
+- WINDOWS: 
+  - If you're on wifi you want the ipv4 address for WIFI
 ```powershell
-(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" }).IPAddress
+ipconfig
 ```
 - MAC:
 ```zsh
