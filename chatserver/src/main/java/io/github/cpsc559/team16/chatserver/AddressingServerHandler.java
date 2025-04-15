@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.messaging.MessageTypes;
@@ -105,6 +106,9 @@ class AddressingServerHandler implements ConnectionHandler {
                 handleAck(message, ctx, key);
             } else if ("UPDATE".equalsIgnoreCase(type) && "ChatServerRecord".equalsIgnoreCase(objectType)) {
                 handleUpdate(message, ctx, key);
+
+            } else if ("UPDATE".equalsIgnoreCase(type) && "AdressServerRecord".equalsIgnoreCase(objectType)) {
+                handleUpdateAddr(message, ctx, key);
             } else if (MessageTypes.SERVERFAILURE.equals(type) && ObjectTypes.CHATSERVER_FAILURE.equals(objectType)) {
                 handleServerFailure(message, ctx, key);
             } else {
@@ -158,6 +162,25 @@ class AddressingServerHandler implements ConnectionHandler {
             debug(DEBUG_BASIC, "[ADDR_SERVER] Registration successful — assigned PID: " + newID);
         } catch (NumberFormatException e) {
             debug(DEBUG_BASIC, "[ADDR_SERVER] Failed to parse PID from ACK payload: " + message.getPayload());
+        }
+    }
+
+    private void handleUpdateAddr(BaseAddrServerMessage<?> message, ConnectionContext ctx, SelectionKey key) {
+        try {
+            Object payload = message.getPayload();
+            // Handle single ChatServerRecord
+            if (payload instanceof AddrServerRecord record) {
+                String host = record.getHostAddress();
+                int port = record.getChatServerPort();
+                System.out.println("New Adressing Server Primart" + host + " " + port);
+
+                debug(DEBUG_BASIC, "Received AddrServerRecord from host: " + host + ", port: " + port);
+            } else {
+                debug(DEBUG_BASIC, "[ADDR_SERVER] Unknown payload type: " + payload.getClass().getName());
+            }
+        } catch (Exception e) {
+            debug(DEBUG_BASIC, "[ADDR_SERVER] Failed to handle UPDATE: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
