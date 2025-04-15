@@ -100,13 +100,7 @@ public class HeartbeatMonitor implements Runnable {
                             try {
                                 debug(1, "Closing unresponsive peer " + peerID);
 
-                                // Get the addressing server handler from ChatServer's handler map
-                                AddressingServerHandler addressingHandler = (AddressingServerHandler) ChatServer
-                                        .getHandlerMap().get(ChatServer.ConnectionType.ADDRESSING_SERVER);
-                                if (addressingHandler != null) {
-                                    addressingHandler.notifyPeerCrash(peerID);
-                                    debug(1, "Notified addressing server about crashed peer " + peerID);
-                                }
+                                // Don't notify addressing server here, let ChatServer.closeConnection handle it
 
                                 key.cancel();
                                 ctx.socketChannel.close();

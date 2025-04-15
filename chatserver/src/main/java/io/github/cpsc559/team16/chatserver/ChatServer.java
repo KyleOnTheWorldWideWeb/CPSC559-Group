@@ -1,12 +1,10 @@
 package io.github.cpsc559.team16.chatserver;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -19,7 +17,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 
 import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import org.json.JSONArray;
@@ -30,7 +27,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cpsc559.team16.common.utilities.BaseMessage;
 import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
-import io.github.cpsc559.team16.common.utilities.ProcessUtils;
 import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
@@ -982,10 +978,25 @@ public class ChatServer {
 
         if (ctx.type == ConnectionType.SERVER) {
             ConnectionContext lostCtx = connectedPeers.get(ctx.peerID);
-            attemptRecconnectingToPeer(lostCtx); // pass full ctx
-            connectedPeers.remove(ctx.peerID);
+            int peerId = ctx.peerID;
 
+            // Try reconnection first
+            attemptRecconnectingToPeer(lostCtx);
+            connectedPeers.remove(peerId);
+
+            // Then notify addressing server about the disconnection
+            // Only do this if reconnection fails or after reconnection attempts
+            if (handlerMap.get(ConnectionType.ADDRESSING_SERVER) != null) {
+                ((AddressingServerHandler) handlerMap.get(ConnectionType.ADDRESSING_SERVER))
+                        .notifyPeerCrash(peerId);
+                debug(DEBUG_BASIC, "Notified addressing server about disconnected peer " + peerId);
+            }
+        } else if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
+            debug(DEBUG_BASIC, "Lost connection to Addressing Server. Attempting to reconnect...");
+            // Start a reconnection attempt to the addressing server
+            attemptReconnectingToAddressingServer();
         }
+
         try {
             SocketAddress remoteAddr = socketChannel.getRemoteAddress();
             debug(DEBUG_NORMAL, "Closing connection to " + remoteAddr);
@@ -1032,11 +1043,12 @@ public class ChatServer {
      *
      * @param lostCtx the previous {@link ConnectionContext} of the peer that was
      *                disconnected
+     * @return true if reconnection was successful, false otherwise
      */
-    private static void attemptRecconnectingToPeer(ConnectionContext lostCtx) {
+    private static boolean attemptRecconnectingToPeer(ConnectionContext lostCtx) {
         if (lostCtx == null || lostCtx.host == null) {
             debug(DEBUG_NORMAL, "No known host/port for lost peer.");
-            return;
+            return false;
         }
 
         int peerID = lostCtx.peerID;
@@ -1061,7 +1073,7 @@ public class ChatServer {
 
                 peerChannel.register(selector, SelectionKey.OP_CONNECT, newCtx);
                 debug(DEBUG_BASIC, "Reconnection initiated to peer PID=" + peerID);
-                return;
+                return true;
             } catch (IOException e) {
                 debug(DEBUG_NORMAL, "Reconnection attempt " + attempt + " failed: " + e.getMessage());
                 try {
@@ -1075,6 +1087,118 @@ public class ChatServer {
         }
 
         debug(DEBUG_BASIC, "All reconnection attempts failed for peer PID=" + peerID);
+        return false;
+    }
+
+    /**
+     * Attempts to reconnect to the Addressing Server after a connection failure.
+     * <p>
+     * This method is triggered when a connection to the Addressing Server is lost
+     * due to
+     * network failure, shutdown, or other I/O issues. It tries to re-establish
+     * a connection to the Addressing Server and register this chat server again.
+     * </p>
+     *
+     * <h3>Reconnection Strategy:</h3>
+     * <ul>
+     * <li>Performs up to 10 reconnection attempts, spaced 3 seconds apart.</li>
+     * <li>For each attempt:
+     * <ul>
+     * <li>Opens a new {@link SocketChannel} in non-blocking mode</li>
+     * <li>Connects to the Addressing Server's known address</li>
+     * <li>Creates a new {@link ConnectionContext} and registers it for
+     * {@code OP_CONNECT}</li>
+     * <li>Sends a REGISTER message to re-establish this chat server's presence</li>
+     * </ul>
+     * </li>
+     * <li>If all attempts fail, a message is logged and the server continues
+     * operating
+     * with existing peer connections, but new client connections will not be
+     * possible.</li>
+     * </ul>
+     */
+    private static void attemptReconnectingToAddressingServer() {
+        debug(DEBUG_BASIC, "Attempting reconnection to Addressing Server...");
+
+        // First, check if we already have any active addressing server connections
+        if (hasExistingAddressingServerConnection()) {
+            debug(DEBUG_BASIC, "An existing Addressing Server connection was found. Aborting reconnection attempt.");
+            return;
+        }
+
+        final int MAX_RETRIES = 10;
+        final int RETRY_DELAY_MS = 3000;
+
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                debug(DEBUG_NORMAL, "Addressing Server reconnection attempt " + attempt);
+
+                // Create a new connection to the addressing server
+                SocketChannel channel = SocketChannel.open();
+                channel.configureBlocking(false);
+                channel.connect(new InetSocketAddress(ADDRESSING_SERVER_HOST, ADDRESSING_SERVER_PORT));
+
+                ConnectionContext ctx = new ConnectionContext(channel);
+                ctx.type = ConnectionType.ADDRESSING_SERVER;
+
+                // Create a new registration message
+                RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(
+                        CLIENT_PORT,
+                        PEER_LISTEN_PORT,
+                        ADDRESSING_SERVER_PORT,
+                        MAX_CLIENTS);
+
+                String json = registrationMsg.toJson() + "\n";
+                ctx.writeQueue.add(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
+
+                channel.register(selector, SelectionKey.OP_CONNECT, ctx);
+                debug(DEBUG_BASIC, "Reconnection attempt to Addressing Server initiated");
+
+                // Wake up the selector to process this connection immediately
+                selector.wakeup();
+                return;
+            } catch (IOException e) {
+                debug(DEBUG_NORMAL, "Reconnection attempt " + attempt + " failed: " + e.getMessage());
+                try {
+                    Thread.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    debug(DEBUG_NORMAL, "Reconnection retry sleep interrupted");
+                    break;
+                }
+            }
+        }
+
+        debug(DEBUG_BASIC,
+                "All reconnection attempts to Addressing Server failed. The Chat Server will continue to operate but may have limited functionality.");
+    }
+
+    /**
+     * Checks if there are any existing connections to the Addressing Server.
+     * <p>
+     * This method prevents creating duplicate connections to the Addressing Server,
+     * which could cause conflicting PIDs and state inconsistencies.
+     * </p>
+     * 
+     * @return true if an existing addressing server connection is found, false
+     *         otherwise
+     */
+    private static boolean hasExistingAddressingServerConnection() {
+        for (SelectionKey key : selector.keys()) {
+            if (!key.isValid())
+                continue;
+
+            Object attachment = key.attachment();
+            if (attachment instanceof ConnectionContext) {
+                ConnectionContext ctx = (ConnectionContext) attachment;
+
+                if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                    debug(DEBUG_DETAILED, "Found existing Addressing Server connection.");
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
