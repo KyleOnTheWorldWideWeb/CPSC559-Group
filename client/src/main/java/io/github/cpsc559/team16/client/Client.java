@@ -972,7 +972,7 @@ public class Client {
                             continue;
                         }
 
-                        debug(DEBUG_LOW_LEVEL, "Received message: " + serializedMsg);
+                        // debug(DEBUG_LOW_LEVEL, "Received message: " + serializedMsg);
                         ClientServerMessage msg = BaseMessage.fromJson(serializedMsg, ClientServerMessage.class);
 
                         synchronized (messageLock) {
