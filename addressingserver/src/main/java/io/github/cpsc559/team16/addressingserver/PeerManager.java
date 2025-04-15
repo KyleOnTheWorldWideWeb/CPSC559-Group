@@ -30,11 +30,21 @@ import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 public class PeerManager {
 
     /**
+     * The AddressingServer instance that owns this PeerManager.
+     * This is used to access the server's configuration and state.
+     */
+    private final AddressingServer server;
+
+    /**
      * A thread-safe mapping of persistent peer connections.
      * Each peer (replica AddressingServer) is tracked by its associated {@code SocketChannel}
      * and wrapped in an {@code NIOMessageChannel} for structured messaging.
      */
     private final Map<SocketChannel, NIOMessageChannel> peerChannels;
+
+    public Map<SocketChannel, NIOMessageChannel> getPeerChannels() {
+        return peerChannels;
+    }
 
     /**
      * Returns a HashMap of SocketChannel and NIOChannel for all the
@@ -138,9 +148,10 @@ public class PeerManager {
      *
      * @param registry the shared registry of AddrServerRecords.
      */
-    public PeerManager(AddrServerRegistry registry) {
+    public PeerManager(AddressingServer server) {
+        this.server = server;
+        this.registry = server.getAddrServerRegistry();
         this.peerChannels = new ConcurrentHashMap<>();
-        this.registry = registry;
     }
 
     /**
@@ -402,10 +413,21 @@ public class PeerManager {
      * @return A Long integer containing the PID of the Primary Addressing Server.
      */
     public Long getPrimaryPID() {
+
+        Long primaryPID = 0L;
+
         for (AddrServerRecord record : registry.getRecords().values()) {
-            if (record.getRole().equals(ServerRole.PRIMARY)) return record.getPID();
+            if (record.getRole().equals(ServerRole.PRIMARY)) {
+
+                if (primaryPID != 0L) {
+                    System.err.println("WARNING: More than one PRIMARY AddressingServer found in the network. Picking highest PID.");
+                }
+                primaryPID = record.getPID();
+            }
         }
-        return 0L;
+
+
+        return primaryPID;
     }
 
     /**

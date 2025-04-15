@@ -10,6 +10,23 @@ import io.github.cpsc559.team16.common.dto.ServerRole;
 
 public class AddrServerRegistry {
 
+    /** The AddressingServer instance that owns this registry */
+    private final AddressingServer server;
+
+
+    /**
+     * Constructor for AddrServerRegistry.
+     * <p>
+     * This constructor initializes the registry with a reference to the AddressingServer instance
+     * that owns it. This allows the registry to interact with the server for various operations.
+     * </p>
+     *
+     * @param server The AddressingServer instance that owns this registry.
+     */
+    public AddrServerRegistry(AddressingServer server) {
+        this.server = server;
+    }
+
     /**
      * This Hashmap is used by each AddressingServer to keep {@code AddrServerRecord}
      * records of all other addressing servers in the network.
@@ -79,6 +96,15 @@ public class AddrServerRegistry {
             System.out.printf("Successfully removed *AddrServerRecord* for Network Process with PID: %d - and Host Address: %s%n", pid, record.getHostAddress());
         } else {
             System.out.println("No AddrServerRecord found for PID: " + pid + " — nothing to remove.");
+        }
+
+        System.out.println("checking role of removed server.");
+
+        if (record.getRole() == ServerRole.PRIMARY) {
+            System.out.println("WARNING: The removed server was the PRIMARY AddressingServer. A new primary should be elected.");
+            server.getLeaderElectionManager().initiateElection();
+        } else {
+            System.out.println("The removed server was a REPLICA AddressingServer.");
         }
     }
 
@@ -153,6 +179,15 @@ public class AddrServerRegistry {
             }
         }
         return registeredReplicaPIDs;
+    }
+
+    public AddrServerRecord getPrimaryPID() {
+        for (AddrServerRecord record : this.addrServerRecords.values()) {
+            if (record.getRole().equals(ServerRole.PRIMARY)) {
+                return record;
+            }
+        }
+        return null;
     }
 
     /**
