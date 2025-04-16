@@ -1,8 +1,5 @@
 package io.github.cpsc559.team16.addressingserver;
 
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Date;
@@ -479,20 +476,17 @@ public class LeaderElectionManager {
      */
     public void sendTo(BaseAddrServerMessage message, Long peerPID) {
         AddrServerRecord peer = server.getAddrServerRegistry().getRecords().get(peerPID);
-        if (peer == null) {
-            System.err.println("Peer with PID " + peerPID + " not found.");
-            return;
+
+        NIOMessageChannel peerChannel = peerManager.getChannels().values().stream()
+            .filter(channel -> channel.getServerPID().equals(peerPID))
+            .findFirst()
+            .orElse(null);
+
+        try {
+            peerChannel.sendMessage(message.toJson());
+        } catch (Exception e) {
+            System.err.println("Failed to send message to peer with PID " + peerPID + ": " + e.getMessage());
         }
 
-        String address = peer.getHostAddress();
-        int addressPort = peer.getPeerPort();
-
-        try (Socket addressSocket = new Socket(address, addressPort)) {
-            // Create a PrintWriter with auto-flush enabled to send the message.
-            PrintWriter out = new PrintWriter(addressSocket.getOutputStream(), true);
-            out.println(message.toJson());
-        } catch (IOException e) {
-            System.err.println("Error sending message to peer: " + e.getMessage());
-        }
     }
 }
