@@ -1,7 +1,7 @@
 package io.github.cpsc559.team16.common.messaging;
 
-import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 
 /**
@@ -81,6 +81,21 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
         super(messageID, MessageTypes.REGISTER, objectType, DEFAULT_PID, senderRole, targetRole, payload);
     }
 
+
+    /**
+     * Factory method for registering an AddressingServer replica with another addressing server replica.
+     *
+     * @param clientPort       Port used for client communication.
+     * @param peerPort         Port used for replica communication.
+     * @param chatServerPort   Port used to receive chat server registrations.
+     * @return A {@code RegisterMessage} containing an {@code AddrServerRecord} payload.
+     */
+    public static RegisterMessage<AddrServerRecord> fromReplicaToReplica(String hostAddress, int clientPort, int peerPort, int chatServerPort) {
+        AddrServerRecord record = new AddrServerRecord(
+                DEFAULT_PID, hostAddress, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
+        return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.REPLICA, record);
+    }
+    
     /**
      * Factory method for registering a ChatServer.
      *

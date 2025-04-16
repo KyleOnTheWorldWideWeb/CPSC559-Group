@@ -214,7 +214,7 @@ public class AddrServerReadDispatcher {
         }
     }
 
-    /**
+/**
      * Handles a register message based on the sender role and object type.
      *
      * @param channel         The channel from which the message originated.
@@ -223,6 +223,24 @@ public class AddrServerReadDispatcher {
     public void handleRegistration(SocketChannel channel, NIOMessageChannel nioChannel,
             BaseAddrServerMessage<?> registerMessage)
             throws IOException {
+        // TODO - THIS IS THE NEW STUFF THAT MIGHT BREAK THINGS
+        if (registerMessage.getSenderRole().equals(Roles.REPLICA) && registerMessage.getTargetRole().equals(Roles.REPLICA)) {
+            AddrServerRecord replicaRecord = registerMessage.safeCastPayload(AddrServerRecord.class);
+            if (replicaRecord != null) {
+                Long replicaPID = replicaRecord.getPID();
+                if (replicaPID != 0L && replicaPID != null) {
+                    this.server.getAddrServerRegistry().updateOrInsertRecord(replicaRecord);
+                    nioChannel.setServerPID(replicaPID);
+                    if (peerManager.getChannels().containsKey(channel)) {
+                        System.out.println("Replica to replica register request came through a persistent connection");
+                    }
+                }
+                else {
+                    System.out.println("Error with replica to replica record, PID = " + replicaPID);
+                }
+            }
+            return;
+        }
         switch (registerMessage.getSenderRole()) {
             case Roles.CLIENT -> {
                 // WE CAN TUNE THE RESPONSE HERE. FOR NOW I WILL SIMPLY DO AN ACK WITH THE
@@ -246,6 +264,7 @@ public class AddrServerReadDispatcher {
                         registerMessage);
             }
             case Roles.REPLICA -> {
+                if (registerMessage.getTargetRole().equals(Roles.REPLICA)) return;
                 System.out.println("Replica registration message has been received.");
                 this.server.getRegistrationCoordinator().handleReplicaRegistration(channel, nioChannel,
                         registerMessage);
@@ -255,7 +274,9 @@ public class AddrServerReadDispatcher {
         }
     }
 
-    private void handleUpdate(SocketChannel channel, NIOMessageChannel nioChannel,
+
+
+   private void handleUpdate(SocketChannel channel, NIOMessageChannel nioChannel,
             BaseAddrServerMessage<?> updateMessage) {
         System.out.printf("Replica handling update. MsgType: %s | ObjectType: %s | MsgID: %d | SenderRole: %s%n.",
                 updateMessage.getMsgType(), updateMessage.getObjectType(), updateMessage.getMessageID(),
@@ -318,6 +339,14 @@ public class AddrServerReadDispatcher {
                 }
             }
             case Roles.REPLICA -> {
+                if (nioChannel.getServerPID() == 0L) {
+                    Long senderPID = updateMessage.getSenderPID();
+                    boolean assigned = peerManager.assignPIDToChannel(channel, senderPID);
+                    if (assigned) {
+                        System.out.printf("Replica channel PID was set from UPDATE message. New PID: %d%n", senderPID);
+                    }
+                }
+
                 switch (updateMessage.getObjectType()) {
                     case ObjectTypes.ADDR_SERVER_RECORD -> {
                         System.out.println("REPLICA is in switch statement for updating AddrServerRecord from REPLICA");
@@ -327,108 +356,22 @@ public class AddrServerReadDispatcher {
                         System.out.println("REPLICA is in switch statement for updating ChatServerRecord from REPLICA");
                         chatServerManager.updateRecords(updateMessage.safeCastPayload(ChatServerRecord.class));
                     }
+                    default -> System.err.println("Unrecognized object type from REPLICA: " + updateMessage.getObjectType());
                 }
             }
+//            case Roles.REPLICA -> {
+//                switch (updateMessage.getObjectType()) {
+//                    case ObjectTypes.ADDR_SERVER_RECORD -> {
+//                        System.out.println("REPLICA is in switch statement for updating AddrServerRecord from REPLICA");
+//                        peerManager.updateRecords(updateMessage.safeCastPayload(AddrServerRecord.class));
+//                    }
+//                    case ObjectTypes.CHAT_SERVER_RECORD -> {
+//                        System.out.println("REPLICA is in switch statement for updating ChatServerRecord from REPLICA");
+//                        chatServerManager.updateRecords(updateMessage.safeCastPayload(ChatServerRecord.class));
+//                    }
+//                }
+//            }
             default -> System.err.println("Unrecognized sender role for UPDATE: " + updateMessage.getSenderRole());
-        }
-    }
-
-    /**
-     * Handles a request message based on the sender role and object type.
-     *
-     * @param channel        The channel from which the request originated.
-     * @param requestMessage The received request message.
-     */
-    private void handleRequest(SocketChannel channel, NIOMessageChannel nioChannel,
-            BaseAddrServerMessage<?> requestMessage) {
-        switch (requestMessage.getSenderRole()) {
-            case Roles.CHATSERVER -> {
-                switch (requestMessage.getObjectType()) {
-                    case (RequestObjectTypes.ALL_SERVER_RECORDS) -> {
-                        executorService.submit(() -> {
-                            try {
-                                broadcastManager.sendAllRecordsToCS(this.getPID(), nioChannel,
-                                        this.server.getChatServerRegistry().getRecords(),
-                                        this.server.getAddrServerRegistry().getRecords());
-                            } catch (IOException e) {
-                                System.err.printf(
-                                        "IOException triggered while responding to ALL_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n",
-                                        nioChannel.getServerPID());
-                            }
-                        });
-                    }
-                    case (RequestObjectTypes.CHAT_SERVER_RECORDS) -> {
-                        executorService.submit(() -> {
-                            try {
-                                broadcastManager.sendAllChatServerRecordsToCS(this.getPID(), nioChannel,
-                                        this.server.getChatServerRegistry().getRecords());
-                            } catch (IOException e) {
-                                System.err.printf(
-                                        "IOException triggered while responding to CHAT_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n",
-                                        nioChannel.getServerPID());
-                            }
-                        });
-                    }
-                    case (RequestObjectTypes.ADDR_SERVER_RECORDS) -> {
-                        executorService.submit(() -> {
-                            try {
-                                broadcastManager.sendAllAddrServerRecordsToCS(this.getPID(), nioChannel,
-                                        this.server.getAddrServerRegistry().getRecords());
-                            } catch (IOException e) {
-                                System.err.printf(
-                                        "IOException triggered while responding to ADDR_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n",
-                                        nioChannel.getServerPID());
-                            }
-                        });
-                    }
-                    default ->
-                        System.err.println("Unrecognized ObjectType for REQUEST: " + requestMessage.getObjectType());
-                }
-            }
-            case Roles.REPLICA -> {
-                switch (requestMessage.getObjectType()) {
-                    case (RequestObjectTypes.ALL_SERVER_RECORDS) -> {
-                        executorService.submit(() -> {
-                            try {
-                                broadcastManager.sendAllRecordsToReplica(this.getPID(), nioChannel,
-                                        this.server.getChatServerRegistry().getRecords(),
-                                        this.server.getAddrServerRegistry().getRecords());
-                            } catch (IOException e) {
-                                System.err.printf(
-                                        "IOException triggered while responding to ALL_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n",
-                                        nioChannel.getServerPID());
-                            }
-                        });
-                    }
-                    case (RequestObjectTypes.CHAT_SERVER_RECORDS) -> {
-                        executorService.submit(() -> {
-                            try {
-                                broadcastManager.sendAllChatServerRecordsToReplica(this.getPID(), nioChannel,
-                                        this.server.getChatServerRegistry().getRecords());
-                            } catch (IOException e) {
-                                System.err.printf(
-                                        "IOException triggered while responding to CHAT_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n",
-                                        nioChannel.getServerPID());
-                            }
-                        });
-                    }
-                    case (RequestObjectTypes.ADDR_SERVER_RECORDS) -> {
-                        executorService.submit(() -> {
-                            try {
-                                broadcastManager.sendAllAddrServerRecordsToReplica(this.getPID(), nioChannel,
-                                        this.server.getAddrServerRegistry().getRecords());
-                            } catch (IOException e) {
-                                System.err.printf(
-                                        "IOException triggered while responding to ADDR_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n",
-                                        nioChannel.getServerPID());
-                            }
-                        });
-                    }
-                    default ->
-                        System.err.println("Unrecognized ObjectType for REQUEST: " + requestMessage.getObjectType());
-                }
-            }
-            default -> System.err.println("Unrecognized sender role for REQUEST: " + requestMessage.getSenderRole());
         }
     }
 

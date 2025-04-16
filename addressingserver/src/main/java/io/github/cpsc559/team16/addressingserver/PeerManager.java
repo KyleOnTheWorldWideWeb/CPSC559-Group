@@ -481,6 +481,105 @@ public class PeerManager {
     }
 
 
+    /**
+     * Attempts to register this REPLICA with all other REPLICA AddressingServers in the registry.
+     * <p>
+     * Skips registration with the PRIMARY and with itself. Establishes a persistent connection
+     * to each REPLICA, sends a {@code RegisterMessage<AddrServerRecord>}, and stores the
+     * connection in {@link #peerChannels}.
+     * </p>
+     *
+     * @param registry The shared AddrServerRegistry containing all known AddressingServer records.
+     */
+    public void registerWithOtherReplicas(AddrServerRegistry registry) {
+        for (AddrServerRecord record : registry.getRecords().values()) {
+            if (record.getRole() == ServerRole.REPLICA && !record.getPID().equals(server.getConfig().getPID())) {
+                registerWithReplica(record);
+            }
+        }
+    }
+
+    /**
+     * Attempts to register this REPLICA with a single REPLICA AddressingServer.
+     * <p>
+     * Skips registration if the target is PRIMARY or is this server itself. Uses the local configuration
+     * to create a {@code RegisterMessage<AddrServerRecord>} using {@code fromReplicaToReplica()}, and
+     * stores a persistent {@code SocketChannel} and {@code NIOMessageChannel} in {@link #peerChannels}.
+     * </p>
+     *
+     * @param record The AddrServerRecord of the target REPLICA to register with.
+     * @return {@code true} if registration succeeded, {@code false} otherwise.
+     */
+    public boolean registerWithReplica(AddrServerRecord record) {
+        if (record.getRole() != ServerRole.REPLICA || record.getPID().equals(server.getConfig().getPID())) {
+            System.out.printf("Skipping registration with PID %d — not a REPLICA or is self.%n", record.getPID());
+            return false;
+        }
+
+        try {
+            SocketChannel channel = SocketChannel.open();
+            channel.configureBlocking(true);
+            channel.connect(new InetSocketAddress(record.getHostAddress(), record.getPeerPort()));
+            while (!channel.finishConnect()) {
+                Thread.sleep(50);
+            }
+
+            NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
+            peerChannels.put(channel, nioChannel); // Store persistent connection
+
+            String publicAddress = System.getenv("PUBLIC_ADDRESS");
+            if (publicAddress == null || publicAddress.isEmpty()) {
+                InetAddress localHost = InetAddress.getLocalHost();
+                publicAddress = localHost.getHostAddress();
+                System.out.println("PUBLIC_ADDRESS not set; using detected: " + publicAddress);
+            } else {
+                System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
+            }
+
+            RegisterMessage<AddrServerRecord> register = RegisterMessage.fromReplicaToReplica(
+                    publicAddress,
+                    server.getConfig().getClientPort(),
+                    server.getConfig().getReplicaPort(),
+                    server.getConfig().getChatServerPort()
+            );
+            nioChannel.sendMessage(register.toJson());
+
+            channel.configureBlocking(false);
+            System.out.printf("Successfully registered with REPLICA PID %d at %s:%d%n",
+                    record.getPID(), record.getHostAddress(), record.getPeerPort());
+
+            return true;
+
+        } catch (IOException | InterruptedException e) {
+            System.err.printf("Failed to register with REPLICA PID %d at %s:%d — %s%n",
+                    record.getPID(), record.getHostAddress(), record.getPeerPort(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Assigns a server PID to the {@link NIOMessageChannel} associated with the given {@link SocketChannel},
+     * if the channel is already stored in {@link #peerChannels}.
+     * <p>
+     * This is typically used during replica registration when the PID of the remote process becomes known.
+     * </p>
+     *
+     * @param channel the {@code SocketChannel} whose associated {@code NIOMessageChannel} should be updated.
+     * @param pid     the PID to assign to the {@code NIOMessageChannel}.
+     * @return {@code true} if the PID was successfully assigned, {@code false} if the channel was not found.
+     */
+    public boolean assignPIDToChannel(SocketChannel channel, Long pid) {
+        NIOMessageChannel nioChannel = peerChannels.get(channel);
+        if (nioChannel != null) {
+            nioChannel.setServerPID(pid);
+            System.out.printf("Assigned PID %d to NIOMessageChannel for SocketChannel: %s%n", pid, channel);
+            return true;
+        } else {
+            System.err.printf("Channel %s not found in peerChannels. PID %d not assigned.%n", channel, pid);
+            return false;
+        }
+    }
+
 
 //    /**
 //     * Updates the provided {@link AddrServerRecord} with runtime information from the given socket connection and PID.
