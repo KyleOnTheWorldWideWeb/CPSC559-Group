@@ -51,7 +51,7 @@ public class ChatServerRegistry {
     public void updateOrInsertRecord(ChatServerRecord record) {
         Long id = record.getPID();
         if (id == null) {
-            System.err.println("AddrServerRecord has a null PID. Cannot update or insert record.");
+            System.err.println("ChatServerRecord has a null PID. Cannot update or insert record.");
             return;
         }
         ChatServerRecord existing = chatServerRecords.get(id);

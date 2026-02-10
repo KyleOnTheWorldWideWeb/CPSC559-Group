@@ -52,6 +52,9 @@ public class ClientManager {
     /**
      * Sends an ACK message to the client with the available ChatServer info.
      *
+     * When a client connects to the network for the first time, or loses its connection to a chat server,
+     * it automatically contacts the Addressing Server to request the address of an available chat server.
+     *
      * @param primaryPID the PID of the Addressing Server
      * @param nioChannel the channel to send the ACK on
      * @return ChatServerRecord if a host is available, null otherwise
