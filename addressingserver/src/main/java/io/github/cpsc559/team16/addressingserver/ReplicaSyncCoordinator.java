@@ -36,7 +36,16 @@ public class ReplicaSyncCoordinator {
 
 
     public void addPendingEvent(Long messageID, PendingEvent event) {
-        pendingEvents.put(messageID, event);
+        if (event.isComplete()) {
+            try {
+                // If no replicas are expected, execute the state change immediately
+                event.respondToRequester();
+            } catch (IOException e) {
+                System.err.println("Immediate completion failed: " + e.getMessage());
+            }
+        } else {
+            pendingEvents.put(messageID, event);
+        }
     }
 
     public ConcurrentMap<Long, PendingEvent> getPendingEvents() { return pendingEvents; }

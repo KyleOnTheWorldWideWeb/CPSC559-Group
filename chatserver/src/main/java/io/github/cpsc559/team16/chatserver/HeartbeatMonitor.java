@@ -3,6 +3,9 @@ package io.github.cpsc559.team16.chatserver;
 import java.nio.channels.SelectionKey;
 import java.util.Map;
 
+import static io.github.cpsc559.team16.client.Client.DEBUG_BASIC;
+import static io.github.cpsc559.team16.client.Client.DEBUG_DETAILED;
+
 /**
  * Monitors the heartbeat of connected peer servers and clients, ensuring that
  * inactive peers
@@ -46,8 +49,10 @@ import java.util.Map;
  */
 
 public class HeartbeatMonitor implements Runnable {
-    private static final long IDLE_TIMEOUT = 8_000; // 8 seconds
+    private static final long IDLE_TIMEOUT = 15000; // 15 seconds
     private static final int MAX_MISSED = 3;
+    private final long monitorStartTime = System.currentTimeMillis();
+    private static final long STARTUP_GRACE_PERIOD = 20_000; // 20 seconds
 
     private final Map<Integer, ConnectionContext> peerMap;
 
@@ -74,13 +79,27 @@ public class HeartbeatMonitor implements Runnable {
     @Override
     public void run() {
         while (true) {
-            debug(3, "Checking peers for heartbeat...");
+
+            // Servers cannot begin aggressive heartbeat monitoring right out of the gate. They need a grace period.
+            if (System.currentTimeMillis() - monitorStartTime < STARTUP_GRACE_PERIOD) {
+                debug(DEBUG_BASIC, "In startup grace period, skipping health checks...");
+                try { Thread.sleep(5000); } catch (InterruptedException e) {}
+                continue;
+            }
+            debug(DEBUG_BASIC, "Starting heartbeat");
+            debug(DEBUG_DETAILED, "Checking peers for heartbeat...");
 
             long now = System.currentTimeMillis();
 
             for (Map.Entry<Integer, ConnectionContext> entry : peerMap.entrySet()) {
                 int peerID = entry.getKey();
                 ConnectionContext ctx = entry.getValue();
+
+                if (peerID == -1 || ctx.peerID == -1) {
+                    debug(3, "Skipping unidentified peer connection...");
+                    continue;
+                }
+
                 SelectionKey key = ctx.socketChannel.keyFor(ChatServer.getSelector());
 
                 if (key == null || !key.isValid()) {

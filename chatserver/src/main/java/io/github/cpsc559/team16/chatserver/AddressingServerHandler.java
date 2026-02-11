@@ -19,6 +19,8 @@ import io.github.cpsc559.team16.common.messaging.ServerFailureMessage;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.messaging.ObjectTypes;
 
+import static io.github.cpsc559.team16.chatserver.ChatServer.processSingleChatServerRecord;
+
 /**
  * Handles all incoming messages from the Addressing Server.
  * <p>
@@ -106,10 +108,10 @@ class AddressingServerHandler implements ConnectionHandler {
                 handleAck(message, ctx, key);
             } else if ("UPDATE".equalsIgnoreCase(type) && "ChatServerRecord".equalsIgnoreCase(objectType)) {
                 handleUpdate(message, ctx, key);
-
-            } else if ("UPDATE".equalsIgnoreCase(type) && "AdressServerRecord".equalsIgnoreCase(objectType)) {
+            } else if ("UPDATE".equalsIgnoreCase(type) && "AddressServerRecord".equalsIgnoreCase(objectType)) {
                 handleUpdateAddr(message, ctx, key);
             } else if (MessageTypes.SERVERFAILURE.equals(type) && ObjectTypes.CHATSERVER_FAILURE.equals(objectType)) {
+
                 handleServerFailure(message, ctx, key);
             } else {
                 debug(DEBUG_NORMAL, "[ADDR_SERVER] Unhandled message — type: " + type + ", objectType: " + objectType);
@@ -208,20 +210,19 @@ class AddressingServerHandler implements ConnectionHandler {
 
             // Handle single ChatServerRecord
             if (payload instanceof ChatServerRecord record) {
-                String jsonStr = objectMapper.writeValueAsString(record);
-                chatServersArray.put(new JSONObject(jsonStr));
+                debug(DEBUG_LOW_LEVEL, "Directly processing ChatServerRecord for PID: " + record.getPID());
+                ChatServer.processSingleChatServerRecord(record, ChatServer.getSelector());
+                // Handle multiple ChatServerRecords
             } else if (payload instanceof Map<?, ?> map) {
                 chatServersArray.put(new JSONObject(map));
+                debug(DEBUG_LOW_LEVEL, "[ADDR_SERVER] Forwarding peer list to processChatServerList()");
+                JSONObject wrapper = new JSONObject();
+                wrapper.put("chatServers", chatServersArray);
+                ChatServer.processChatServerList(wrapper.toString(), ChatServer.getSelector());
             } else {
                 debug(DEBUG_BASIC, "[ADDR_SERVER] Unexpected payload type: " + payload.getClass());
                 return;
             }
-
-            JSONObject wrapper = new JSONObject();
-            wrapper.put("chatServers", chatServersArray);
-
-            debug(DEBUG_LOW_LEVEL, "[ADDR_SERVER] Forwarding peer list to processChatServerList()");
-            ChatServer.processChatServerList(wrapper.toString(), ChatServer.getSelector());
 
         } catch (Exception e) {
             debug(DEBUG_BASIC, "[ADDR_SERVER] Failed to handle UPDATE: " + e.getMessage());
@@ -256,6 +257,22 @@ class AddressingServerHandler implements ConnectionHandler {
             }
 
             int failedPeerId = failedPeerPID.intValue();
+
+            // Add this right before the containsKey check
+            debug(DEBUG_BASIC, "--- SEARCHING FOR PID: " + failedPeerId + " ---");
+
+            if (ChatServer.getConnectedPeers().isEmpty()) {
+                debug(DEBUG_BASIC, "[!!!] Peer Map is EMPTY. No peers registered.");
+            } else {
+                for (Object keyInMap : ChatServer.getConnectedPeers().keySet()) {
+                    boolean match = keyInMap.equals(failedPeerId);
+                    debug(DEBUG_BASIC, String.format("Comparing: Target [%d] (Integer) vs MapKey [%s] (%s) | Match: %b",
+                            failedPeerId,
+                            keyInMap.toString(),
+                            keyInMap.getClass().getSimpleName(),
+                            match));
+                }
+            }
 
             // Remove the failed peer from our connected peers
             if (ChatServer.getConnectedPeers().containsKey(failedPeerId)) {
@@ -304,46 +321,63 @@ class AddressingServerHandler implements ConnectionHandler {
      */
     public void notifyPeerCrash(int crashedPeerId) {
         try {
+            // SAFETY CHECK: Do not notify for PID -1.
+            // A PID of -1 means the connection failed before the handshake finished.
+            if (crashedPeerId <= 0) {
+                debug(DEBUG_NORMAL, "[ADDR_SERVER] Skipping notification for unidentified peer (ID: " + crashedPeerId + "). This is likely a startup race condition.");
+                return;
+            }
+
             debug(DEBUG_NORMAL, "[ADDR_SERVER] Preparing crash notification for peer ID: " + crashedPeerId);
 
             // Create a Standardized ServerFailureMessage using the factory method
-            ServerFailureMessage<Long> crashMessage = ServerFailureMessage.chatServerFailed(
-                    ChatServer.getID(), // Sender PID
-                    Roles.CHATSERVER, // Sender Role
-                    Roles.PRIMARY, // Target Role
-                    (long) crashedPeerId // Failed Peer ID (cast to Long)
-            );
+            // Using the common utility classes from your imports
+            io.github.cpsc559.team16.common.messaging.ServerFailureMessage<Long> crashMessage =
+                    io.github.cpsc559.team16.common.messaging.ServerFailureMessage.chatServerFailed(
+                            ChatServer.getID(),
+                            io.github.cpsc559.team16.common.messaging.Roles.CHATSERVER,
+                            io.github.cpsc559.team16.common.messaging.Roles.PRIMARY,
+                            (long) crashedPeerId
+                    );
 
             String json = crashMessage.toJson() + "\n";
 
-            // Find the addressing server connection
+            // Find the addressing server connection by iterating through selector keys
             for (SelectionKey key : ChatServer.getSelector().keys()) {
                 if (!key.isValid())
                     continue;
 
-                ConnectionContext ctx = (ConnectionContext) key.attachment();
-                if (ctx != null && ctx.type == ChatServer.ConnectionType.ADDRESSING_SERVER) {
-                    // Queue the message to be sent
-                    synchronized (ctx.writeQueue) {
-                        ctx.writeQueue
-                                .add(java.nio.ByteBuffer.wrap(json.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                Object attachment = key.attachment();
+
+                // FIX: Verify attachment type before casting to avoid ClassCastException
+                // Your listener keys have 'ConnectionType' enums as attachments, not 'ConnectionContext'
+                if (attachment instanceof ConnectionContext) {
+                    ConnectionContext ctx = (ConnectionContext) attachment;
+
+                    if (ctx.type == ChatServer.ConnectionType.ADDRESSING_SERVER) {
+                        // Queue the message to be sent via the non-blocking write logic
+                        synchronized (ctx.writeQueue) {
+                            ctx.writeQueue.add(java.nio.ByteBuffer.wrap(
+                                    json.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+                            ));
+                        }
+
+                        // Set OP_WRITE so the main loop handles the actual socket write
+                        key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+                        key.selector().wakeup();
+
+                        debug(DEBUG_BASIC, "[ADDR_SERVER] Sent SERVERFAILURE message for peer " + crashedPeerId
+                                + " to Addressing Server");
+                        return;
                     }
-
-                    // Ensure OP_WRITE is set to trigger a write operation
-                    key.interestOps(key.interestOps() | java.nio.channels.SelectionKey.OP_WRITE);
-                    key.selector().wakeup();
-
-                    debug(DEBUG_BASIC, "[ADDR_SERVER] Sent SERVERFAILURE message for peer " + crashedPeerId
-                            + " to Addressing Server");
-                    return;
                 }
             }
 
-            debug(DEBUG_BASIC, "[ADDR_SERVER] No connection to Addressing Server found to notify about crashed peer");
+            debug(DEBUG_BASIC, "[ADDR_SERVER] No active Addressing Server connection found to report crash of PID: " + crashedPeerId);
         } catch (Exception e) {
-            debug(DEBUG_BASIC,
-                    "[ADDR_SERVER] Failed to notify Addressing Server about crashed peer: " + e.getMessage());
+            debug(DEBUG_BASIC, "[ADDR_SERVER] Error in notifyPeerCrash: " + e.getMessage());
             e.printStackTrace();
         }
     }
+
 }

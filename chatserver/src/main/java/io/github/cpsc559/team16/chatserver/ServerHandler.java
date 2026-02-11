@@ -207,8 +207,13 @@ class ServerHandler implements ConnectionHandler {
      */
 
     public void handle(BaseMessage message, ConnectionContext ctx, SelectionKey key) {
-        if (!(message instanceof ServerServerMessage msg)) {
+        // FIX C: Universal activity reset
+        // Any valid message received on this channel proves the peer is alive.
+        ctx.lastActivityTime = System.currentTimeMillis();
+        ctx.awaitingPong = false;
+        ctx.missedPongs = 0;
 
+        if (!(message instanceof ServerServerMessage msg)) {
             if (message instanceof ClientServerMessage clientMsg) {
                 ConnectionHandler clientHandler = ChatServer.getHandler(ChatServer.ConnectionType.CLIENT);
                 if (clientHandler != null) {
@@ -283,9 +288,7 @@ class ServerHandler implements ConnectionHandler {
                     key.selector().wakeup();
                     return;
                 } else if (msg.getCommand().equals("PONG")) {
-                    ctx.awaitingPong = false;
-                    ctx.missedPongs = 0;
-                    ctx.lastActivityTime = System.currentTimeMillis();
+                    // Logic is now redundant due to universal reset at top, but kept for logging
                     debug(DEBUG_NORMAL, "Received PONG from " + msg.getSender());
                     return;
                 }
@@ -293,7 +296,6 @@ class ServerHandler implements ConnectionHandler {
             } catch (JsonProcessingException e) {
                 e.printStackTrace();
             }
-
         }
     }
 

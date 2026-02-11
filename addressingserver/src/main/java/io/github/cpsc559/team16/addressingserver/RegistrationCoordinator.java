@@ -174,7 +174,7 @@ public class RegistrationCoordinator {
                     this.chatServerRegistry.getRecords(),
                     this.addrServerRegistry.getRecords());
             this.broadcastManager.broadcastChatServerRecordToCS(primaryPID, record);
-            this.addrServerRegistry.debugPrintAllServers();
+            this.chatServerRegistry.debugPrintAllServers();
         } catch (IOException ioe) {
             System.err.printf("IOException triggered while registering PID: %d - triggering connection cleanup.%n", newPID);
             this.cleanupManager.cleanupPersistentConnection(channel, true);

@@ -356,7 +356,6 @@ public class ChatServer {
 
         debug(DEBUG_BASIC, String.format("Listening for clients on %d, peers on %d", port, PEER_LISTEN_PORT));
 
-        debug(DEBUG_BASIC, "Starting heartbeat");
 
         Thread heartbeatThread = new Thread(new HeartbeatMonitor(connectedPeers));
         heartbeatThread.setDaemon(true);
@@ -574,8 +573,8 @@ public class ChatServer {
             String publicAddress = System.getenv("PUBLIC_ADDRESS");
             // Add a fallback if the environment variable isn't set
             if (publicAddress == null || publicAddress.isEmpty()) {
-                InetAddress localHost = InetAddress.getLocalHost();
-                publicAddress = localHost.getHostAddress();
+                // In Docker, getHostName() returns the unique Container ID which can be used for internal DNS routing
+                publicAddress = InetAddress.getLocalHost().getHostName();
                 System.out.println(
                         "WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
             } else {
@@ -649,6 +648,21 @@ public class ChatServer {
                     continue;
                 }
 
+                if (connectedPeers.containsKey(peerID)) {
+                    debug(DEBUG_LOW_LEVEL, "Already connected to PID=" + peerID + ". Skipping.");
+                    continue;
+                }
+
+                // --- TIE BREAKER LOGIC START -> Needed to avoid race conditions when several containers are spun up simultaneously. ---
+                // Only connect if this.ID is smaller than the peer's ID.
+                // If this.ID is larger, wait for the other process to make the connection request.
+                if (ID > peerID) {
+                    debug(DEBUG_NORMAL, "My PID (" + ID + ") is higher than " + peerID +
+                            ". Waiting for them to initiate the connection.");
+                    continue;
+                }
+                // --- TIE BREAKER LOGIC END ---
+
                 String peerAddress = server.getString("hostAddress");
                 int peerPort = server.getInt("peerPort");
 
@@ -663,6 +677,43 @@ public class ChatServer {
             debug(DEBUG_BASIC, "Error parsing chat server list: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+
+    public static void processSingleChatServerRecord(ChatServerRecord record, Selector selector) {
+        if (record == null) return;
+
+        long peerPID = record.getPID(); // Cast long to int if necessary
+
+        int peerID = (int) peerPID;
+
+        // 1. Skip self
+        if (peerID == ID) {
+            debug(DEBUG_LOW_LEVEL, "Skipping self in update: PID=" + peerID);
+            return;
+        }
+
+        // 2. Check if already connected
+        if (connectedPeers.containsKey(peerID)) {
+            debug(DEBUG_LOW_LEVEL, "Already connected to PID=" + peerID + ". Skipping.");
+            return;
+        }
+
+        // 3. Tie Breaker: Only connect if my PID is lower than theirs
+        if (ID > peerID) {
+            debug(DEBUG_NORMAL, "My PID (" + ID + ") is higher than " + peerID +
+                    ". Waiting for them to initiate the connection.");
+            return;
+        }
+
+        // 4. Extract connection info directly from the record object
+        String peerAddress = record.getHostAddress();
+        int peerPort = record.getPeerPort();
+
+        debug(DEBUG_NORMAL, String.format("Initiating connection to peer PID=%d at %s:%d",
+                peerID, peerAddress, peerPort));
+
+        connectToPeerServer(selector, peerAddress, peerPort, peerID);
     }
 
     /**
@@ -695,7 +746,8 @@ public class ChatServer {
      * <h3>Integration notes:</h3>
      * <ul>
      * <li>This method is usually called from
-     * {@link #processChatServerList(String, Selector)}</li>
+     * {@link #processChatServerList(String, Selector)}</li> or
+     * {@link #processSingleChatServerRecord(ChatServerRecord, Selector)}</li>
      * <li>The {@code OP_CONNECT} event is handled in the selector loop via
      * {@link #handleConnect(SelectionKey)}</li>
      * </ul>
@@ -708,7 +760,6 @@ public class ChatServer {
      * @param peerID   the unique process ID of the peer server, as assigned by the
      *                 Addressing Server
      */
-
     public static void connectToPeerServer(Selector selector, String host, int port, int peerID) {
         debug(DEBUG_BASIC, String.format("Attempting to connect to peer server PID=%d at %s:%d", peerID, host, port));
 

@@ -65,25 +65,18 @@ services:  # Defines the services (Docker containers) that will be run.
 
   chatserver:
     image: chatserver:latest
-    container_name: chatserver
-    profiles: [ "chatserver", "main-single" ]
+    profiles: [ "chatserver" ]
     build:
       dockerfile: Dockerfile.chatserver
-    ports:
-      - "2424:2424"
-      - "2425:2425"
     environment:
-      # HOST_ADDRESS and ADDRESS_SERVER_IP seem redundant - refactor the code to use only one
-      - HOST_ADDRESS=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
-      - ADDRESS_SERVER_IP=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
       - CS_PORT=${CS_PORT:-2424}
       - CS_PEER_PORT=${CS_PEER_PORT:-2425}
       - CS_ADDRSERVER_PORT=${CS_ADDRSERVER_PORT:-49802}
-      - PUBLIC_ADDRESS=${CS_PUBLIC_ADDRESS:-chatserver}
+      - ADDRESS_SERVER_IP=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
+      - DEBUG_LEVEL=${DEBUG_LEVEL:-0}
+      # We leave PUBLIC_ADDRESS out entirely to ensure the internal Docker DNS is used
     networks:
       - chat_network
-    # volumes:
-    #   - ./chatlogs:/app/src/main/java/com/Logs
 
   client:
     image: client:latest
@@ -97,6 +90,7 @@ services:  # Defines the services (Docker containers) that will be run.
       - CLIENT_PORT=${CLIENT_PORT:-3000}
       - HOST_ADDRESS=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
       - ADDRESS_SERVER_IP=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
+      - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
     networks:
       - chat_network
     tty: true

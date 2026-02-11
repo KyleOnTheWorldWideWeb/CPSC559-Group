@@ -195,7 +195,6 @@ public class ChatServerManager {
         chatServerChannels.put(socketChannel, nioChannel);
         // Update network topology storing the ChatServerRecord, thus updating the local state of the Primary
         registry.putChatServerRecord(record.getPID(), record);
-        System.out.println("New replica successfully registered within the network.");
     }
 
 
@@ -221,9 +220,9 @@ public class ChatServerManager {
         System.out.println("Socket Channel ID = " + socketChannel.toString());
 
         registry.putChatServerRecord(peerPID, record);
-
         // Send an ACK to notify the server it has been registered.
         nioChannel.sendMessage(AckMessage.chatServerRegistered(primaryPID, peerPID).toJson());
+        System.out.println("New Chat Server successfully registered within the network.");
     }
 
     /**
