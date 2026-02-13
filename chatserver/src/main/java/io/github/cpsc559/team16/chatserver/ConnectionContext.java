@@ -81,6 +81,12 @@ public class ConnectionContext {
     public boolean awaitingPong = false;
     public int missedPongs = 0;
 
+    // Connections are attempted up to 3 times before a failure message is generated
+    public int retryCount = 0;
+    public static final int MAX_RETRIES = 3;
+
+    public volatile boolean needsClosing = false;
+
     public ConnectionContext(SocketChannel socketChannel) {
         this.socketChannel = socketChannel;
         this.lastActivityTime = System.currentTimeMillis();

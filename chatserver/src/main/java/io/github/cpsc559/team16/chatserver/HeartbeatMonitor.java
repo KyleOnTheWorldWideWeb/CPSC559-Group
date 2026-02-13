@@ -78,6 +78,7 @@ public class HeartbeatMonitor implements Runnable {
 
     @Override
     public void run() {
+        debug(DEBUG_BASIC, "Starting heartbeat thread...");
         while (true) {
 
             // Servers cannot begin aggressive heartbeat monitoring right out of the gate. They need a grace period.
@@ -86,8 +87,13 @@ public class HeartbeatMonitor implements Runnable {
                 try { Thread.sleep(5000); } catch (InterruptedException e) {}
                 continue;
             }
-            debug(DEBUG_BASIC, "Starting heartbeat");
-            debug(DEBUG_DETAILED, "Checking peers for heartbeat...");
+
+            if (this.peerMap.isEmpty()) {
+                debug(DEBUG_BASIC, "No active peer connections exist.");
+            } else {
+                debug(DEBUG_DETAILED, "Checking " + this.peerMap.size() + " peers for heartbeat...");
+            }
+
 
             long now = System.currentTimeMillis();
 
@@ -117,12 +123,12 @@ public class HeartbeatMonitor implements Runnable {
 
                         if (ctx.missedPongs >= MAX_MISSED) {
                             try {
-                                debug(1, "Closing unresponsive peer " + peerID);
+                                debug(1, "Tagging unresponsive peer " + peerID + " for closure.");
 
-                                // Don't notify addressing server here, let ChatServer.closeConnection handle it
+                                ctx.needsClosing = true; // Set the flag
+                                ChatServer.getSelector().wakeup(); // Interrupt the main thread's selector.select()
 
-                                key.cancel();
-                                ctx.socketChannel.close();
+                                // We remove it from the map here so heartbeats stop immediately
                                 peerMap.remove(peerID);
                             } catch (Exception e) {
                                 debug(1, "Error closing peer " + peerID + ": " + e.getMessage());

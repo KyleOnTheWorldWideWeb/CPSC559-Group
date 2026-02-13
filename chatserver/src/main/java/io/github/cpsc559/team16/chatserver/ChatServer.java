@@ -13,12 +13,10 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.messaging.NotificationMessage;
@@ -299,6 +297,7 @@ public class ChatServer {
         debug(DEBUG_BASIC, "Starting NIO Server...");
         debug(DEBUG_DETAILED, "Initializing handlers and selector...");
 
+        // 1. Initialize the Handlers
         handlerMap.put(ConnectionType.CLIENT, new ClientHandler());
         handlerMap.put(ConnectionType.SERVER, new ServerHandler());
         handlerMap.put(ConnectionType.ADDRESSING_SERVER, new AddressingServerHandler());
@@ -306,6 +305,7 @@ public class ChatServer {
         selector = Selector.open();
         debug(DEBUG_NORMAL, "Selector opened successfully");
 
+        // 2. Setup Listeners FIRST - Get initialized before trying to talk to the Addressing Server
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "2424"));
         if (isPortInUse(port)) {
             port = CLIENT_PORT;
@@ -315,9 +315,20 @@ public class ChatServer {
             CLIENT_PORT = port;
         }
 
+        // Bind ports so they are ready to receive connections immediately
+        ServerSocketChannel clientChannel = setupListener(port);
+        ServerSocketChannel peerChannel = setupListener(PEER_LISTEN_PORT);
+
+        clientChannel.register(selector, SelectionKey.OP_ACCEPT, ConnectionType.CLIENT);
+        peerChannel.register(selector, SelectionKey.OP_ACCEPT, ConnectionType.SERVER);
+
+        debug(DEBUG_BASIC, String.format("Listeners ready. Clients: %d, Peers: %d", port, PEER_LISTEN_PORT));
+
+        // 3. Register with Addressing Server ONLY AFTER listeners are up
         connectToAddressingServer(selector);
 
-        while (!isRegistered()) {
+        // FIX: Guard against ClassCastException while waiting for registration
+        while (!registered) {
             selector.select();
             Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
             debug(DEBUG_EXTREME, "Selector woke up with " + selector.selectedKeys().size() + " keys");
@@ -329,8 +340,15 @@ public class ChatServer {
                 if (!key.isValid())
                     continue;
 
-                ConnectionContext ctx = (ConnectionContext) key.attachment();
-                if (ctx == null || ctx.type != ConnectionType.ADDRESSING_SERVER)
+                // Only process keys that have a ConnectionContext (The Addressing Server)
+                // Other keys (Listeners) are ignored until registration is complete
+                Object attachment = key.attachment();
+                if (!(attachment instanceof ConnectionContext ctx)) {
+                    debug(DEBUG_DETAILED, "Queueing non-registration event...");
+                    continue;
+                }
+
+                if (ctx.type != ConnectionType.ADDRESSING_SERVER)
                     continue;
 
                 if (key.isConnectable()) {
@@ -343,26 +361,25 @@ public class ChatServer {
             }
         }
 
-        debug(DEBUG_BASIC, String.format("Chat Server registered with assigned PID: %d", getID()));
+        debug(DEBUG_BASIC, String.format("Chat Server registered with assigned PID: %d", ID));
 
-        List<ServerBinding> serverBindings = List.of(
-                new ServerBinding(setupListener(port), ConnectionType.CLIENT),
-                new ServerBinding(setupListener(PEER_LISTEN_PORT), ConnectionType.SERVER));
-
-        for (ServerBinding binding : serverBindings) {
-            binding.channel().register(selector, SelectionKey.OP_ACCEPT, binding.type());
-            debug(DEBUG_NORMAL, "Registered " + binding.type() + " server binding");
-        }
-
-        debug(DEBUG_BASIC, String.format("Listening for clients on %d, peers on %d", port, PEER_LISTEN_PORT));
-
-
+        // Begin Heartbeat monitoring (it has a built-in delay to account for network initialization).
         Thread heartbeatThread = new Thread(new HeartbeatMonitor(connectedPeers));
         heartbeatThread.setDaemon(true);
         heartbeatThread.start();
 
         while (true) {
             selector.select();
+
+            // Check all keys to see if any are tagged for closure by Heartbeat thread
+            for (SelectionKey key : selector.keys()) {
+                if (key.isValid() && key.attachment() instanceof ConnectionContext ctx) {
+                    if (ctx.needsClosing) {
+                        closeConnection(key);
+                    }
+                }
+            }
+
             Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
             debug(DEBUG_EXTREME, "Processing selector events...");
 
@@ -389,7 +406,7 @@ public class ChatServer {
                         handleConnect(key);
                     }
                 } catch (IOException ex) {
-                    debug(DEBUG_NORMAL, "Connection error: " + ex.getMessage());
+                    debug(DEBUG_NORMAL, "Connection error in main loop: " + ex.getMessage());
                     closeConnection(key);
                 }
             }
@@ -427,19 +444,43 @@ public class ChatServer {
         ConnectionContext ctx = (ConnectionContext) key.attachment();
         SocketChannel socketChannel = ctx.socketChannel;
 
-        debug(DEBUG_DETAILED, "handleConnect() called for: " + socketChannel.getRemoteAddress());
+        try {
+            if (socketChannel.finishConnect()) {
+                debug(DEBUG_NORMAL, "Successfully connected to peer PID=" + ctx.peerID);
+                key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
-        if (socketChannel.finishConnect()) {
-            debug(DEBUG_NORMAL, "Finished connecting to peer: " + socketChannel.getRemoteAddress());
-            key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
-
-            if (ctx.type == ConnectionType.SERVER && ctx.peerID != ID) {
-                debug(DEBUG_BASIC, "Marked peer " + ctx.peerID + " as connected.");
-                connectedPeers.put(ctx.peerID, ctx);
-                requestChatLogFor(ctx, key);
+                if (ctx.type == ConnectionType.SERVER && ctx.peerID != ID) {
+                    connectedPeers.put(ctx.peerID, ctx);
+                    requestChatLogFor(ctx, key);
+                }
             }
-        } else {
-            debug(DEBUG_BASIC, "Connection not yet complete");
+        } catch (IOException e) {
+            // Only attempt retries for PEER connections that were refused
+            if (ctx.type == ConnectionType.SERVER && e.getMessage().contains("refused")) {
+
+                if (ctx.retryCount < ConnectionContext.MAX_RETRIES) {
+                    ctx.retryCount++;
+                    debug(DEBUG_NORMAL, String.format("PID=%d not ready. Retry %d/%d...",
+                            ctx.peerID, ctx.retryCount, ConnectionContext.MAX_RETRIES));
+
+                    // 1. Clean up current failed attempt
+                    socketChannel.close();
+                    key.cancel();
+
+                    // 2. Schedule the next attempt
+                    // In a real NIO app, you might use a ScheduledExecutor,
+                    // but for this, a brief sleep + re-call is functional.
+                    try { Thread.sleep(500 * ctx.retryCount); } catch (InterruptedException ignored) {}
+
+                    connectToPeerServer(selector, ctx.host, ctx.port, ctx.peerID, ctx.retryCount);
+                    return; // Exit quietly! No exception thrown to main yet.
+                }
+            }
+
+            // If we get here, it's either the Addressing Server failing,
+            // a different kind of IO error, or we've run out of retries.
+            // Throwing here triggers the 'catch' in your main loop.
+            throw new IOException("Connection failed after retries: " + e.getMessage());
         }
     }
 
@@ -668,7 +709,7 @@ public class ChatServer {
 
                 debug(DEBUG_NORMAL,
                         String.format("Attempting connection to peer PID=%d at %s:%d", peerID, peerAddress, peerPort));
-                connectToPeerServer(selector, peerAddress, peerPort, peerID);
+                connectToPeerServer(selector, peerAddress, peerPort, peerID,0);
             }
 
             debug(DEBUG_BASIC, "Finished processing peer server list.");
@@ -713,7 +754,7 @@ public class ChatServer {
         debug(DEBUG_NORMAL, String.format("Initiating connection to peer PID=%d at %s:%d",
                 peerID, peerAddress, peerPort));
 
-        connectToPeerServer(selector, peerAddress, peerPort, peerID);
+        connectToPeerServer(selector, peerAddress, peerPort, peerID, 0);
     }
 
     /**
@@ -760,7 +801,7 @@ public class ChatServer {
      * @param peerID   the unique process ID of the peer server, as assigned by the
      *                 Addressing Server
      */
-    public static void connectToPeerServer(Selector selector, String host, int port, int peerID) {
+    public static void connectToPeerServer(Selector selector, String host, int port, int peerID, int currentRetry) {
         debug(DEBUG_BASIC, String.format("Attempting to connect to peer server PID=%d at %s:%d", peerID, host, port));
 
         try {
@@ -773,6 +814,7 @@ public class ChatServer {
             ctx.peerID = peerID;
             ctx.host = host;
             ctx.port = port;
+            ctx.retryCount = currentRetry; // Maintain the retry count
 
             peerChannel.register(selector, SelectionKey.OP_CONNECT, ctx);
             selector.wakeup();
@@ -1014,6 +1056,8 @@ public class ChatServer {
         debug(DEBUG_DETAILED, "Write queue empty, removing OP_WRITE");
     }
 
+
+
     /**
      * Closes a socket connection and performs cleanup based on its connection type.
      * <p>
@@ -1051,49 +1095,94 @@ public class ChatServer {
      * @throws IOException if closing the socket channel fails
      */
 
-    private static void closeConnection(SelectionKey key) throws IOException {
-        SocketChannel socketChannel = (SocketChannel) key.channel();
+//    private static void closeConnection(SelectionKey key) throws IOException {
+//        SocketChannel socketChannel = (SocketChannel) key.channel();
+//
+//        ConnectionContext ctx = (ConnectionContext) key.attachment();
+//        if (ctx.username != null) {
+//            ClientHandler.unregisterUsername(ctx.username);
+//            // Notify addressing server about client disconnection
+//            if (ctx.type == ConnectionType.CLIENT) {
+//                notifyAddressingServerClientCount();
+//            }
+//        }
+//
+//        if (ctx.type == ConnectionType.SERVER) {
+//            ConnectionContext lostCtx = connectedPeers.get(ctx.peerID);
+//            int peerId = ctx.peerID;
+//
+//            // Try reconnection first
+//            attemptRecconnectingToPeer(lostCtx);
+//            connectedPeers.remove(peerId);
+//
+//            // Then notify addressing server about the disconnection
+//            // Only do this if reconnection fails or after reconnection attempts
+//            if (handlerMap.get(ConnectionType.ADDRESSING_SERVER) != null) {
+//                ((AddressingServerHandler) handlerMap.get(ConnectionType.ADDRESSING_SERVER))
+//                        .notifyPeerCrash(peerId);
+//                debug(DEBUG_BASIC, "Notified addressing server about disconnected peer " + peerId);
+//            }
+//        } else if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
+//            debug(DEBUG_BASIC, "Lost connection to Addressing Server. Attempting to reconnect...");
+//            // Start a reconnection attempt to the addressing server
+//            attemptReconnectingToAddressingServer();
+//        }
+//
+//        try {
+//            SocketAddress remoteAddr = socketChannel.getRemoteAddress();
+//            debug(DEBUG_NORMAL, "Closing connection to " + remoteAddr);
+//        } catch (IOException e) {
+//            debug(DEBUG_NORMAL, "Channel was already closed or not available during cleanup.");
+//        }
+//        key.cancel();
+//        if (socketChannel.isOpen())
+//            socketChannel.close();
+//    }
+
+    private static void closeConnection(SelectionKey key) {
+        if (key == null) return;
 
         ConnectionContext ctx = (ConnectionContext) key.attachment();
-        if (ctx.username != null) {
+        SocketChannel socketChannel = (SocketChannel) key.channel();
+
+        // 1. CLEAR THE MAPS FIRST
+        // This stops the Heartbeat thread and other logic from seeing this peer immediately
+        if (ctx != null && ctx.peerID != -1) {
+            connectedPeers.remove(ctx.peerID);
+            // If your HeartbeatMonitor uses 'peerMap', ensure it's the same reference
+            debug(DEBUG_BASIC, "Removed PID " + ctx.peerID + " from active peer tracking.");
+        }
+
+        // 2. CLEAN UP CLIENT STATE
+        if (ctx != null && ctx.username != null) {
             ClientHandler.unregisterUsername(ctx.username);
-            // Notify addressing server about client disconnection
             if (ctx.type == ConnectionType.CLIENT) {
                 notifyAddressingServerClientCount();
             }
         }
 
-        if (ctx.type == ConnectionType.SERVER) {
-            ConnectionContext lostCtx = connectedPeers.get(ctx.peerID);
-            int peerId = ctx.peerID;
-
-            // Try reconnection first
-            attemptRecconnectingToPeer(lostCtx);
-            connectedPeers.remove(peerId);
-
-            // Then notify addressing server about the disconnection
-            // Only do this if reconnection fails or after reconnection attempts
-            if (handlerMap.get(ConnectionType.ADDRESSING_SERVER) != null) {
-                ((AddressingServerHandler) handlerMap.get(ConnectionType.ADDRESSING_SERVER))
-                        .notifyPeerCrash(peerId);
-                debug(DEBUG_BASIC, "Notified addressing server about disconnected peer " + peerId);
+        // 3. NOTIFY ADDRESSING SERVER (If it was a peer)
+        if (ctx != null && ctx.type == ConnectionType.SERVER && ctx.peerID != -1) {
+            AddressingServerHandler addrHandler = (AddressingServerHandler) handlerMap.get(ConnectionType.ADDRESSING_SERVER);
+            if (addrHandler != null) {
+                addrHandler.notifyPeerCrash(ctx.peerID);
+                debug(DEBUG_BASIC, "Notified Addressing Server of crash: PID " + ctx.peerID);
             }
-        } else if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
-            debug(DEBUG_BASIC, "Lost connection to Addressing Server. Attempting to reconnect...");
-            // Start a reconnection attempt to the addressing server
-            attemptReconnectingToAddressingServer();
         }
 
+        // 4. PHYSICAL TEARDOWN
         try {
-            SocketAddress remoteAddr = socketChannel.getRemoteAddress();
-            debug(DEBUG_NORMAL, "Closing connection to " + remoteAddr);
+            key.cancel();
+            if (socketChannel != null && socketChannel.isOpen()) {
+                socketChannel.close();
+            }
+            debug(DEBUG_NORMAL, "Socket channel and SelectionKey closed/cancelled successfully.");
         } catch (IOException e) {
-            debug(DEBUG_NORMAL, "Channel was already closed or not available during cleanup.");
+            debug(DEBUG_LOW_LEVEL, "Cleanup: Channel already closed.");
         }
-        key.cancel();
-        if (socketChannel.isOpen())
-            socketChannel.close();
     }
+
+
 
     /**
      * Attempts to reconnect to a lost peer server using its previous connection
