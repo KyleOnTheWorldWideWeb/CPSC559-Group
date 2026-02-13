@@ -236,6 +236,7 @@ public class ConnectionManager {
 
         String hostname = client.getAsHostname();
         int port = client.getAsPort();
+        Client.debug(Client.DEBUG_NORMAL, "Attempting to resolve and connect to: " + hostname + ":" + port);
 
         // Open a socket to the addressing server
         try (Socket addressSocket = new Socket(hostname, port)) {

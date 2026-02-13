@@ -327,11 +327,9 @@ public class ChatServer {
         // 3. Register with Addressing Server ONLY AFTER listeners are up
         connectToAddressingServer(selector);
 
-        // FIX: Guard against ClassCastException while waiting for registration
         while (!registered) {
             selector.select();
             Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-            debug(DEBUG_EXTREME, "Selector woke up with " + selector.selectedKeys().size() + " keys");
 
             while (keys.hasNext()) {
                 SelectionKey key = keys.next();
@@ -340,23 +338,31 @@ public class ChatServer {
                 if (!key.isValid())
                     continue;
 
-                // Only process keys that have a ConnectionContext (The Addressing Server)
-                // Other keys (Listeners) are ignored until registration is complete
-                Object attachment = key.attachment();
-                if (!(attachment instanceof ConnectionContext ctx)) {
-                    debug(DEBUG_DETAILED, "Queueing non-registration event...");
+                // 1. SILENTLY IGNORE LISTENERS
+                // These are the server sockets on 2424/2425.
+                if (key.isAcceptable()) {
                     continue;
                 }
 
-                if (ctx.type != ConnectionType.ADDRESSING_SERVER)
-                    continue;
+                Object attachment = key.attachment();
 
-                if (key.isConnectable()) {
-                    handleConnect(key);
-                } else if (key.isWritable()) {
-                    handleWrite(key);
-                } else if (key.isReadable()) {
-                    handleRead(key);
+                // 2. CHECK ATTACHMENT
+                if (!(attachment instanceof ConnectionContext ctx)) {
+                    continue;
+                }
+
+                // 3. SEPARATE ADDRESSING SERVER FROM OTHERS
+                if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                    if (key.isConnectable()) {
+                        handleConnect(key);
+                    } else if (key.isWritable()) {
+                        handleWrite(key);
+                    } else if (key.isReadable()) {
+                        handleRead(key);
+                    }
+                } else {
+                    // This is a Peer or Client that attempted a connection while this server is registering.
+                    debug(DEBUG_DETAILED, "Queueing event for " + ctx.type + " (deferred until registered)");
                 }
             }
         }
@@ -370,7 +376,7 @@ public class ChatServer {
 
         while (true) {
             selector.select();
-
+            debug(DEBUG_EXTREME, "Selector woke up with " + selector.selectedKeys().size() + " keys");
             // Check all keys to see if any are tagged for closure by Heartbeat thread
             for (SelectionKey key : selector.keys()) {
                 if (key.isValid() && key.attachment() instanceof ConnectionContext ctx) {
