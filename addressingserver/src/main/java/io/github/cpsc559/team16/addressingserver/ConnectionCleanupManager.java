@@ -132,6 +132,8 @@ public class ConnectionCleanupManager {
      * failure).</li>
      * <li>Removes the connection from either the {@code PeerManager} or
      * {@code ChatServerManager}.</li>
+     * <li>Removes the server record associated with the connection from the appropriate
+     * {@code AddrServerRegistry} or {@code ChatServerRegistry}</li>
      * <li>Cancels the selection key and closes the channel gracefully.</li>
      * </ul>
      * </p>
@@ -199,14 +201,14 @@ public class ConnectionCleanupManager {
                         //broadcastFailureToReplicas(msg, primaryPID, failedPID, Roles.REPLICA);
 
                         broadcastServerFailure(primaryPID, failedPID, Roles.REPLICA);
-                        peerManager.removeProcessCloseConnection(channel);
+                        peerManager.removeRemoteProcess(channel);
                         this.peerManager.debugPrintAllServers();
                     }
                 } else {
                     if (chatServerManager.getChannels().containsKey(channel)) {
-                        chatServerManager.removeProcessCloseConnection(channel);
+                        chatServerManager.removeRemoteProcess(channel);
                     } else if (peerManager.getChannels().containsKey(channel)) {
-                        peerManager.removeProcessCloseConnection(channel);
+                        peerManager.removeRemoteProcess(channel);
                     }
                 }
             }
@@ -231,17 +233,18 @@ public class ConnectionCleanupManager {
      * failure).</li>
      * <li>Removes the connection from either the {@code PeerManager} or
      * {@code ChatServerManager}.</li>
+     * <li>Removes the server record associated with the connection from the appropriate
+     * {@code AddrServerRegistry} or {@code ChatServerRegistry}</li>
      * <li>Cancels the selection key and closes the channel gracefully.</li>
      * </ul>
      * </p>
      *
-     * @param channel the {@code SocketChannel} being cleaned up.
-     * @param cce     {@code true} if the cleanup is due to a remote disconnect
-     *                (i.e., {@link ConnectionClosedException}),
-     *                {@code false} if due to a local I/O failure.
+     * @param channel the {@code NIOMessageChannel} associated with the error.
+     * @param broadcastFailure  {@code true} if a system-wide broadcast of the connection failure should be performed.
+     *                   {@code false} if only local cleanup should be performed.
      */
-    public void cleanupPersistentConnection(SocketChannel channel, Boolean cce) {
-        if (cce) {
+    public void cleanupPersistentConnection(SocketChannel channel, Boolean broadcastFailure) {
+        if (broadcastFailure) {
             NIOMessageChannel ch = getKnownPersistentChannel(channel);
             if (ch != null) {
                 System.out.println("Channel not null");
@@ -308,15 +311,17 @@ public class ConnectionCleanupManager {
 
                         System.out.println("Broadcasting");
                         broadcastServerFailure(peerManager.getPrimaryPID(), failedPID, Roles.REPLICA);
-                        peerManager.removeProcessCloseConnection(channel);
+                        peerManager.removeRemoteProcess(channel);
                         this.peerManager.debugPrintAllServers();
                     }
                 } else {
                     System.out.println("Else");
                     if (chatServerManager.getChannels().containsKey(channel)) {
-                        chatServerManager.removeProcessCloseConnection(channel);
+                        chatServerManager.removeRemoteProcess(channel);
+                        this.chatServerManager.debugPrintAllServers();
                     } else if (peerManager.getChannels().containsKey(channel)) {
-                        peerManager.removeProcessCloseConnection(channel);
+                        peerManager.removeRemoteProcess(channel);
+                        this.peerManager.debugPrintAllServers();
                     }
                 }
             }
@@ -500,7 +505,10 @@ public class ConnectionCleanupManager {
     /**
      * Gracefully closes the outbound connection to the Primary without
      * triggering failure broadcasts to the rest of the network.
-     *
+     * <p>
+     *     Removes the server record associated with the failed PRIMARY addressing server
+     *     from the {@code AddrServerRegistry}.
+     *</p>
      *<p>
      *     Typically used by REPLICA addressing servers at the end of a leader election.
      *</p>
@@ -511,8 +519,7 @@ public class ConnectionCleanupManager {
         if (primaryChannel != null) {
             System.out.println("DEBUG: Initiating graceful disconnect from Primary (PID: "
                     + primaryChannel.getServerPID() + ")");
-
-            // By passing 'false', we bypass the 'if (cce)' block in cleanupPersistentConnectionNIO
+            // By passing 'false', we bypass the 'if (broadcastFailure)' block in cleanupPersistentConnectionNIO
             // This prevents any ServerFailureMessages from being generated.
             cleanupPersistentConnectionNIO(primaryChannel, false);
         } else {
@@ -524,7 +531,7 @@ public class ConnectionCleanupManager {
      * Generic helper to handle the serialization and transmission of messages.
      * * @param channel The NIO channel to send through.
      * @param message The message object to be sent.
-     * @return true if sent successfully, false otherwise.
+     * @return true if sent subroadcastFailuressfully, false otherwise.
      */
     public boolean sendMessage(NIOMessageChannel channel, BaseAddrServerMessage<?> message) {
         if (channel == null || !channel.isOpen()) {
@@ -573,9 +580,15 @@ public class ConnectionCleanupManager {
             return;
         }
         else {
-            sendMessage(nioChannel, ShutdownMessage.toPrimary(senderPID, failedPID));
+            if (nioChannel.getServerPID().equals(failedPID)) {
+                sendMessage(nioChannel, ShutdownMessage.toPrimary(senderPID, failedPID));
+            }
+            else {
+                System.err.println("Warning: Failed PRIMARY PID does not match current PRIMARY connection PID." +
+                        "Shutdown message request aborted.");
+            }
+
         }
-        //cleanupPersistentConnectionNIO(nioChannel, true);
     }
 
 
@@ -598,12 +611,12 @@ public class ConnectionCleanupManager {
                                                                 // AddressingServer STATES ARE CONSISTENT.
             System.out.println(
                     "PRIMARY has received all ACK's from REPLICA's - server state synchronized, sending failure message to ChatServer's.");
-            // All replicas have successfully replicated the update. Update state locally
+            // All replicas have subroadcastFailuressfully replicated the update. Update state locally
             // and continue with response.
             this.broadcastFailureToChatServers(message, primaryPID, failedPID, failedRole);
             // Create event for messaging chat
             // TODO - Create event for messaging chat servers
-            this.chatServerManager.removeProcessCloseConnection(channel);
+            this.chatServerManager.removeRemoteProcess(channel);
             this.chatServerManager.debugPrintAllServers();
         });
     }
@@ -627,12 +640,12 @@ public class ConnectionCleanupManager {
                                                                 // AddressingServer STATES ARE CONSISTENT.
             System.out.println(
                     "PRIMARY has received all ACK's from REPLICA's - server state synchronized, sending failure message to ChatServer's.");
-            // All replicas have successfully replicated the update. Update state locally
+            // All replicas have subroadcastFailuressfully replicated the update. Update state locally
             // and continue with response.
             this.broadcastFailureToChatServers(message, primaryPID, failedPID, failedRole);
             // Create event for messaging chat servers
             // TODO - Create event for messaging chat servers
-            this.peerManager.removeProcessCloseConnection(channel);
+            this.peerManager.removeRemoteProcess(channel);
             this.peerManager.debugPrintAllServers();
         });
     }

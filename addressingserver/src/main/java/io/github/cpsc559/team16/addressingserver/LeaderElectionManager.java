@@ -384,82 +384,60 @@ public class LeaderElectionManager {
             System.err.println("New leader PID is null. Cannot set new leader.");
             return;
         } else if (newLeaderPID.equals(server.getPeerManager().getPrimaryPID())) {
-            System.out.println("No change");
+            System.out.println("New leader PID matches current leader - no changes made.");
             return;
         }
 
         clearLeader();
 
-        // Update the internal registry to reflect the new leadership status
         AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(newLeaderPID);
         if (record != null) {
-            record.setRole(ServerRole.PRIMARY);
             System.out.println("New leader is AddressingServer with PID: " + newLeaderPID);
-        } else {
-            System.err.println("No AddrServerRecord found in the registry for PID: " + newLeaderPID);
-        }
-
-        // TODO: make two cases - self is elected, other is elected.
-        if (newLeaderPID.equals(config.getPID())) {
-            System.out.println("This AddressingServer is now the PRIMARY.");
-            config.setRole(ServerRole.PRIMARY);
-
-            AddrServerRecord thisProcessRecord = server.getAddrServerRegistry().getRecords().get(config.getPID());
-            thisProcessRecord.setRole(ServerRole.PRIMARY);
-
-            server.getBroadcastManager().broadcastAddrServerRecordToCS(config.getPID(), thisProcessRecord);
-        } else {
-
-        }
-
-        AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(newLeaderPID);
-        if (record != null) {
-            record.setRole(ServerRole.PRIMARY);
-            System.out.println("New leader is AddressingServer with PID: " + newLeaderPID);
-
-            // Update server primary connection details.
-            server.setPrimaryPeerPort(record.getPeerPort());
-            server.setPrimaryHostAddress(record.getHostAddress());
-        } else {
-            System.err.println("No AddrServerRecord found for PID: " + newLeaderPID);
-        }
-
-        // If self becomes leader, update own role; otherwise, register with the new primary.
-        if (newLeaderPID.equals(config.getPID())) {
-//            System.out.println("This AddressingServer is now the PRIMARY.");
-//            config.setRole(ServerRole.PRIMARY);
-//
-//            AddrServerRecord newLeader = server.getAddrServerRegistry().getRecords().get(config.getPID());
-//
-//            server.getBroadcastManager().broadcastAddrServerRecordToCS(config.getPID(), newLeader);
-        } else {
-            System.out.println("Must register with new primary.");
-            try {
-                server.requestRestart();
-            } catch (Exception e) {
-                System.err.println("Failed to register with new primary: " + e.getMessage());
+            if (newLeaderPID.equals(config.getPID())) {
+                System.out.println("This AddressingServer is now the PRIMARY.");
+                // Update config to reflect PRIMARY status
+                config.setRole(ServerRole.PRIMARY);
+                // Set internal PID generator to ensure no active processes have their PID re-assigned.
+                ElectionHelper.promoteSelf(this.server);
+                // Inform chat servers of new PRIMARY
+                server.getBroadcastManager().broadcastAddrServerRecordToCS(config.getPID(), record);
+            } else {
+                ElectionHelper.promotePeer(this.server, record);
+                try {
+                    server.registerReplicaAddrServer();
+                } catch (IOException ioe) {
+                    System.err.println("Failed to register with new primary: " + ioe.getMessage());
+                }
             }
+        } else {
+            System.err.println("WARNING: Critical election failure. " +
+                    "No AddrServerRecord found in the registry for PID: " + newLeaderPID + ".");
         }
     }
 
     /**
      * <p>
-     * Removes the PRIMARY addressing server from the registry and closes the NIOMessageChannel if it is still open.
-     * Any peer set as PRIMARY is removed from the list of peers and sent a poison pill (shutdown) message.
-     * Also sets the role for this process to REPLICA in the {@link AddrServerConfig} instance variable.
+     *    Used during failover by REPLICA addressing servers after a new leader has been elected. This method
+     *    performs the following cleanup actions related to the failed PRIMARY addressing server:
      * </p>
+     * <ul>
+     *     <li>Sends an {@code ShutdownMessage} to fence the failed PRIMARY from the network.</li>
+     *      <li>Removes the PRIMARY addressing server from the registry and closes the
+     *      NIOMessageChannel if it is still open.</li>
+     *      <li>Removes the server record associated with the failed PRIMARY connection from this processes
+     *       internal set of records using the {@code AddrServerRegistry}.</li>
+     *      <li>Cancels the selection key and closes the channel gracefully.</li>
+     * </ul>
      */
     public void clearLeader() {
         Map<Long, AddrServerRecord> records = server.getAddrServerRegistry().getRecords();
         for (AddrServerRecord record : records.values()) {
             if (record.getRole().equals(ServerRole.PRIMARY)) {
                 long failedPID = record.getPID();
-                // TODO - send shutdown message to leader here
                 server.getCleanupManager().sendShutdownRequestToPrimary(server.getConfig().getPID(), failedPID);
-                System.out.println("Cleared leadership from AddressingServer with PID: " + failedPID);
+                server.getCleanupManager().disconnectFromPrimaryQuietly();
             }
         }
-        config.setRole(ServerRole.REPLICA);
     }
 
     //==========================================================================

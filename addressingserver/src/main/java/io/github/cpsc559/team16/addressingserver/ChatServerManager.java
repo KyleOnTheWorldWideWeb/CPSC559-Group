@@ -51,7 +51,7 @@ public class ChatServerManager {
      *                <strong>NOTE:</strong> This method does not close the SocketChannel connection. It is up to the calling
      *                code to enact this behaviour.
      */
-    private void removeRemoteProcess(SocketChannel channel) {
+    public void removeRemoteProcess(SocketChannel channel) {
         NIOMessageChannel ch = this.chatServerChannels.get(channel);
         if (ch != null) {
             Long pid = ch.getServerPID();

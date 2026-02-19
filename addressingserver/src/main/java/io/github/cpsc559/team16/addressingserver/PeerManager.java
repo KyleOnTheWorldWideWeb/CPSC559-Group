@@ -170,7 +170,7 @@ public class PeerManager {
      * <strong>NOTE:</strong> This method does not close the {@code SocketChannel}; closing the channel is the responsibility
      * of the caller.
      */
-    private void removeRemoteProcess(SocketChannel channel) {
+    public void removeRemoteProcess(SocketChannel channel) {
         NIOMessageChannel ch = this.peerChannels.get(channel);
         if (ch != null) {
             Long pid = ch.getServerPID();

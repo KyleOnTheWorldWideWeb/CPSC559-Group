@@ -12,6 +12,8 @@ package io.github.cpsc559.team16.addressingserver;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 
+import java.io.IOException;
+
 public final class ElectionHelper {
 
 
@@ -47,25 +49,22 @@ public final class ElectionHelper {
      */
     public static void promoteSelf(AddressingServer server) {
         System.out.println("Promoting this addressing server REPLICA to PRIMARY...");
+        // Update config to reflect PRIMARY status
         server.getConfig().setRole(ServerRole.PRIMARY);
+        // Update the internal registry to reflect the new leadership status
         server.getAddrServerRegistry().getRecords().get(server.getConfig().getPID()).setRole(ServerRole.PRIMARY);
+        // Set internal PID generator to ensure no active processes have their PID re-assigned.
         server.setPidCounterToNetworkMax();
         // Update server primary connection details.
-        // Pretty sure this is redundant, but I need to look at all of Coles code first.
         server.setPrimaryPeerPort(server.getConfig().getReplicaPort());
         server.setPrimaryHostAddress(server.getConfig().getHostAddress());
-
     }
 
     public static void promotePeer(AddressingServer server, AddrServerRecord record) {
-        System.out.println("Promoting a separate addressing server REPLICA to PRIMARY...");
+        System.out.println("Promoting an separate network process from REPLICA to PRIMARY...");
         record.setRole(ServerRole.PRIMARY);
-        // Update internal address to reflect that of the new primary addressing server
         server.setPrimaryPeerPort(record.getPeerPort());
         server.setPrimaryHostAddress(record.getHostAddress());
-        // We can extend this method later to do:
-        // - broadcast UPDATE message "All your base are belong to us"
-
     }
 
 }
