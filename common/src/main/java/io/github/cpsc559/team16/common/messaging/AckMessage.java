@@ -58,10 +58,11 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
     /**
      * Constructs a new acknowledgment message.
      *
+     * @param messageID use the {@link MessageIDGenerator} to generate a unique message ID based on the network PID of the calling code.
      * @param objectType Describes what action is being acknowledged (e.g., "Registration", "Update").
      * @param senderPID The ID of the process sending the acknowledgment.
-     * @param senderRole The role of the sender (e.g., PRIMARY, REPLICA, CHATSERVER).
-     * @param targetRole The role of the process being acknowledged (e.g., CHATSERVER, REPLICA).
+     * @param senderRole The role of the sender (e.g. PRIMARY, REPLICA, CHATSERVER).
+     * @param targetRole The role of the process being acknowledged (e.g. CHATSERVER, REPLICA).
      * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
 

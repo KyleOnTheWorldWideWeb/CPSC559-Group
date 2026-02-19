@@ -143,6 +143,7 @@ public class AddrServerReadDispatcher {
             case MessageTypes.NOTIFICATION -> handleNotification(channel, nioChannel, message);
             case MessageTypes.SERVERFAILURE -> handleServerFailure(channel, nioChannel, message);
             case MessageTypes.ELECTION -> handleElection(channel, nioChannel, message);
+            case MessageTypes.SHUTDOWN -> handleShutdownRequest(message);
             default -> System.err.println("Unrecognized message type: " + message.getMsgType());
         }
     }
@@ -190,7 +191,7 @@ public class AddrServerReadDispatcher {
     private void handleAck(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> ackMessage) {
         switch (ackMessage.getObjectType()) {
             case AckObjectTypes.REGISTERED -> {
-                System.out.println("ACK ENTERED");
+                //System.out.println("ACK ENTERED");
                 // This should ONLY ever be received by a REPLICA from the PRIMARY
                 // AddressingServer
                 // A Registration ACK is always sent with the pid as a string for the process as
@@ -551,6 +552,37 @@ public class AddrServerReadDispatcher {
     private void handleElection(SocketChannel channel, NIOMessageChannel nioChannel,
             BaseAddrServerMessage<?> electionMessage) {
         server.getLeaderElectionManager().processElectionMessage(channel, nioChannel, electionMessage);
+    }
+
+
+    /**
+     * Handles a shutdown request message.
+     * <p>
+     * This method validates that the shutdown request is explicitly targeted
+     * at this AddressingServer instance by comparing the payload PID with
+     * this process's PID. The payload is expected to contain a {@link Long}
+     * representing the network PID of the process that should terminate.
+     * </p>
+     * <p>
+     * If the PID matches, a graceful shutdown is initiated via the
+     * {@code NetworkManager}. If the PID does not match, the message is ignored
+     * and logged as invalid.
+     * </p>
+     *
+     * @param shutdownMessage The received shutdown message containing the
+     *                        target process PID as its payload.
+     */
+    private void handleShutdownRequest(BaseAddrServerMessage<?> shutdownMessage) {
+        // Failsafe - check message (payload) PID to ensure request matches this processes PID.
+        Long failedPID = shutdownMessage.safeCastPayload(Long.class);
+        if (this.getPID().equals(failedPID)) {
+            System.out.println("Shutdown request validated - this process has been flagged for termination.");
+            server.getNetworkManager().requestShutdown();
+        }
+        else {
+            System.out.printf("Invalid shutdown message received - target PID = %d but this PID = %d\n", failedPID, this.getPID());
+        }
+
     }
 
 }

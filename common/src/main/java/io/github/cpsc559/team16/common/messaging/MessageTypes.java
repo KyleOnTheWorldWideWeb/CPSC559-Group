@@ -38,6 +38,14 @@ public class MessageTypes {
 
     /**
      * Message type for instructing a remote process that has been flagged as failed
+     * to shutdown (exit safely and do not restart).
+     * <p>Failed processes are disconnected from the network automatically, but this provides
+     * an additional layer of protection by fencing in the failed process.</p>
+     */
+    public static final String SHUTDOWN = "SHUTDOWN";
+
+    /**
+     * Message type for instructing a remote process that has been flagged as failed
      * to reinitialize (exit and restart the main event loop).
      * <p>Failed processes are disconnected from the network automatically, but this provides another layer of protection,
      * and provides the opportunity for re-integration in the network.</p>

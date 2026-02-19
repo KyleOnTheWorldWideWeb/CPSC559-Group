@@ -515,19 +515,24 @@ public class AddressingServer {
                 PRIMARY_HOST_ADDRESS, PRIMARY_PEER_PORT,
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
 
-        if (maybeChannel.isEmpty()) {
-            System.err.println("First attempt to register with primary failed. Retrying...");
+        // Retry connection using exponential backoff
+        int attempts = 0;
+        while (maybeChannel.isEmpty() && attempts < 5) {
+
+            long sleepTime = (long) Math.pow(2, attempts) * 1000;
+            System.err.println("First attempt to register with primary addressing server failed. " +
+                    "Retrying in " + sleepTime +" seconds.");
             try {
-                Thread.sleep(500); // Optional: brief delay before retry
+                Thread.sleep(sleepTime);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 System.err.println("Retry sleep interrupted.");
             }
-
             // TODO - Need to change this to dynamic port retrieval
             maybeChannel = peerManager.registerWithPrimary(
                     PRIMARY_HOST_ADDRESS, PRIMARY_PEER_PORT,
                     config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
+            attempts++;
         }
 
         if (maybeChannel.isPresent()) {
@@ -602,7 +607,8 @@ public class AddressingServer {
                     server.registerPrimaryAddrServer();
                 } else {
                     System.out.println("Launching AddressingServer as REPLICA");
-                    // TODO - retrieve the address of the primary addressing server from the Domain A record
+                    // This is where dynamic address retrieval of the primary addressing server is
+                    // done via a domain a record hosted on a public server with a static address.
                     server.registerReplicaAddrServer();
                 }
                // TODO - A thread(s) must be spun up for this method call.

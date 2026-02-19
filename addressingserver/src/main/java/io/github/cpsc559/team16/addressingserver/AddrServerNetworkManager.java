@@ -41,7 +41,7 @@ public class AddrServerNetworkManager {
      * is used by the
      * {@link AddrServerNetworkManager} to detect whether a controlled shutdown or
      * restart has been
-     * requested (e.g., in response to a restart message or failure condition).
+     * requested (e.g. in response to a restart message or failure condition).
      * </p>
      * <p>
      * When set to {@code true}, the main network event loop will

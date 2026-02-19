@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import java.io.IOException;
+import java.net.UnknownHostException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
@@ -146,7 +147,6 @@ public class PeerManager {
     /**
      * Constructs a {@code PeerManager} and binds it to a shared {@code AddrServerRegistry}.
      *
-     * @param registry the shared registry of AddrServerRecords.
      */
     public PeerManager(AddressingServer server) {
         this.server = server;
@@ -344,6 +344,16 @@ public class PeerManager {
         }
     }
 
+
+    public String getThisDockerAddress() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException e) {
+            System.out.println("[Replica] Could not retrieve internal Docker address - defaulting to 'localhost'");
+            return "localhost";
+        }
+    }
+
     /**
      * Initializes a connection to the primary AddressingServer and sends a registration request.
      * <p>
@@ -371,16 +381,7 @@ public class PeerManager {
 
             NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
             peerChannels.put(channel, nioChannel);
-            String publicAddress = System.getenv("PUBLIC_ADDRESS");
-            // Add a fallback if the environment variable isn't set
-            if (publicAddress == null || publicAddress.isEmpty()) {
-                // Fallback to hostname/IP detection
-                InetAddress localHost = InetAddress.getLocalHost();
-                publicAddress = localHost.getHostAddress();
-                System.out.println("WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
-            } else {
-                System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
-            }
+            String publicAddress = getThisDockerAddress();
             RegisterMessage<AddrServerRecord> register =
                     RegisterMessage.fromReplica(publicAddress, clientPort, peerPort, chatServerPort);
             nioChannel.sendMessage(register.toJson());

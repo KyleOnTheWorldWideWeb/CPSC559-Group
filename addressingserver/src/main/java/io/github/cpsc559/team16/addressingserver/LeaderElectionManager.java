@@ -6,6 +6,7 @@ import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Map;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
@@ -43,6 +44,7 @@ public class LeaderElectionManager {
      * </p>
      */
     private final AddressingServer server;
+
 
     /**
      * <p>
@@ -142,6 +144,7 @@ public class LeaderElectionManager {
         this.config = server.getConfig();
         this.peerManager = server.getPeerManager();
         this.running = false;
+
     }
 
     //==========================================================================
@@ -342,11 +345,18 @@ public class LeaderElectionManager {
      * </p>
      */
     public void declareSelfLeader() {
+
         // Shut down any coordinator request on the network manager.
-        server.getNetworkManager().shutdownCoordinatorRequest();
+        // TODO - Figure out why he is calling this - he shouldn't be. Was a bug occurring?
+        //server.getNetworkManager().shutdownCoordinatorRequest();
 
         midElection = false;
-        setNewLeader(server.getConfig().getPID());
+        ElectionHelper.promoteSelf(this.server);
+        // TODO - need to send a shutdown message to the old leader
+        // Send poison pill to the current (failed) leader process, fencing it in.
+
+
+        // Deprecated - setNewLeader(server.getConfig().getPID());
 
         BaseAddrServerMessage leaderMessage = generateLeaderMessage();
 
@@ -354,7 +364,8 @@ public class LeaderElectionManager {
         for (Long peerPID : server.getAddrServerRegistry().getRecords().keySet()) {
             if (!peerPID.equals(config.getPID())) {
                 sendTo(leaderMessage, peerPID);
-                server.getAddrServerRegistry().getRecords().remove(peerPID);
+                // Why is he removing all the addressing servers from the registry?
+                //server.getAddrServerRegistry().getRecords().remove(peerPID);
                 System.out.println("LEM: Sent leader message to peer with PID " + peerPID);
             }
         }
@@ -379,6 +390,28 @@ public class LeaderElectionManager {
 
         clearLeader();
 
+        // Update the internal registry to reflect the new leadership status
+        AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(newLeaderPID);
+        if (record != null) {
+            record.setRole(ServerRole.PRIMARY);
+            System.out.println("New leader is AddressingServer with PID: " + newLeaderPID);
+        } else {
+            System.err.println("No AddrServerRecord found in the registry for PID: " + newLeaderPID);
+        }
+
+        // TODO: make two cases - self is elected, other is elected.
+        if (newLeaderPID.equals(config.getPID())) {
+            System.out.println("This AddressingServer is now the PRIMARY.");
+            config.setRole(ServerRole.PRIMARY);
+
+            AddrServerRecord thisProcessRecord = server.getAddrServerRegistry().getRecords().get(config.getPID());
+            thisProcessRecord.setRole(ServerRole.PRIMARY);
+
+            server.getBroadcastManager().broadcastAddrServerRecordToCS(config.getPID(), thisProcessRecord);
+        } else {
+
+        }
+
         AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(newLeaderPID);
         if (record != null) {
             record.setRole(ServerRole.PRIMARY);
@@ -393,12 +426,12 @@ public class LeaderElectionManager {
 
         // If self becomes leader, update own role; otherwise, register with the new primary.
         if (newLeaderPID.equals(config.getPID())) {
-            System.out.println("This AddressingServer is now the PRIMARY.");
-            config.setRole(ServerRole.PRIMARY);
-
-            AddrServerRecord newLeader = server.getAddrServerRegistry().getRecords().get(config.getPID());
-
-            server.getBroadcastManager().broadcastAddrServerRecordToCS(config.getPID(), newLeader);
+//            System.out.println("This AddressingServer is now the PRIMARY.");
+//            config.setRole(ServerRole.PRIMARY);
+//
+//            AddrServerRecord newLeader = server.getAddrServerRegistry().getRecords().get(config.getPID());
+//
+//            server.getBroadcastManager().broadcastAddrServerRecordToCS(config.getPID(), newLeader);
         } else {
             System.out.println("Must register with new primary.");
             try {
@@ -411,16 +444,19 @@ public class LeaderElectionManager {
 
     /**
      * <p>
-     * Clears the current leader designation from all peers.
-     * Any peer set as PRIMARY is re-designated as REPLICA.
-     * Also sets own configuration to REPLICA.
+     * Removes the PRIMARY addressing server from the registry and closes the NIOMessageChannel if it is still open.
+     * Any peer set as PRIMARY is removed from the list of peers and sent a poison pill (shutdown) message.
+     * Also sets the role for this process to REPLICA in the {@link AddrServerConfig} instance variable.
      * </p>
      */
     public void clearLeader() {
-        for (AddrServerRecord record : server.getAddrServerRegistry().getRecords().values()) {
+        Map<Long, AddrServerRecord> records = server.getAddrServerRegistry().getRecords();
+        for (AddrServerRecord record : records.values()) {
             if (record.getRole().equals(ServerRole.PRIMARY)) {
-                record.setRole(ServerRole.REPLICA);
-                System.out.println("Cleared leadership from AddressingServer with PID: " + record.getPID());
+                long failedPID = record.getPID();
+                // TODO - send shutdown message to leader here
+                server.getCleanupManager().sendShutdownRequestToPrimary(server.getConfig().getPID(), failedPID);
+                System.out.println("Cleared leadership from AddressingServer with PID: " + failedPID);
             }
         }
         config.setRole(ServerRole.REPLICA);

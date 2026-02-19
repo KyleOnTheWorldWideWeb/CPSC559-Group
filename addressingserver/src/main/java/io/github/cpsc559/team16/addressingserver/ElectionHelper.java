@@ -8,13 +8,12 @@ package io.github.cpsc559.team16.addressingserver;
 *
 */
 
-public class ElectionHelper {
 
-    private AddressingServer server;
+import io.github.cpsc559.team16.common.dto.ServerRole;
+import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 
-    public ElectionHelper(AddressingServer server) {
+public final class ElectionHelper {
 
-    }
 
     /**
      * Computes the next available PID by scanning both registries.
@@ -22,34 +21,51 @@ public class ElectionHelper {
      *
      * @return the next safe PID to assign.
      */
-    public long computeNextPID() {
-        long maxChatPID = server.getChatServerRegistry().getRecords().keySet().stream()
-                .mapToLong(Long::longValue)
-                .max()
-                .orElse(0L);
-
-        long maxAddrPID = server.getAddrServerRegistry().getRecords().keySet().stream()
-                .mapToLong(Long::longValue)
-                .max()
-                .orElse(0L);
-
-        return Math.max(maxChatPID, maxAddrPID) + 1;
-    }
+//    private static long computeNextPID(AddressingServer server) {
+//        long maxChatPID = server.getChatServerRegistry().getRecords().keySet().stream()
+//                .mapToLong(Long::longValue)
+//                .max()
+//                .orElse(0L);
+//
+//        long maxAddrPID = server.getAddrServerRegistry().getRecords().keySet().stream()
+//                .mapToLong(Long::longValue)
+//                .max()
+//                .orElse(0L);
+//
+//        return Math.max(maxChatPID, maxAddrPID) + 1;
+//    }
+//
+//    private static void setPidCounter(AddressingServer server) {
+//        long nextPID = computeNextPID(server);
+//        server.setPidCounter(nextPID);
+//        System.out.printf("Set PID counter to highest PID currently registered: %d%n", nextPID);
+//    }
 
     /**
      * Handles full promotion steps for a replica becoming the new Primary.
      * @param server the AddressingServer instance being promoted.
      */
-    public void promote(AddressingServer server) {
-        System.out.println("Promoting this REPLICA to PRIMARY...");
-        server.getConfig().setRole(io.github.cpsc559.team16.common.dto.ServerRole.PRIMARY);
+    public static void promoteSelf(AddressingServer server) {
+        System.out.println("Promoting this addressing server REPLICA to PRIMARY...");
+        server.getConfig().setRole(ServerRole.PRIMARY);
+        server.getAddrServerRegistry().getRecords().get(server.getConfig().getPID()).setRole(ServerRole.PRIMARY);
+        server.setPidCounterToNetworkMax();
+        // Update server primary connection details.
+        // Pretty sure this is redundant, but I need to look at all of Coles code first.
+        server.setPrimaryPeerPort(server.getConfig().getReplicaPort());
+        server.setPrimaryHostAddress(server.getConfig().getHostAddress());
 
-        long nextPID = computeNextPID();
-        server.setPidCounter(nextPID);
-        System.out.printf("Set PID counter to %d%n", nextPID);
+    }
 
+    public static void promotePeer(AddressingServer server, AddrServerRecord record) {
+        System.out.println("Promoting a separate addressing server REPLICA to PRIMARY...");
+        record.setRole(ServerRole.PRIMARY);
+        // Update internal address to reflect that of the new primary addressing server
+        server.setPrimaryPeerPort(record.getPeerPort());
+        server.setPrimaryHostAddress(record.getHostAddress());
         // We can extend this method later to do:
         // - broadcast UPDATE message "All your base are belong to us"
 
     }
+
 }

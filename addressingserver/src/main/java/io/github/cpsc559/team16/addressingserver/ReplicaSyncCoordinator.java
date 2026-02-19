@@ -11,6 +11,39 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * Coordinates replication and synchronization of state between the PRIMARY
+ * and REPLICA AddressingServers in the distributed network.
+ *
+ * <p>
+ * This class is responsible for tracking pending events that require acknowledgments (ACKs)
+ * from replicas, processing those acknowledgments, and ensuring that updates to shared
+ * state (e.g., {@link AddrServerRecord} or {@link ChatServerRecord}) are applied consistently
+ * across all nodes.
+ * </p>
+ *
+ * <p>
+ * Key responsibilities include:
+ * <ul>
+ *   <li>Maintaining a thread-safe registry of {@link PendingEvent} objects representing
+ *       in-progress operations that require confirmation from one or more replicas.</li>
+ *   <li>Processing ACK messages from replicas and notifying the original requester
+ *       when all expected acknowledgments are received.</li>
+ *   <li>Handling updates to AddressingServer and ChatServer records from the PRIMARY,
+ *       applying them locally, and sending ACKs back to the PRIMARY to confirm replication.</li>
+ *   <li>Managing failure scenarios for both ChatServer and AddressingServer processes,
+ *       including cleanup of persistent connections and registry updates.</li>
+ *   <li>Facilitating strong consistency guarantees across the distributed addressing server network.</li>
+ * </ul>
+ * </p>
+ *
+ * <p>
+ * Typically used on REPLICA servers, this class ensures that replicated state changes
+ * initiated by the PRIMARY are reliably acknowledged and that any failed replicas or
+ * servers are properly cleaned up to maintain network consistency.
+ * </p>
+ */
+
 public class ReplicaSyncCoordinator {
 
     private final PeerManager peerManager;
@@ -95,6 +128,15 @@ public class ReplicaSyncCoordinator {
     }
 
 
+    /**
+     * Used to clean up failed ChatServer processes.
+     *
+     * @param failureMessage
+     * @param nioChannel
+     * @param localPID
+     * @param cleanupManager
+     * @param failedPID
+     */
     public void processFailureMessageSendAck(BaseAddrServerMessage<?> failureMessage,
                                                NIOMessageChannel nioChannel,
                                                Long localPID,
