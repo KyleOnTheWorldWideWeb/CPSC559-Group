@@ -14,10 +14,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
-import io.github.cpsc559.team16.common.messaging.AckMessage;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
-import io.github.cpsc559.team16.common.messaging.UpdateMessage;
+import io.github.cpsc559.team16.common.messaging.*;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
@@ -345,7 +342,7 @@ public class PeerManager {
     }
 
 
-    public String getThisDockerAddress() {
+    private String getThisDockerAddress() {
         try {
             return InetAddress.getLocalHost().getHostName();
         } catch (UnknownHostException e) {
@@ -353,6 +350,46 @@ public class PeerManager {
             return "localhost";
         }
     }
+
+    /**
+     * Core logic to establish a connection to the primary AddressingServer and transmit an initial message.
+     *
+     * @param host    the IP address of the PRIMARY AddressingServer.
+     * @param port    the port used by the PRIMARY for registration/synchronization.
+     * @param message the initial message (Registration or Synchronization) to be sent.
+     * @return An {@link Optional} containing the connected {@code SocketChannel}, or empty if the connection failed.
+     */
+    /**
+     * Core logic to establish a connection to the primary AddressingServer and transmit an initial message.
+     *
+     * @param host    the IP address of the PRIMARY AddressingServer.
+     * @param port    the port used by the PRIMARY for registration/synchronization.
+     * @param message the initial message (Registration or Synchronization) to be sent.
+     * @return An {@link Optional} containing the connected {@code SocketChannel}, or empty if the connection failed.
+     */
+    private Optional<SocketChannel> transmitDiscoveryMessage(String host, int port, BaseAddrServerMessage<?> message) {
+        try {
+            SocketChannel channel = SocketChannel.open();
+            channel.configureBlocking(true);
+            channel.connect(new InetSocketAddress(host, port));
+            while (!channel.finishConnect()) {
+                Thread.sleep(100);
+            }
+
+            NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
+            peerChannels.put(channel, nioChannel);
+
+            nioChannel.sendMessage(message.toJson());
+
+            channel.configureBlocking(false);
+            return Optional.of(channel);
+        } catch (IOException | InterruptedException e) {
+            System.err.println("Failed to register replica with primary: " + e.getMessage());
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+
 
     /**
      * Initializes a connection to the primary AddressingServer and sends a registration request.
@@ -366,36 +403,89 @@ public class PeerManager {
      * @param clientPort         the replica’s client port.
      * @param peerPort           the replica’s peer communication port.
      * @param chatServerPort     the replica’s chat server communication port.
-     * @return The SocketChannel used to register with the PRIMARY {@code AddressingServer}. This channel must
-     * be registered with the {@code Selector} in the {@code AddrServerNetworkManager} for this REPLICA server.
+     * @return The SocketChannel used to register with the PRIMARY {@code AddressingServer}.
      */
     public Optional<SocketChannel> registerWithPrimary(String primaryHostAddress, int primaryReplicaPort,
                                                        int clientPort, int peerPort, int chatServerPort) {
-        try {
-            SocketChannel channel = SocketChannel.open();
-            channel.configureBlocking(true);
-            channel.connect(new InetSocketAddress(primaryHostAddress, primaryReplicaPort));
-            while (!channel.finishConnect()) {
-                Thread.sleep(100);
-            }
+        String publicAddress = getThisDockerAddress();
+        RegisterMessage<AddrServerRecord> register =
+                RegisterMessage.fromReplica(server.getMessageIDGenerator().nextID(),
+                        publicAddress, clientPort, peerPort, chatServerPort);
+        System.out.println("Registration from REPLICA sent to PRIMARY.");
+        return transmitDiscoveryMessage(primaryHostAddress, primaryReplicaPort, register);
+    }
 
-            NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
-            peerChannels.put(channel, nioChannel);
-            String publicAddress = getThisDockerAddress();
-            RegisterMessage<AddrServerRecord> register =
-                    RegisterMessage.fromReplica(publicAddress, clientPort, peerPort, chatServerPort);
-            nioChannel.sendMessage(register.toJson());
 
-            channel.configureBlocking(false);
-
-            System.out.println("Registration from REPLICA sent to PRIMARY.");
-            return Optional.of(channel);
-        } catch (IOException | InterruptedException e) {
-            System.err.println("Failed to register replica with primary: " + e.getMessage());
-            e.printStackTrace();
+    /**
+     * Re-establishes a connection with a newly elected PRIMARY and synchronizes existing state.
+     * <p>
+     * This is invoked by REPLICA processes following a leader election. This sends a
+     * {@link SyncRegisterMessage} containing the replica's existing PID and record,
+     * allowing the new PRIMARY to restore the replica's record without assigning a new identity.
+     * </p>
+     *
+     * @param primaryHostAddress the IP address of the newly elected PRIMARY AddressingServer.
+     * @param primaryReplicaPort the port used by the new PRIMARY for peer synchronization.
+     * @return The SocketChannel used to sync with the PRIMARY {@code AddressingServer}.
+     */
+    public Optional<SocketChannel> synchronizeWithPrimary(String primaryHostAddress, int primaryReplicaPort) {
+        AddrServerRecord myRecord = server.getAddrServerRegistry().getRecords().get(this.server.getConfig().getPID());
+        if (myRecord != null) {
+            SyncRegisterMessage<AddrServerRecord> syncMsg =
+                    SyncRegisterMessage.fromReplica(server.getMessageIDGenerator().nextID(), myRecord);
+            System.out.println("Synchronization from REPLICA sent to PRIMARY.");
+            return transmitDiscoveryMessage(primaryHostAddress, primaryReplicaPort, syncMsg);
+        }
+        else {
+            System.err.println("Error occurred while attempting to retrieve AddrServerRecord for synchronization with PRIMARY.");
             return Optional.empty();
         }
     }
+
+
+
+//    /**
+//     * Initializes a connection to the primary AddressingServer and sends a registration request.
+//     * <p>
+//     * This is invoked by REPLICA processes on startup to formally register themselves with the PRIMARY.
+//     * Once connected, the replica will receive back its PID and the full registry of AddrServer records.
+//     * </p>
+//     *
+//     * @param primaryHostAddress the IP address of the PRIMARY AddressingServer.
+//     * @param primaryReplicaPort the port used by the PRIMARY for peer registration.
+//     * @param clientPort         the replica’s client port.
+//     * @param peerPort           the replica’s peer communication port.
+//     * @param chatServerPort     the replica’s chat server communication port.
+//     * @return The SocketChannel used to register with the PRIMARY {@code AddressingServer}. This channel must
+//     * be registered with the {@code Selector} in the {@code AddrServerNetworkManager} for this REPLICA server.
+//     */
+//    public Optional<SocketChannel> registerWithPrimary(String primaryHostAddress, int primaryReplicaPort,
+//                                                       int clientPort, int peerPort, int chatServerPort) {
+//        try {
+//            SocketChannel channel = SocketChannel.open();
+//            channel.configureBlocking(true);
+//            channel.connect(new InetSocketAddress(primaryHostAddress, primaryReplicaPort));
+//            while (!channel.finishConnect()) {
+//                Thread.sleep(100);
+//            }
+//
+//            NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
+//            peerChannels.put(channel, nioChannel);
+//            String publicAddress = getThisDockerAddress();
+//            RegisterMessage<AddrServerRecord> register =
+//                    RegisterMessage.fromReplica(publicAddress, clientPort, peerPort, chatServerPort);
+//            nioChannel.sendMessage(register.toJson());
+//
+//            channel.configureBlocking(false);
+//
+//            System.out.println("Registration from REPLICA sent to PRIMARY.");
+//            return Optional.of(channel);
+//        } catch (IOException | InterruptedException e) {
+//            System.err.println("Failed to register replica with primary: " + e.getMessage());
+//            e.printStackTrace();
+//            return Optional.empty();
+//        }
+//    }
 
     /**
      * This is a hell of an obtuse way of finding out an addressing servers role, but if you need it,

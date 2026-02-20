@@ -98,6 +98,20 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
     }
 
     /**
+     * Factory method for registering an AddressingServer replica.
+     *
+     * @param clientPort       Port used for client communication.
+     * @param peerPort         Port used for replica communication.
+     * @param chatServerPort   Port used to receive chat server registrations.
+     * @return A {@code RegisterMessage} containing an {@code AddrServerRecord} payload.
+     */
+    public static RegisterMessage<AddrServerRecord> fromReplica(long messageID, String hostAddress, int clientPort, int peerPort, int chatServerPort) {
+        AddrServerRecord record = new AddrServerRecord(
+                DEFAULT_PID, hostAddress, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
+        return new RegisterMessage<>(messageID, ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
+    }
+
+    /**
      * Factory method for registering a ChatServer with the HostAddress declared.
      *
      * @param hostAddress      The network (IP) address of the address server.
@@ -114,21 +128,6 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
         return new RegisterMessage<>(ObjectTypes.CHAT_SERVER_RECORD, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
 
-
-
-    /**
-     * Factory method for registering an AddressingServer replica.
-     *
-     * @param clientPort       Port used for client communication.
-     * @param peerPort         Port used for replica communication.
-     * @param chatServerPort   Port used to receive chat server registrations.
-     * @return A {@code RegisterMessage} containing an {@code AddrServerRecord} payload.
-     */
-    public static RegisterMessage<AddrServerRecord> fromReplica(String hostAddress, int clientPort, int peerPort, int chatServerPort) {
-        AddrServerRecord record = new AddrServerRecord(
-                DEFAULT_PID, hostAddress, clientPort, peerPort, chatServerPort, ServerRole.REPLICA);
-        return new RegisterMessage<>(ObjectTypes.ADDR_SERVER_RECORD, Roles.REPLICA, Roles.PRIMARY, record);
-    }
 
     /**
      * Factory method for registering an AddressingServer replica with the HostAddress declared.

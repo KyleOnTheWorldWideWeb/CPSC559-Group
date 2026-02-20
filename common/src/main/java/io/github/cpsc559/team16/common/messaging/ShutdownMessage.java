@@ -47,8 +47,8 @@ public class ShutdownMessage extends BaseAddrServerMessage<Long> {
      * @param replicaPID The process ID of the REPLICA expected to shut down (failsafe).
      * @return A ShutdownMessage with targetRole set to REPLICA.
      */
-    public static ShutdownMessage toReplica(long senderPID, String senderRole, long replicaPID) {
-        return new ShutdownMessage(senderPID, senderRole, Roles.REPLICA, replicaPID);
+    public static ShutdownMessage toReplica(long messageID, long senderPID, String senderRole, long replicaPID) {
+        return new ShutdownMessage(messageID, senderPID, senderRole, Roles.REPLICA, replicaPID);
     }
 
     /**
@@ -60,8 +60,8 @@ public class ShutdownMessage extends BaseAddrServerMessage<Long> {
      * @param primaryPID The process ID of the PRIMARY expected to shut down (failsafe).
      * @return A ShutdownMessage with targetRole set to PRIMARY.
      */
-    public static ShutdownMessage toPrimary(long senderPID, long primaryPID) {
-        return new ShutdownMessage(senderPID, Roles.REPLICA, Roles.PRIMARY, primaryPID);
+    public static ShutdownMessage toPrimary(long messageID, long senderPID, long primaryPID) {
+        return new ShutdownMessage(messageID, senderPID, Roles.REPLICA, Roles.PRIMARY, primaryPID);
     }
 
     /**
@@ -73,8 +73,8 @@ public class ShutdownMessage extends BaseAddrServerMessage<Long> {
      * @param chatServerPID The process ID of the CHATSERVER expected to shutdown (failsafe).
      * @return A ShutdownMessage with targetRole set to CHATSERVER.
      */
-    public static ShutdownMessage toChatServer(long senderPID, String senderRole, long chatServerPID) {
-        return new ShutdownMessage(senderPID, senderRole, Roles.CHATSERVER, chatServerPID);
+    public static ShutdownMessage toChatServer(long messageID, long senderPID, String senderRole, long chatServerPID) {
+        return new ShutdownMessage(messageID, senderPID, senderRole, Roles.CHATSERVER, chatServerPID);
     }
 
 }

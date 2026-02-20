@@ -404,11 +404,13 @@ public class LeaderElectionManager {
             } else {
                 ElectionHelper.promotePeer(this.server, record);
                 try {
+                    // TODO: send synchronize message
                     server.registerReplicaAddrServer();
                 } catch (IOException ioe) {
                     System.err.println("Failed to register with new primary: " + ioe.getMessage());
                 }
             }
+            // TODO: Broadcast address of new Primary to all client processes (they need it in case they get disconnected from the ChatServer)
         } else {
             System.err.println("WARNING: Critical election failure. " +
                     "No AddrServerRecord found in the registry for PID: " + newLeaderPID + ".");

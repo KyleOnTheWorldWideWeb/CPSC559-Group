@@ -12,9 +12,14 @@ package io.github.cpsc559.team16.common.messaging;
  */
 public class MessageTypes {
     /**
-     * Message type for registration requests. Used when a process is trying to register with the network.
+     * Message type for registration requests. Used when a new process is trying to register with the network.
      */
     public static final String REGISTER = "REGISTER";
+
+    /**
+     * Message type for registration requests. Used when an existing process is trying to synchronize with the PRIMARY.
+     */
+    public static final String SYNCHRONIZE = "SYNCHRONIZE";
 
     /**
      * Message type for update messages. Used when a process is sending an updated state or record.

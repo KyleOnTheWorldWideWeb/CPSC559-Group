@@ -43,7 +43,7 @@ services:
     profiles: [ "addressingserver-backup" ]
     environment:
       - AS_ROLE=BACKUP
-      - PRIMARY_ADDRESS_SERVER_IP=as-primary # Points to the other container
+      - PRIMARY_ADDRESS_SERVER_IP=addressingserver # Points to the other container
     ports: !reset []
 
   chatserver:

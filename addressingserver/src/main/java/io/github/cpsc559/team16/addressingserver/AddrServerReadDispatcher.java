@@ -585,4 +585,10 @@ public class AddrServerReadDispatcher {
 
     }
 
+    public void handleSynchronization(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg) {
+        this.server.getRegistrationCoordinator().handleReplicaSynchronization(channel, nioChannel, msg);
+    }
+
+
+
 }

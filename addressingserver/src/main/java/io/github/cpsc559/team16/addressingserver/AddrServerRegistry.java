@@ -79,6 +79,42 @@ public class AddrServerRegistry {
         debugPrintServer(record);
     }
 
+    /**
+     * Validates an incoming {@link AddrServerRecord} against the local registry to ensure consistency.
+     * <p>
+     * This method is a critical security and integrity check used during the
+     * {@code SYNCHRONIZE} handshake. It verifies that the process claiming a specific PID
+     * matches a record stored in this registry across all functional fields:
+     * <ul>
+     * <li><b>Identity:</b> The Process ID (PID).</li>
+     * <li><b>Role:</b> The {@link ServerRole} (PRIMARY/REPLICA).</li>
+     * <li><b>Topology:</b> The Host Address and all three communication ports (Client, Peer, Chat).</li>
+     * </ul>
+     * </p>
+     * <p>
+     * This record is the single source of truth - If any field mismatches,
+     * it indicates a state conflict (e.g. a process attempting to
+     * spoof an identity, a split-brain scenario, or a stale registry record).
+     * </p>
+     *
+     * @param externalRecord the record provided by the connecting AddressingServer process.
+     * @return {@code true} if the external record perfectly matches the registry's state;
+     * {@code false} if no record exists for that PID or if a field mismatch is detected.
+     */
+    public boolean validateReplicaIdentity(AddrServerRecord externalRecord) {
+        AddrServerRecord registryRecord = this.getRecords().get(externalRecord.getPID());
+
+        if (registryRecord == null) {
+            return false;
+        }
+
+        return externalRecord.getPID().equals(registryRecord.getPID()) &&
+                externalRecord.getHostAddress().equals(registryRecord.getHostAddress()) &&
+                externalRecord.getClientPort() == registryRecord.getClientPort() &&
+                externalRecord.getPeerPort() == registryRecord.getPeerPort() &&
+                externalRecord.getChatServerPort() == registryRecord.getChatServerPort() &&
+                externalRecord.getRole().equals(registryRecord.getRole());
+    }
 
     /**
      * Removes an {@link AddrServerRecord} from the registry using the provided process ID (PID).

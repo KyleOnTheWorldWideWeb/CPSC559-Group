@@ -381,6 +381,20 @@ public class AddrServerNetworkManager {
     }
 
     /**
+     *
+     * @param message
+     * @return
+     */
+    public boolean isSupportedMessageType(BaseAddrServerMessage<?> message) {
+        return switch (message.getMsgType()) {
+            case MessageTypes.REGISTER,
+                    MessageTypes.ELECTION,
+                    MessageTypes.SYNCHRONIZE -> true;
+            default -> false;
+        };
+    }
+
+    /**
      * Begins the main event loop for the {@code AddressingServer} process by
      * listening for incoming connections on the ports defined in its instance of
      * the
@@ -516,9 +530,8 @@ public class AddrServerNetworkManager {
                                 }
 
                                 BaseAddrServerMessage<?> message = deserializeMessage(firstMsg);
-                                if (message == null || (!message.getMsgType().equals(MessageTypes.REGISTER) &&
-                                        !message.getMsgType().equals(MessageTypes.ELECTION))) {
-                                    System.err.println("Rejected: initial message must be REGISTER or ELECTION.");
+                                if (message == null || !isSupportedMessageType(message)) {
+                                    System.err.println("Rejected: initial message must be REGISTER, SYNCHRONIZE, or ELECTION.");
                                     channel.close();
                                     key.cancel();
                                     continue;
@@ -531,12 +544,24 @@ public class AddrServerNetworkManager {
                                     continue;
                                 }
 
-                                if (message.getSenderRole().equals(Roles.CHATSERVER)) {
+                                String senderRole = message.getSenderRole();
+                                // Open persistent connection and hand it to the manager class.
+                                if (senderRole.equals(Roles.CHATSERVER)) {
                                     openPersistentChannel(channel); // will register with selector
                                     cleanupManager.getChatServerManager().getChannels().put(channel, nioChannel);
-                                } else if (message.getSenderRole().equals(Roles.REPLICA)) {
+                                } else if (senderRole.equals(Roles.REPLICA)) {
                                     openPersistentChannel(channel);
                                     cleanupManager.getPeerManager().getChannels().put(channel, nioChannel);
+                                }
+
+                                // If synchronization fails, the persistent connection that was just opened is closed.
+                                // The persistent connection does not contain a unique PID until registration occurs below.
+                                if (message.getMsgType().equals(MessageTypes.SYNCHRONIZE)) {
+                                    if (senderRole.equals(Roles.CHATSERVER)) {
+
+                                    } else if (senderRole.equals(Roles.REPLICA)) {
+                                        readDispatcher.handleSynchronization(channel, nioChannel, message);
+                                    }
                                 }
 
                                 try {
