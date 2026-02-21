@@ -509,7 +509,6 @@ public class ConnectionCleanupManager {
      */
     public void disconnectFromPrimaryQuietly() {
         NIOMessageChannel primaryChannel = peerManager.getPrimaryNIOChannel();
-
         if (primaryChannel != null) {
             System.out.println("DEBUG: Initiating graceful disconnect from Primary (PID: "
                     + primaryChannel.getServerPID() + ")");

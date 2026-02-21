@@ -16,55 +16,41 @@ import java.io.IOException;
 
 public final class ElectionHelper {
 
-
-    /**
-     * Computes the next available PID by scanning both registries.
-     * Called during promotion to PRIMARY.
-     *
-     * @return the next safe PID to assign.
-     */
-//    private static long computeNextPID(AddressingServer server) {
-//        long maxChatPID = server.getChatServerRegistry().getRecords().keySet().stream()
-//                .mapToLong(Long::longValue)
-//                .max()
-//                .orElse(0L);
-//
-//        long maxAddrPID = server.getAddrServerRegistry().getRecords().keySet().stream()
-//                .mapToLong(Long::longValue)
-//                .max()
-//                .orElse(0L);
-//
-//        return Math.max(maxChatPID, maxAddrPID) + 1;
-//    }
-//
-//    private static void setPidCounter(AddressingServer server) {
-//        long nextPID = computeNextPID(server);
-//        server.setPidCounter(nextPID);
-//        System.out.printf("Set PID counter to highest PID currently registered: %d%n", nextPID);
-//    }
-
     /**
      * Handles full promotion steps for a replica becoming the new Primary.
      * @param server the AddressingServer instance being promoted.
      */
     public static void promoteSelf(AddressingServer server) {
-        System.out.println("Promoting this addressing server REPLICA to PRIMARY...");
-        // Update config to reflect PRIMARY status
-        server.getConfig().setRole(ServerRole.PRIMARY);
-        // Update the internal registry to reflect the new leadership status
-        server.getAddrServerRegistry().getRecords().get(server.getConfig().getPID()).setRole(ServerRole.PRIMARY);
+        System.out.println("This addressing server has been promoted from REPLICA to PRIMARY...");
+        // Shut down the ping manager (only REPLICA's ping their peers)
+        // TODO: See if ping manager needs to exist or not for the primary
+        //server.getPingManager().shutdown();
         // Set internal PID generator to ensure no active processes have their PID re-assigned.
         server.setPidCounterToNetworkMax();
-        // Update server primary connection details.
-        server.setPrimaryPeerPort(server.getConfig().getReplicaPort());
-        server.setPrimaryHostAddress(server.getConfig().getHostAddress());
+        // Update config to reflect new PRIMARY status
+        AddrServerConfig config = server.getConfig();
+        config.setRole(ServerRole.PRIMARY);
+        // Update the internal registry to reflect the new leadership status
+        AddrServerRecord myRecord = server.getAddrServerRegistry().getRecords().get(config.getPID());
+        if (myRecord != null) {
+            myRecord.setRole(ServerRole.PRIMARY);
+        }
+        // TODO: Ghetto DNS update where we write PRIMARY_HOST_ADDRESS to a text file
+        // Since we don't have a DNS, the new Primary writes its info to the shared volume NOW.
+        // server.getNetworkManager().publishPrimaryDiscoveryFile();
+
+        // Update connection details for the primary addressing server.
+        server.getConfig().setPrimaryPeerPort(server.getConfig().getReplicaPort());
+        server.getConfig().setPrimaryHostAddress(server.getConfig().getHostAddress());
+        System.out.println("Promotion Complete. Now serving as PRIMARY.");
     }
 
     public static void promotePeer(AddressingServer server, AddrServerRecord record) {
         System.out.println("Promoting an separate network process from REPLICA to PRIMARY...");
         record.setRole(ServerRole.PRIMARY);
-        server.setPrimaryPeerPort(record.getPeerPort());
-        server.setPrimaryHostAddress(record.getHostAddress());
+        // Update connection details for the primary addressing server.
+        server.getConfig().setPrimaryPeerPort(record.getPeerPort());
+        server.getConfig().setPrimaryHostAddress(record.getHostAddress());
     }
 
 }

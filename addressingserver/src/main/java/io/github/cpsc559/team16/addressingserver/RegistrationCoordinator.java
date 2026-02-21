@@ -103,6 +103,7 @@ public class RegistrationCoordinator {
         // Check to see if the ChatServerRecord sent by the registering process contains a PID (0L signifies a new network process)
         ChatServerRecord record = msg.safeCastPayload(ChatServerRecord.class);
         Long csPID = server.generatePID();
+        record.setPID(csPID);
         // If there are no other Replica addressing servers, register directly without coordinating with others.
         if (addrServerRegistry.getRecords().size() == 1) {
             this.registerChatServerNoReplicasExist(primaryPID, csPID, channel, nioChannel, record);
@@ -405,8 +406,6 @@ public class RegistrationCoordinator {
             // The record received matches the internal record.
             // A persistent connection has already been registered, and the NIOMessageChannel's PID has been set
             Long primaryPID = server.getConfig().getPID();
-            // 2. Update local Registry immediately (Restoring the record)
-            this.addrServerRegistry.updateOrInsertRecord(record);
             // If other replicas exist, we must ensure they have the record of this server.
             if (this.addrServerRegistry.getRecords().size() > 1) {
                 // TODO: Might need to avoid sending this back to the replica that
@@ -414,10 +413,9 @@ public class RegistrationCoordinator {
                 Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
                 long messageID = server.getMessageIDGenerator().nextID();
 
-                // WRONG!
-                // We use a simpler event because we don't need to send "All Records" back to a sync-ing peer
+                // We use a simpler event because we don't need to send "All Records" back to a syncing peer
                 PendingEvent event = new PendingEvent(
-                        AckMessage.replicaRegistered(primaryPID, replicaPID),
+                        AckMessage.replicaSynchronized(messageID, primaryPID, replicaPID),
                         replicaChannelMap,
                         nioChannel,
                         () -> System.out.println("Sync complete for PID: " + replicaPID),

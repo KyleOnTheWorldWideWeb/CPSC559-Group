@@ -252,8 +252,8 @@ public class PeerManager {
                     nioChannel.getServerPID(), record.getPID());
             throw new IllegalArgumentException(err);
         }
-        // Store the peer channel for future use.
-        peerChannels.put(socketChannel, nioChannel);
+        // This already occurs in AddrServerNetworkManager - channels are stored before dispatching of any kind
+        //peerChannels.put(socketChannel, nioChannel);
         // Update network topology storing the AddrServerRecord, thus updating the local state of the Primary
         registry.putAddrServerRecord(record.getPID(), record);
         System.out.println("New replica successfully registered within the network.");
@@ -417,7 +417,7 @@ public class PeerManager {
 
 
     /**
-     * Re-establishes a connection with a newly elected PRIMARY and synchronizes existing state.
+     * Establishes a connection with a newly elected PRIMARY and synchronizes existing state.
      * <p>
      * This is invoked by REPLICA processes following a leader election. This sends a
      * {@link SyncRegisterMessage} containing the replica's existing PID and record,
@@ -428,13 +428,13 @@ public class PeerManager {
      * @param primaryReplicaPort the port used by the new PRIMARY for peer synchronization.
      * @return The SocketChannel used to sync with the PRIMARY {@code AddressingServer}.
      */
-    public Optional<SocketChannel> synchronizeWithPrimary(String primaryHostAddress, int primaryReplicaPort) {
+    public Optional<SocketChannel> synchronizeWithPrimary() {
         AddrServerRecord myRecord = server.getAddrServerRegistry().getRecords().get(this.server.getConfig().getPID());
         if (myRecord != null) {
             SyncRegisterMessage<AddrServerRecord> syncMsg =
                     SyncRegisterMessage.fromReplica(server.getMessageIDGenerator().nextID(), myRecord);
             System.out.println("Synchronization from REPLICA sent to PRIMARY.");
-            return transmitDiscoveryMessage(primaryHostAddress, primaryReplicaPort, syncMsg);
+            return transmitDiscoveryMessage(server.getConfig().getPrimaryHostAddress(), server.getConfig().getPrimaryPeerPort(), syncMsg);
         }
         else {
             System.err.println("Error occurred while attempting to retrieve AddrServerRecord for synchronization with PRIMARY.");
@@ -501,7 +501,8 @@ public class PeerManager {
      * Returns the network process ID (PID) of the current Primary Addressing Server
      * by looking through all the current AddrServer records in the network.
      *
-     * @return A Long integer containing the PID of the Primary Addressing Server.
+     * @return A Long integer containing the PID of the Primary Addressing Server or
+     * 0L to indicate no primary was found in the records.
      */
     public Long getPrimaryPID() {
 
@@ -509,15 +510,9 @@ public class PeerManager {
 
         for (AddrServerRecord record : registry.getRecords().values()) {
             if (record.getRole().equals(ServerRole.PRIMARY)) {
-
-                if (primaryPID != 0L) {
-                    System.err.println("WARNING: More than one PRIMARY AddressingServer found in the network. Picking highest PID.");
-                }
                 primaryPID = record.getPID();
             }
         }
-
-
         return primaryPID;
     }
 

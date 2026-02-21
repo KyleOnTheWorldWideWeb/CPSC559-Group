@@ -14,20 +14,17 @@ public class AddrServerConfig {
      * The network address of this Addressing Server.
      * The Primary Addressing Server posts this address to the
      * A-record in the static DNS.
-     * TODO - Assign dynamically at runtime for replication.
      */
     private final String hostAddress;
 
     /**
      * The port used for client connections.
-     * TODO - Assign dynamically at runtime for replication.
      * Clients use this port to connect and send messages.
      */
     private final int clientPort;
 
     /**
      * The port reserved for peer-to-peer communication amongst the
-     * TODO - Assign dynamically at runtime for replication.
      * Primary Addressing Server and it's backups.
      */
     private final int replicaPort;
@@ -49,6 +46,17 @@ public class AddrServerConfig {
      */
     private ServerRole role;
 
+    /**
+     * The network address of the PRIMARY Addressing Server.
+     * REPLICA instances use this to identify the target for registration and synchronization.
+     */
+    private String primaryHostAddress;
+
+    /**
+     * The port on the PRIMARY Addressing Server reserved for peer/replica connections.
+     * Used by REPLICAs during the initial handshake.
+     */
+    private int primaryPeerPort;
 
     /**
      * The configuration object for the Addressing Server.
@@ -74,24 +82,10 @@ public class AddrServerConfig {
         this.clientPort = Integer.parseInt(System.getenv().get("AS_CLIENT_PORT"));
         this.replicaPort = Integer.parseInt(System.getenv().get("AS_REPLICA_PORT"));
         this.chatServerPort = Integer.parseInt(System.getenv().get("AS_CHATSERVER_PORT"));
+        // Retrieve PRIMARY addressing server details from environment
+        this.primaryHostAddress = System.getenv().getOrDefault("HOST_ADDRESS", "localhost");
+        this.primaryPeerPort = Integer.parseInt(System.getenv().getOrDefault("PRIMARY_PEER_PORT", "49801"));
     }
-
-    public String getHostAddress() {
-        return hostAddress;
-    }
-
-    public int getClientPort() {
-        return clientPort;
-    }
-
-    public int getReplicaPort() {
-        return replicaPort;
-    }
-
-    public int getChatServerPort() {
-        return chatServerPort;
-    }
-
 
 
     /**
@@ -116,13 +110,99 @@ public class AddrServerConfig {
         return role;
     }
 
+
+    /**
+     * Sets the unique process identifier (PID) for this server.
+     * <p>
+     * This is typically called by the Primary during the registration handshake
+     * or initialized during the startup of a Primary process.
+     * </p>
+     * * @param pid the unique network-wide ID to assign to this server.
+     */
     public void setPID(Long pid) {
         this.pid = pid;
     }
+
+    /**
+     * Retrieves the unique process identifier (PID) for this server.
+     * * @return the assigned {@code Long} PID, or {@code 0L} if the process is not yet registered.
+     */
     public Long getPID() {
         return this.pid;
     }
 
+    /**
+     * Returns the network host address (IP or hostname) where this server is reachable.
+     * * @return the host address string used for incoming network connections.
+     */
+    public String getHostAddress() {
+        return hostAddress;
+    }
+
+    /**
+     * Returns the port number dedicated to handling Client (end-user) connections.
+     * * @return the integer port used for client-to-server communication.
+     */
+    public int getClientPort() {
+        return clientPort;
+    }
+
+    /**
+     * Returns the port number dedicated to Peer-to-Peer communication.
+     * <p>
+     * This port is used for replication, consensus protocols, and heartbeats
+     * between AddressingServer instances.
+     * </p>
+     * * @return the integer port used for replica-to-primary communication.
+     */
+    public int getReplicaPort() {
+        return replicaPort;
+    }
+
+    /**
+     * Returns the port number dedicated to ChatServer interactions.
+     * <p>
+     * ChatServers connect to this port to register themselves and receive
+     * topology updates from the AddressingServer.
+     * </p>
+     * * @return the integer port used for chat-server-to-addressing-server communication.
+     */
+    public int getChatServerPort() {
+        return chatServerPort;
+    }
+
+
+    /**
+     * Returns the host address of the current Primary Addressing Server.
+     * @return the IP or hostname of the Primary.
+     */
+    public String getPrimaryHostAddress() {
+        return primaryHostAddress;
+    }
+
+    /**
+     * Updates the recorded address of the Primary Addressing Server.
+     * @param address the new Primary host address.
+     */
+    public void setPrimaryHostAddress(String address) {
+        this.primaryHostAddress = address;
+    }
+
+    /**
+     * Returns the port used by the Primary for peer/replica handshakes.
+     * @return the peer port of the Primary.
+     */
+    public int getPrimaryPeerPort() {
+        return primaryPeerPort;
+    }
+
+    /**
+     * Updates the recorded peer port of the Primary Addressing Server.
+     * @param port the new Primary peer port.
+     */
+    public void setPrimaryPeerPort(int port) {
+        this.primaryPeerPort = port;
+    }
 
 
 }

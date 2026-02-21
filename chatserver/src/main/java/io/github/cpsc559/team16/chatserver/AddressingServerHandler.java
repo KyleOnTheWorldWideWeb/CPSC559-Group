@@ -175,7 +175,7 @@ class AddressingServerHandler implements ConnectionHandler {
                 String host = record.getHostAddress();
                 int port = record.getChatServerPort();
                 System.out.println("New Adressing Server Primart" + host + " " + port);
-
+                // TODO: Synchronize with Primary in much the same way that Replicas do!
                 debug(DEBUG_BASIC, "Received AddrServerRecord from host: " + host + ", port: " + port);
             } else {
                 debug(DEBUG_BASIC, "[ADDR_SERVER] Unknown payload type: " + payload.getClass().getName());

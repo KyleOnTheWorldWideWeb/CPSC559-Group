@@ -138,6 +138,22 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
     }
 
     /**
+     * Creates an ACK message from the PRIMARY server directed to a REPLICA.
+     * <p>
+     * This factory method generates an {@code AckMessage} where the sender is identified as {@link Roles#PRIMARY}
+     * and the recipient as {@link Roles#REPLICA}.
+     * The acknowledgment type is hardcoded as {@code AckObjectTypes.SYNCHRONIZED}, and the payload contains the assigned PID.
+     * </p>
+     *
+     * @param senderPID the process ID of the PRIMARY server sending this message
+     * @param payload   the assigned PID to be sent as confirmation
+     * @return an {@code AckMessage} constructed with the specified parameters, ready to be sent from the PRIMARY to the REPLICA
+     */
+    public static AckMessage<Long> replicaSynchronized(long messageID, long senderPID, Long payload) {
+        return new AckMessage<>(messageID, AckObjectTypes.SYNCHRONIZED, senderPID, Roles.PRIMARY, Roles.REPLICA, payload);
+    }
+
+    /**
      * Creates an ACK message from the PRIMARY {@code AddressingServer} directed to a {@code ChatServer}.
      * <p>
      * This factory method generates an {@code AckMessage} where the sender is identified as {@link Roles#PRIMARY}

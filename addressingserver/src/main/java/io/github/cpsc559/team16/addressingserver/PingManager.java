@@ -12,6 +12,7 @@ import java.util.Iterator;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
+import io.github.cpsc559.team16.common.messaging.Roles;
 
 /**
  * <h1>PingManager</h1>

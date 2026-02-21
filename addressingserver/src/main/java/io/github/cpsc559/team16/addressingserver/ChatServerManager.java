@@ -169,11 +169,12 @@ public class ChatServerManager {
     public void registerServerSendACK(SocketChannel socketChannel, NIOMessageChannel nioChannel,
                                     Long primaryPID, Long peerPID, ChatServerRecord record) throws IOException {
         nioChannel.setServerPID(peerPID);
-        chatServerChannels.put(socketChannel, nioChannel);
+        // This occurs in AddrServerNetworkManager already
+        //chatServerChannels.put(socketChannel, nioChannel);
         System.out.println("PRIMARY AddrServer has registered a new ChatServer process with network PID: " + peerPID);
         System.out.println("NIOChannel PID = " + nioChannel.getServerPID());
         System.out.println("Socket Channel ID = " + socketChannel.toString());
-
+        record.setPID(peerPID);
         registry.putChatServerRecord(peerPID, record);
         // Send an ACK to notify the server it has been registered.
         nioChannel.sendMessage(AckMessage.chatServerRegistered(primaryPID, peerPID).toJson());

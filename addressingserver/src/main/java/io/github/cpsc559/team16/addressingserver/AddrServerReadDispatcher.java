@@ -208,9 +208,14 @@ public class AddrServerReadDispatcher {
                         + server.getConfig().getPID());
             }
             case AckObjectTypes.REPLICATED -> {
-                System.out.println("Replicated message received.");
+                System.out.println("Replicated ACK message received.");
                 handleReplicationAck(ackMessage);
             }
+            case AckObjectTypes.SYNCHRONIZED -> {
+                System.out.println("Synchronized ACK message received.");
+                // Could start new leader thread here?
+            }
+
             default -> System.err.println("Unrecognized ACK response: " + ackMessage.getObjectType());
         }
     }

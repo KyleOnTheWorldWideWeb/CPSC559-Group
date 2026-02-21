@@ -13,24 +13,6 @@ import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 public class AddressingServer {
 
-    // TODO - Need to change this to dynamic port retrieval
-    /**
-     * The port reserved for peer connections on the Primary Addressing server
-     */
-    private static int PRIMARY_PEER_PORT;
-
-    public void setPrimaryPeerPort(int port) {
-        PRIMARY_PEER_PORT = port;
-    }
-
-    /**
-     * The address of the Primary Addressing server
-     */
-    private static String PRIMARY_HOST_ADDRESS;
-    public void setPrimaryHostAddress(String address) {
-        PRIMARY_HOST_ADDRESS = address;
-    }
-
     /**
      * Indicates whether the server has been instructed to restart. Typically used after an orphaned or failed
      * AddressingServer has been instructed to terminate and reinitialize.
@@ -352,21 +334,6 @@ public class AddressingServer {
         return ++this.pidCounter;
     }
 
-    /**
-     * Sets the internal process ID counter to a specified value.
-     * <p>
-     * This method is typically called during replica promotion, where the newly
-     * elected {@code PRIMARY} {@code AddressingServer} must resume assigning
-     * unique process IDs without conflicting with existing ones. The provided
-     * value should reflect the current highest PID observed across the network.
-     * </p>
-     *
-     * @param currentNetworkMaxPID the highest known PID from all registered processes,
-     *                             used to initialize the counter for new PID assignment.
-     */
-    public void setPidCounter(Long currentNetworkMaxPID) {
-        this.pidCounter = currentNetworkMaxPID;
-    }
 
     /**
      * Returns the highest process ID (PID) currently assigned in the network,
@@ -386,6 +353,15 @@ public class AddressingServer {
         return (maxAddrServerPID > maxChatServerPID) ? maxAddrServerPID : maxChatServerPID;
     }
 
+    /**
+     * Sets the internal process ID counter to a specified value.
+     * <p>
+     * This method is typically called during replica promotion, where the newly
+     * elected {@code PRIMARY} {@code AddressingServer} must resume assigning
+     * unique process IDs without conflicting with existing network processes.
+     * </p>
+     *
+     */
     public void setPidCounterToNetworkMax() {
         this.pidCounter = getMaxPidInNetwork() + 1;
     }
@@ -426,7 +402,6 @@ public class AddressingServer {
 
         this.leaderElectionManager = new LeaderElectionManager(this);
         this.pingManager = new PingManager(this);
-
     }
 
 
@@ -512,7 +487,7 @@ public class AddressingServer {
      */
     public void registerReplicaAddrServer() throws IOException {
         Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
-                PRIMARY_HOST_ADDRESS, PRIMARY_PEER_PORT,
+                config.getPrimaryHostAddress(), config.getPrimaryPeerPort(),
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
 
         // Retry connection using exponential backoff
@@ -530,7 +505,7 @@ public class AddressingServer {
             }
             // TODO - Need to change this to dynamic port retrieval
             maybeChannel = peerManager.registerWithPrimary(
-                    PRIMARY_HOST_ADDRESS, PRIMARY_PEER_PORT,
+                    config.getPrimaryHostAddress(), config.getPrimaryPeerPort(),
                     config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
             attempts++;
         }
@@ -590,8 +565,6 @@ public class AddressingServer {
             System.err.println(e.getMessage());
         }
 
-        PRIMARY_PEER_PORT = Integer.parseInt(System.getenv("PRIMARY_PEER_PORT"));
-        PRIMARY_HOST_ADDRESS = System.getenv("HOST_ADDRESS");
 
         // Track whether this is the first time the loop has occurred.
         boolean firstIteration = true;
