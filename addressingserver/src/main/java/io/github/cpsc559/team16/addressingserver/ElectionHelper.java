@@ -12,8 +12,6 @@ package io.github.cpsc559.team16.addressingserver;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 
-import java.io.IOException;
-
 public final class ElectionHelper {
 
     /**
@@ -40,7 +38,7 @@ public final class ElectionHelper {
         // server.getNetworkManager().publishPrimaryDiscoveryFile();
 
         // Update connection details for the primary addressing server.
-        server.getConfig().setPrimaryPeerPort(server.getConfig().getReplicaPort());
+        server.getConfig().setPrimaryReplicaPort(server.getConfig().getReplicaPort());
         server.getConfig().setPrimaryHostAddress(server.getConfig().getHostAddress());
         System.out.println("Promotion Complete. Now serving as PRIMARY.");
     }
@@ -49,7 +47,7 @@ public final class ElectionHelper {
         System.out.println("Promoting an separate network process from REPLICA to PRIMARY...");
         record.setRole(ServerRole.PRIMARY);
         // Update connection details for the primary addressing server.
-        server.getConfig().setPrimaryPeerPort(record.getPeerPort());
+        server.getConfig().setPrimaryReplicaPort(record.getPeerPort());
         server.getConfig().setPrimaryHostAddress(record.getHostAddress());
     }
 

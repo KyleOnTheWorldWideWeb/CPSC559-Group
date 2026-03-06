@@ -582,7 +582,9 @@ public class AddrServerReadDispatcher {
         Long failedPID = shutdownMessage.safeCastPayload(Long.class);
         if (this.getPID().equals(failedPID)) {
             System.out.println("Shutdown request validated - this process has been flagged for termination.");
-            server.getNetworkManager().requestShutdown();
+            server.shutdown();
+            // Terminate the JVM immediately
+            System.exit(0);
         }
         else {
             System.out.printf("Invalid shutdown message received - target PID = %d but this PID = %d\n", failedPID, this.getPID());

@@ -6,6 +6,7 @@ import java.nio.channels.SocketChannel; // Used for conditionals that don't rely
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.messaging.MessageIDGenerator;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
@@ -14,38 +15,29 @@ import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 public class AddressingServer {
 
     /**
-     * Indicates whether the server has been instructed to restart. Typically used after an orphaned or failed
-     * AddressingServer has been instructed to terminate and reinitialize.
-     * <p>
-     * This flag is marked {@code volatile} to ensure visibility across threads. It can be
-     * safely updated by any thread (e.g. the {@code AddrServerReadDispatcher}) and read by the main thread
-     * to trigger a controlled in-process restart of the {@code AddressingServer}.
-     * </p>
-     * <p>
-     * When {@code true}, the main event loop exits and the server is re-instantiated as a new process.
-     * </p>
+     * Used by the PRIMARY Addressing server to write discovery information to
+     * disk - e.g. hostname, port no, etc. This data is accessed by other network processes
+     * that want to initiate contact with the PRIMARY (e.g. upon instantiation, or after an election).
+     * <par>
+     * This replaces the original DNS functionality wherein a domain A record is dynamically updated
+     * with the address of an addressing server in the distributed chat network that is currently
+     * acting as the primary.
+     * </par>
      */
-    private volatile boolean restartRequested = false;
+    private PrimaryDiscoveryManager discoveryManager = null;
 
     /**
-     * Sets the {@code restartRequested} flag to {@code true}.
-     * <p>
-     * This method is typically called when a shutdown or restart message is received from the network.
-     * It signals the {@code AddressingServer} to exit its current event loop and reinitialize as a new replica.
-     * </p>
-     */
-    public void requestRestart() {
-        this.restartRequested = true;
-        shutdown();
-    }
-
-    /**
-     * Checks whether the server has been flagged for restart.
      *
-     * @return {@code true} if a restart has been requested, {@code false} otherwise.
+     * @return
      */
-    public boolean isRestartRequested() {
-        return this.restartRequested;
+    public PrimaryDiscoveryManager getDiscoveryManager() {
+        if (config.getRole() != ServerRole.PRIMARY) {
+            throw new IllegalStateException("REPLICA attempted to access DiscoveryManager!");
+        }
+        if (discoveryManager == null) {
+            this.discoveryManager = new PrimaryDiscoveryManager(this.config);
+        }
+        return discoveryManager;
     }
 
 
@@ -340,9 +332,10 @@ public class AddressingServer {
      * considering both {@code AddressingServer}s and {@code ChatServer}s.
      * <p>
      *     This method is used to ensure that all future PIDs assigned during
-     *     registration events (e.g., new servers joining the network) are strictly
+     *     registration events (e.g. new servers joining the network) are strictly
      *     greater than any currently active PID. This prevents PID reuse and
-     *     maintains global uniqueness of process identifiers across both system roles.
+     *     maintains global uniqueness of process identifiers across both (addr and chat)
+     *     system roles. Distinct PIDs are essential for interprocess communication.
      * </p>
      *
      * @return the highest PID found in either the {@code AddrServerRegistry} or {@code ChatServerRegistry}.
@@ -365,6 +358,42 @@ public class AddressingServer {
     public void setPidCounterToNetworkMax() {
         this.pidCounter = getMaxPidInNetwork() + 1;
     }
+
+    /**
+     * Indicates whether the server has been instructed to restart. Typically used after an orphaned or failed
+     * AddressingServer has been instructed to terminate and reinitialize.
+     * <p>
+     * This flag is marked {@code volatile} to ensure visibility across threads. It can be
+     * safely updated by any thread (e.g. the {@code AddrServerReadDispatcher}) and read by the main thread
+     * to trigger a controlled in-process restart of the {@code AddressingServer}.
+     * </p>
+     * <p>
+     * When {@code true}, the main event loop exits and the server is re-instantiated as a new process.
+     * </p>
+     */
+    private volatile boolean restartRequested = false;
+
+    /**
+     * Sets the {@code restartRequested} flag to {@code true}.
+     * <p>
+     * This method is typically called when a shutdown or restart message is received from the network.
+     * It signals the {@code AddressingServer} to exit its current event loop and reinitialize as a new replica.
+     * </p>
+     */
+    public void requestRestart() {
+        this.restartRequested = true;
+        shutdown();
+    }
+
+    /**
+     * Checks whether the server has been flagged for restart.
+     *
+     * @return {@code true} if a restart has been requested, {@code false} otherwise.
+     */
+    public boolean isRestartRequested() {
+        return this.restartRequested;
+    }
+
 
 
     /**
@@ -405,30 +434,35 @@ public class AddressingServer {
     }
 
 
-
     public void registerPrimaryAddrServer() throws IOException {
-        Long pid = generatePID();
-        config.setPID(pid); // Assign a process id to the primary
-        genMID.setPID(pid); // Set the PID in the message ID generator (it needs this to generate unique network message ID's)
-        System.out.println("PRIMARY AddressingServer .env host address: " + config.getHostAddress());
-        // try {
-        //     System.out.println("PRIMARY AddressingServer runtime host address: " + InetAddress.getLocalHost().getHostAddress());
-        // } catch (Exception e) {
-        //     System.err.println("Error reading host address: " + e.getMessage());
-        // }
-        String publicAddress = System.getenv("PUBLIC_ADDRESS");
-        // Add a fallback if the environment variable isn't set
-        if (publicAddress == null || publicAddress.isEmpty()) {
-            // Fallback to hostname/IP detection
-            InetAddress localHost = InetAddress.getLocalHost();
-            publicAddress = localHost.getHostAddress();
 
-        } else {
-            System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
+        Long pid = generatePID();
+        config.setPID(pid);
+        genMID.setPID(pid);
+
+        String host = config.getHostAddress();
+        if (host == null || host.isEmpty() || host.equals("localhost")) {
+            host = InetAddress.getLocalHost().getHostName(); // Use Docker container ID/hostname
         }
-        System.out.println("PRIMARY AddressingServer .env public address: " + publicAddress);
-        addrServerRegistry.registerAddrServer(pid, publicAddress,
-                config.getClientPort(), config.getReplicaPort(), config.getChatServerPort(), config.getRole());
+
+        System.out.println("PRIMARY initializing with Hostname: " + host + " and PID: " + pid);
+
+        // Update Local Registry (Self-Register by creating an AddrServerRecord)
+        addrServerRegistry.registerAddrServer(
+                pid,
+                host,
+                config.getClientPort(),
+                config.getReplicaPort(),
+                config.getChatServerPort(),
+                config.getRole()
+        );
+
+        try {
+            PrimaryDiscoveryManager discovery = new PrimaryDiscoveryManager(config);
+            discovery.publish();
+        } catch (IOException e) {
+            System.err.println("CRITICAL: Primary could not publish discovery file: " + e.getMessage());
+        }
     }
 
     /**
@@ -486,8 +520,38 @@ public class AddressingServer {
      * @see AddrServerNetworkManager#openPersistentChannel(SocketChannel)
      */
     public void registerReplicaAddrServer() throws IOException {
+        // Retrieve the details for the primary addressing server
+        int discoveryAttempts = 0;
+        int maxDiscoveryAttempts = 10; // Total 20 seconds
+        boolean fileFound = false;
+
+        System.out.println("Replica starting: Searching for Primary discovery file...");
+
+        while (discoveryAttempts < maxDiscoveryAttempts) {
+            if (config.refreshPrimaryDetails()) {
+                fileFound = true;
+                break;
+            }
+
+            discoveryAttempts++;
+            System.out.printf("Discovery file not found. Attempt %d/%d. Retrying in 2s...%n",
+                    discoveryAttempts, maxDiscoveryAttempts);
+
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Startup discovery interrupted", e);
+            }
+        }
+
+        if (!fileFound) {
+            System.err.println("CRITICAL: Primary discovery file missing after timeout. Shutting down this process.");
+            System.exit(1);
+        }
+
         Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
-                config.getPrimaryHostAddress(), config.getPrimaryPeerPort(),
+                config.getPrimaryHostAddress(), config.getPrimaryReplicaPort(),
                 config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
 
         // Retry connection using exponential backoff
@@ -503,9 +567,8 @@ public class AddressingServer {
                 Thread.currentThread().interrupt();
                 System.err.println("Retry sleep interrupted.");
             }
-            // TODO - Need to change this to dynamic port retrieval
             maybeChannel = peerManager.registerWithPrimary(
-                    config.getPrimaryHostAddress(), config.getPrimaryPeerPort(),
+                    config.getPrimaryHostAddress(), config.getPrimaryReplicaPort(),
                     config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
             attempts++;
         }
@@ -527,7 +590,7 @@ public class AddressingServer {
      * Close all connections in the {@link AddrServerNetworkManager}.
      * Shut down the thread running the heartbeat pings in {@link PingManager}.
      * <p>
-     * Throw a party with one candle! Play the cake song:
+     * <b>Throw a party with one candle! Play the cake song:</b>
      * </p>
      * <p><a href="https://youtu.be/6ug6Bbc6diA?si=Empv4R9Wg6kdo1lD">"We do what we must, because we can"</a></p>
      */
@@ -584,12 +647,11 @@ public class AddressingServer {
                     // done via a domain a record hosted on a public server with a static address.
                     server.registerReplicaAddrServer();
                 }
-               // TODO - A thread(s) must be spun up for this method call.
-               //  Since this invocation causes an infinite loop, the main thread will get hung up.
-               //  And the Replica won't enter the main event loop and function as intended.
+
                 System.out.println("AddressingServer: Starting PingManager...");
-                new Thread(() -> server.getPingManager().run()).start();
-                System.out.println("AddressingServer: Started PingManager...");
+                Thread pingThread = new Thread(() -> server.getPingManager().run());
+                pingThread.setDaemon(true);
+                pingThread.start();
 
                 try {
                     server.start();         // blocks in main event loop of AddrServerNetworkManager

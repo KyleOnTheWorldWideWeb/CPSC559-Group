@@ -434,7 +434,7 @@ public class PeerManager {
             SyncRegisterMessage<AddrServerRecord> syncMsg =
                     SyncRegisterMessage.fromReplica(server.getMessageIDGenerator().nextID(), myRecord);
             System.out.println("Synchronization from REPLICA sent to PRIMARY.");
-            return transmitDiscoveryMessage(server.getConfig().getPrimaryHostAddress(), server.getConfig().getPrimaryPeerPort(), syncMsg);
+            return transmitDiscoveryMessage(server.getConfig().getPrimaryHostAddress(), server.getConfig().getPrimaryReplicaPort(), syncMsg);
         }
         else {
             System.err.println("Error occurred while attempting to retrieve AddrServerRecord for synchronization with PRIMARY.");

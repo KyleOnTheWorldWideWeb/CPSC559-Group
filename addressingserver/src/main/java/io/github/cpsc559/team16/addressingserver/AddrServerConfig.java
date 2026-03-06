@@ -1,6 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import io.github.cpsc559.team16.common.dto.ServerRole;
+import io.github.cpsc559.team16.common.utilities.PrimaryDiscoveryReader;
+
+import java.io.IOException;
 
 public class AddrServerConfig {
 
@@ -53,10 +56,11 @@ public class AddrServerConfig {
     private String primaryHostAddress;
 
     /**
-     * The port on the PRIMARY Addressing Server reserved for peer/replica connections.
+     * The port on the PRIMARY Addressing Server reserved for replica connections.
      * Used by REPLICAs during the initial handshake.
      */
-    private int primaryPeerPort;
+    private int primaryReplicaPort;
+
 
     /**
      * The configuration object for the Addressing Server.
@@ -74,19 +78,20 @@ public class AddrServerConfig {
      * </ul></p>
      */
     public AddrServerConfig() {
-        System.out.println("----> Addressing server environment variables:");
-        System.getenv().forEach((key, value) -> System.out.println(key + ": " + value));
-        String roleEnv = System.getenv().getOrDefault("AS_ROLE", "BACKUP").trim().toUpperCase();
-        this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.REPLICA;
-        this.hostAddress = System.getenv().getOrDefault("HOST_ADDRESS", "172.20.0.2");
-        this.clientPort = Integer.parseInt(System.getenv().get("AS_CLIENT_PORT"));
-        this.replicaPort = Integer.parseInt(System.getenv().get("AS_REPLICA_PORT"));
-        this.chatServerPort = Integer.parseInt(System.getenv().get("AS_CHATSERVER_PORT"));
-        // Retrieve PRIMARY addressing server details from environment
-        this.primaryHostAddress = System.getenv().getOrDefault("HOST_ADDRESS", "localhost");
-        this.primaryPeerPort = Integer.parseInt(System.getenv().getOrDefault("PRIMARY_PEER_PORT", "49801"));
-    }
+        // Look for the specific network named assigned to this container
+        this.hostAddress = System.getenv().getOrDefault("AS_HOST_ADDRESS", "localhost");
 
+        this.clientPort = Integer.parseInt(System.getenv().getOrDefault("AS_CLIENT_PORT", "49800"));
+        this.replicaPort = Integer.parseInt(System.getenv().getOrDefault("AS_REPLICA_PORT", "49801"));
+        this.chatServerPort = Integer.parseInt(System.getenv().getOrDefault("AS_CHATSERVER_PORT", "49802"));
+
+        String roleEnv = System.getenv().getOrDefault("AS_ROLE", "REPLICA").toUpperCase();
+        this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.REPLICA;
+
+        // Primary Details: Initialized as null/empty; will be filled by DiscoveryReader for all REPLICA processes
+        this.primaryHostAddress = null;
+        this.primaryReplicaPort = -1;
+    }
 
     /**
      * Changes the role of an AddressingServer in the DS.
@@ -192,17 +197,39 @@ public class AddrServerConfig {
      * Returns the port used by the Primary for peer/replica handshakes.
      * @return the peer port of the Primary.
      */
-    public int getPrimaryPeerPort() {
-        return primaryPeerPort;
+    public int getPrimaryReplicaPort() {
+        return primaryReplicaPort;
     }
 
     /**
      * Updates the recorded peer port of the Primary Addressing Server.
      * @param port the new Primary peer port.
      */
-    public void setPrimaryPeerPort(int port) {
-        this.primaryPeerPort = port;
+    public void setPrimaryReplicaPort(int port) {
+        this.primaryReplicaPort = port;
     }
 
+    /**
+     * Re-reads the shared discovery file to update the current known Primary.
+     * This is called during initialization and after a detected failover.
+     * @return true if a Primary was found and its details were loaded, false otherwise.
+     */
+    public boolean refreshPrimaryDetails() {
+        try {
+            PrimaryDiscoveryReader.PrimaryAddress details = PrimaryDiscoveryReader.readPrimaryDetails();
+            if (details != null) {
+                this.primaryHostAddress = details.hostAddress();
+                this.primaryReplicaPort = details.replicaPort();
+                return true;
+            }
+        } catch (IOException e) {
+            System.err.println("Config: Error reading primary addressing server discovery file: " + e.getMessage());
+        }
+
+        // If we reach here, no primary was found. Clear old stale data.
+        this.primaryHostAddress = null;
+        this.primaryReplicaPort = -1;
+        return false;
+    }
 
 }

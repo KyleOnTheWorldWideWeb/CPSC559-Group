@@ -59,6 +59,9 @@ public class AddrServerNetworkManager {
      */
     public void requestShutdown() {
         this.shutdownRequested = true;
+        if (this.selector != null) {
+            this.selector.wakeup(); // Interrupts the blocking select() immediately so the thread is not waiting for a connection.
+        }
     }
 
     /**

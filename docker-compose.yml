@@ -14,13 +14,11 @@ services:
     restart: on-failure
     environment:
       # Defaults to hardcoded values if no .env file is present
+      - AS_HOST_ADDRESS=${AS_HOST_ADDRESS:-addressingserver}
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
       - AS_REPLICA_PORT=${AS_REPLICA_PORT:-49801}
       - AS_CHATSERVER_PORT=${AS_CHATSERVER_PORT:-49802}
-      - HOST_ADDRESS=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
-      - PUBLIC_ADDRESS=addressingserver
       - AS_ROLE=${AS_ROLE:-PRIMARY}
-      - PRIMARY_PEER_PORT=${AS_REPLICA_PORT:-49801}
     ports:
       # Static port mapping for the Primary Addressing Server
       - "49800:49800"
@@ -29,6 +27,8 @@ services:
       - "5050:5050"
     networks:
       - chat_network
+    volumes:
+      - ./data:/shared
 #    healthcheck:
 #      test: [ "CMD", "sh", "/healthcheck.sh" ]
 #      interval: 30s
@@ -43,7 +43,6 @@ services:
     profiles: [ "addressingserver-backup" ]
     environment:
       - AS_ROLE=BACKUP
-      - PRIMARY_ADDRESS_SERVER_IP=addressingserver # Points to the other container
     ports: !reset []
 
   chatserver:
@@ -60,6 +59,8 @@ services:
       # We leave PUBLIC_ADDRESS out entirely to ensure the internal Docker DNS is used
     networks:
       - chat_network
+    volumes:
+      - ./data:/shared
 
   client:
     image: client:latest
@@ -77,6 +78,8 @@ services:
       - chat_network
     tty: true
     stdin_open: true
+    volumes:
+      - ./data:/shared
 
 networks:
   chat_network:
