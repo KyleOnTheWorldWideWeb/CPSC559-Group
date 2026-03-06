@@ -538,7 +538,8 @@ public class PeerManager {
         Long primaryPid = this.getPrimaryPID();
         if (primaryPid != 0L) {
             for (NIOMessageChannel ch : this.peerChannels.values()) {
-                if (ch.getServerPID().equals(primaryPid)) return ch;
+                if (ch.getServerPID().equals(primaryPid) && ch.getSocketChannel().isOpen())
+                    return ch;
             }
         }
         return null;

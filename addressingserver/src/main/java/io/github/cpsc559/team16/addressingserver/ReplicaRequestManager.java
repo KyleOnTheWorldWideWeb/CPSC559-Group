@@ -72,8 +72,8 @@ public class ReplicaRequestManager {
 
 
 
-    public void requestAllServerRecords(Long senderPID) {
-        RequestMessage<Void> message = RequestMessage.requestAllServerRecords(genMID.nextID(), senderPID);
+    public void requestAllServerRecords() {
+        RequestMessage<Void> message = RequestMessage.requestAllServerRecords(genMID.nextID(), genMID.getPID());
         try {
             primaryChannel.sendMessage(message.toJson());
         } catch (JsonProcessingException e) {
@@ -83,8 +83,8 @@ public class ReplicaRequestManager {
         }
     }
 
-    public void requestAllChatServerRecords(Long senderPID) {
-        RequestMessage<Void> message = RequestMessage.requestAllChatServerRecords(genMID.nextID(), senderPID);
+    public void requestAllChatServerRecords() {
+        RequestMessage<Void> message = RequestMessage.requestAllChatServerRecords(genMID.nextID(), genMID.getPID());
         try {
             primaryChannel.sendMessage(message.toJson());
         } catch (JsonProcessingException e) {
@@ -94,8 +94,8 @@ public class ReplicaRequestManager {
         }
     }
 
-    public void requestAllAddrServerRecords(Long senderPID) {
-        RequestMessage<Void> message = RequestMessage.requestAllAddrServerRecords(genMID.nextID(), senderPID);
+    public void requestAllAddrServerRecords() {
+        RequestMessage<Void> message = RequestMessage.requestAllAddrServerRecords(genMID.nextID(), genMID.getPID());
         try {
             primaryChannel.sendMessage(message.toJson());
         } catch (JsonProcessingException e) {

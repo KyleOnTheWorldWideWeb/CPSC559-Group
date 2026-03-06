@@ -36,14 +36,9 @@ public class ReplicaRequestCoordinator extends Thread {
     /** Flag to indicate if this thread should continue running. */
     private volatile boolean running = true;
 
+    /** A functional supplier that retrieves the current channel to the PRIMARY addressing server. */
     private final Supplier<NIOMessageChannel> primaryChannelSupplier;
 
-    /** The network PID of the process that instantiated this thread */
-    private Long replicaPID;
-
-    public void setReplicaPID(Long pid) {
-        this.replicaPID = pid;
-    }
 
     /**
      * Constructs a new {@code ReplicaRequestCoordinator} thread responsible for managing
@@ -61,12 +56,11 @@ public class ReplicaRequestCoordinator extends Thread {
      * @param onReady                  a {@code Consumer} callback used to expose the instantiated {@link ReplicaRequestManager}
      * @param primaryChannelSupplier   a {@code Supplier} that provides the active {@link NIOMessageChannel} connected to the PRIMARY
      */
-    public ReplicaRequestCoordinator(MessageIDGenerator messageIDGenerator, Long replicaPID,
+    public ReplicaRequestCoordinator(MessageIDGenerator messageIDGenerator,
                                      Consumer<ReplicaRequestManager> onReady,
                                      Supplier<NIOMessageChannel> primaryChannelSupplier) {
         super("ReplicaRequestCoordinator");
         this.messageIDGenerator = messageIDGenerator;
-        this.replicaPID = replicaPID;
         this.primaryChannelSupplier = primaryChannelSupplier;
         this.onReady = onReady;
         this.setDaemon(true);
@@ -81,9 +75,43 @@ public class ReplicaRequestCoordinator extends Thread {
         this.interrupt(); // Wake up a sleeping thread so it can shutdown immediately.
     }
 
-    public void pause() {
 
-    }
+//    @Override
+//    public void run() {
+//        while (running && requestManager == null) {
+//            primaryChannel = primaryChannelSupplier.get();
+//            if (primaryChannel != null) {
+//                this.requestManager = new ReplicaRequestManager(messageIDGenerator, primaryChannel);
+//                this.onReady.accept(requestManager);
+//                break;
+//            }
+//            try {
+//                Thread.sleep(1000); // Try again shortly
+//            } catch (InterruptedException ie) {
+//                Thread.currentThread().interrupt();
+//                return; // Exit cleanly
+//            }
+//        }
+//
+//
+//        while (running) {
+//            try {
+//                if (requestManager.incrementSyncCounter()) {        // Update all records (Chat and Addr) every 6 cycles
+//                    requestManager.requestAllServerRecords();
+//                }
+//                else { requestManager.requestAllChatServerRecords();} // update only chat server records every cycle
+//
+//                Thread.sleep(20000); // ~1 request every 20 seconds (can be adjusted)
+//            } catch (InterruptedException ie) {
+//                Thread.currentThread().interrupt();
+//                break;
+//            } catch (Exception e) {
+//                System.err.println("ReplicaRequestCoordinator encountered an error: " + e.getMessage());
+//                e.printStackTrace();
+//            }
+//        }
+//    }
+
 
     /**
      * The main loop for the {@code ReplicaRequestCoordinator}.
@@ -95,36 +123,40 @@ public class ReplicaRequestCoordinator extends Thread {
      */
     @Override
     public void run() {
-        while (running && requestManager == null) {
-            NIOMessageChannel primaryChannel = primaryChannelSupplier.get();
-            if (primaryChannel != null) {
-                this.requestManager = new ReplicaRequestManager(messageIDGenerator, primaryChannel);
-                this.onReady.accept(requestManager);
-                break;
-            }
-            try {
-                Thread.sleep(1000); // Try again shortly
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                return; // Exit cleanly
-            }
-        }
-
-
         while (running) {
-            try {
-                if (requestManager.incrementSyncCounter()) {        // Update all records (Chat and Addr) every 6 cycles
-                    requestManager.requestAllServerRecords(this.replicaPID);
+            // Connection Phase: If we don't have an active manager, we need to try and get one.
+            if (requestManager == null) {
+                primaryChannel = primaryChannelSupplier.get();
+                if (primaryChannel != null && primaryChannel.getSocketChannel().isOpen()) {
+                    this.requestManager = new ReplicaRequestManager(messageIDGenerator, primaryChannel);
+                    this.onReady.accept(requestManager);
+                } else {
+                    try {
+                        Thread.sleep(2000);
+                        continue; // Skip to next iteration to try connecting again
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return; // We have retry logic inside the AddrServerNetworkManager main loop (for replicas)
+                    }
                 }
-                else { requestManager.requestAllChatServerRecords(this.replicaPID);} // update only chat server records every cycle
+            }
 
-                Thread.sleep(20000); // ~1 request every 20 seconds (can be adjusted)
+            // Action Phase: We have a manager, so now we can sync this REPLICA's records with the PRIMARY
+            try {
+                if (requestManager.incrementSyncCounter()) {
+                    requestManager.requestAllServerRecords();
+                } else {
+                    requestManager.requestAllChatServerRecords();
+                }
+                Thread.sleep(20000);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
-                System.err.println("ReplicaRequestCoordinator encountered an error: " + e.getMessage());
-                e.printStackTrace();
+                // If the socket dies, we reset the manager.
+                // The next loop iteration will go back to "Connection Phase"
+                System.err.println("Sync failed. Connection likely lost. Resetting...");
+                this.requestManager = null;
             }
         }
     }

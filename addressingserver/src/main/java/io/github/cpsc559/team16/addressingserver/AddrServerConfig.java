@@ -11,12 +11,15 @@ public class AddrServerConfig {
      * Each AddressingServer process has a distinct id amongst its peers.
      * {@code pid} is used as a 'tie-breaker' during leader elections.
      */
-    private long pid;
+    private volatile long pid;
 
     /**
      * The network address of this Addressing Server.
-     * The Primary Addressing Server posts this address to the
+     * <par>
+     * The Primary Addressing Server used to this address to the
      * A-record in the static DNS.
+     * Now it writes it to the shared volume in a text file.
+     * </par>
      */
     private final String hostAddress;
 

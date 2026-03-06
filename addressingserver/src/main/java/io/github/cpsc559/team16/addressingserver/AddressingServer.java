@@ -417,7 +417,7 @@ public class AddressingServer {
      */
     public AddressingServer() {
         this.config = new AddrServerConfig();
-        this.genMID = new MessageIDGenerator();
+        this.genMID = new MessageIDGenerator(this.config::getPID);
 
         this.chatServerRegistry = new ChatServerRegistry();
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
@@ -451,7 +451,6 @@ public class AddressingServer {
 
         Long pid = generatePID();
         config.setPID(pid);
-        genMID.setPID(pid);
 
         String host = config.getHostAddress();
         if (host == null || host.isEmpty() || host.equals("localhost")) {
@@ -491,6 +490,7 @@ public class AddressingServer {
      * <ul>
      *   <li>Attempt to fetch the {@link NIOMessageChannel} associated with the Primary via {@link PeerManager}.</li>
      *   <li>Instantiate a {@link ReplicaRequestManager} using the channel and the local {@link MessageIDGenerator}.</li>
+     *   <li>Use the {@code getPID} method in {@link AddrServerConfig} to retrieve the network PID of the instantiating process.</li>
      *   <li>Publish the newly created {@code ReplicaRequestManager} to the internal field via a callback.</li>
      * </ul>
      * </p>
@@ -498,9 +498,12 @@ public class AddressingServer {
      * @return a new, unstarted {@code ReplicaRequestCoordinator} thread configured for this AddressingServer instance.
      */
     public ReplicaRequestCoordinator createReplicaRequestCoordinator() {
+        // If a coordinator already exists, try to shut it down first to avoid thread leaks (we only ever need one).
+        if (this.replicaRequestCoordinator != null) {
+            this.replicaRequestCoordinator.shutdown();
+        }
         this.replicaRequestCoordinator =  new ReplicaRequestCoordinator(
                 this.genMID,
-                this.config.getPID(),
                 this::setReplicaRequestManager, // Save reference to internal field
                 this.peerManager::getPrimaryNIOChannel
         );

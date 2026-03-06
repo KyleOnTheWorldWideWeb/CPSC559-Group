@@ -211,22 +211,41 @@ public class AddrServerNetworkManager {
         this.replicaRequestCoordinator = this.replicaRequestFactory.get();
     }
 
+    /** Supplier for the coordinator class that handles requests sent by REPLICA processes to the PRIMARY */
     private final Supplier<ReplicaRequestCoordinator> replicaRequestFactory;
 
+    /**
+     * Terminate the {@link ReplicaRequestCoordinator} background thread and cleans up its reference.
+     * <p>
+     * This method signals the coordinator to stop, interrupts its current sleep or network operation,
+     * and attempts to join the thread for up to 2 seconds to ensure a graceful exit. Once the
+     * thread has terminated (or the timeout is reached), the local reference is nullified to
+     * prevent stale interactions and allow for garbage collection.
+     * </p>
+     * <p>
+     * This is primarily used when a {@code REPLICA} is promoted to {@code PRIMARY}, as a primary
+     * server should not attempt to synchronize state with itself.
+     * </p>
+     */
     public void shutdownCoordinatorRequest() {
-        if (this.replicaRequestCoordinator != null && this.replicaRequestCoordinator.isAlive()) {
+        if (this.replicaRequestCoordinator != null) {
             this.replicaRequestCoordinator.shutdown();
             try {
                 // Wait up to 2 seconds for the thread to die gracefully
                 this.replicaRequestCoordinator.join(2000);
 
                 if (this.replicaRequestCoordinator.isAlive()) {
-                    System.err.println("Replica request coordinator didn't stop in time - proceeding anyway.");
+                    // We use an interrupt in repilcaRequestCoordinator.shutdown to wake it up,
+                    // so if it is still alive here we must dereference it.
+                    System.err.println("WARNING: ReplicaRequestCoordinator did not terminate within 2s." +
+                            "Proceeding with nullification to avoid blocking the main thread.");
                 }
             } catch (InterruptedException e) {
-                System.err.println("Main event loop interrupted while waiting for replica request coordinator thread to die.");
+                System.err.println("Main event loop interrupted while waiting for replica request coordinator thread to die:" + e.getMessage());
+                Thread.currentThread().interrupt();
+            } finally {
+                this.replicaRequestCoordinator = null;
             }
-            this.replicaRequestCoordinator = null;
         }
     }
 
@@ -474,7 +493,7 @@ public class AddrServerNetworkManager {
 
             if (config.getRole().equals(ServerRole.REPLICA) && !this.midElection) {
                 if (replicaRequestCoordinator != null && !replicaRequestCoordinator.isAlive()) {
-                    System.err.println("ReplicaRequestCoordinator thread is not alive. Restarting...");
+                    System.err.println("ReplicaRequestCoordinator is missing or dead. Starting new instance...");
                     createReplicaRequestCoordinator();
                     replicaRequestCoordinator.start();
                 }

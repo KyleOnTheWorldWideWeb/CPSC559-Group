@@ -198,8 +198,6 @@ public class AddrServerReadDispatcher {
                 // the payload.
                 Long assignedPID = ackMessage.safeCastPayload(Long.class);
                 server.getConfig().setPID(assignedPID);
-                genMID.setPID(assignedPID);
-                server.getReplicaRequestCoordinator().setReplicaPID(assignedPID);
                 // This nioChannel was used to send the REGISTER message that triggered this
                 // ACK.
                 // We didn't know the PRIMARY AddressingServer PID when making that initial
