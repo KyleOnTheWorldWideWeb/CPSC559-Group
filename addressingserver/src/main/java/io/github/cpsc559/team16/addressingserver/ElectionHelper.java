@@ -12,6 +12,8 @@ package io.github.cpsc559.team16.addressingserver;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 
+import java.io.IOException;
+
 public final class ElectionHelper {
 
     /**
@@ -33,9 +35,16 @@ public final class ElectionHelper {
         if (myRecord != null) {
             myRecord.setRole(ServerRole.PRIMARY);
         }
-        // TODO: Ghetto DNS update where we write PRIMARY_HOST_ADDRESS to a text file
+
         // Since we don't have a DNS, the new Primary writes its info to the shared volume NOW.
-        // server.getNetworkManager().publishPrimaryDiscoveryFile();
+        try {
+            PrimaryDiscoveryManager discovery = server.getDiscoveryManager();
+            discovery.publish();
+        } catch (IllegalStateException ise) {
+            System.err.println("REPLICA attempted to publish host details before promotion: " + ise.getMessage());
+        } catch(IOException ioe) {
+            System.err.println("New PRIMARY could not publish discovery file: " + ioe.getMessage());
+        }
 
         // Update connection details for the primary addressing server.
         server.getConfig().setPrimaryReplicaPort(server.getConfig().getReplicaPort());

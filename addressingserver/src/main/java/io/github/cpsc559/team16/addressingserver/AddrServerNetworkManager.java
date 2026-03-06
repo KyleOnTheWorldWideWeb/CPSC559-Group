@@ -64,6 +64,12 @@ public class AddrServerNetworkManager {
         }
     }
 
+    private volatile boolean midElection = false;
+
+    public void setMidElection(boolean running) {
+        this.midElection = running;
+    }
+
     /**
      * The ServerSocketChannel that listens for incoming connection requests from
      * chat servers.
@@ -211,11 +217,16 @@ public class AddrServerNetworkManager {
         if (this.replicaRequestCoordinator != null && this.replicaRequestCoordinator.isAlive()) {
             this.replicaRequestCoordinator.shutdown();
             try {
-                this.replicaRequestCoordinator.join();
+                // Wait up to 2 seconds for the thread to die gracefully
+                this.replicaRequestCoordinator.join(2000);
+
+                if (this.replicaRequestCoordinator.isAlive()) {
+                    System.err.println("Replica request coordinator didn't stop in time - proceeding anyway.");
+                }
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                System.err.println("Interrupted while waiting for ReplicaRequestCoordinator to finish.");
+                System.err.println("Main event loop interrupted while waiting for replica request coordinator thread to die.");
             }
+            this.replicaRequestCoordinator = null;
         }
     }
 
@@ -461,7 +472,7 @@ public class AddrServerNetworkManager {
                 eventWatchdog.start();
             }
 
-            if (config.getRole().equals(ServerRole.REPLICA)) {
+            if (config.getRole().equals(ServerRole.REPLICA) && !this.midElection) {
                 if (replicaRequestCoordinator != null && !replicaRequestCoordinator.isAlive()) {
                     System.err.println("ReplicaRequestCoordinator thread is not alive. Restarting...");
                     createReplicaRequestCoordinator();

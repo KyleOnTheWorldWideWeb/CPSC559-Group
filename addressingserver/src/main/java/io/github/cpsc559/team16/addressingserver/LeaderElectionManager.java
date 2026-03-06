@@ -6,10 +6,8 @@ import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Date;
-import java.util.Map;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
-import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.messaging.ElectionMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
@@ -127,6 +125,7 @@ public class LeaderElectionManager {
      */
     public boolean setMidElection(boolean midElection) {
         this.midElection = midElection;
+        server.getNetworkManager().setMidElection(true);
         // Additional actions can be taken when mid-election is set.
         return this.midElection;
     }
@@ -235,6 +234,7 @@ public class LeaderElectionManager {
         leaderAnnouncementReceived = true;
         running = false;
         setMidElection(false);
+        server.getNetworkManager().setMidElection(false);
         followNewLeader(senderPID);
     }
 
@@ -280,6 +280,8 @@ public class LeaderElectionManager {
             System.out.println("LEM: Initiating election...");
             try {
                 setMidElection(true);
+                // Shut down the Replica request coordinator (used for replication by replicas, not the primary)
+                server.getNetworkManager().shutdownCoordinatorRequest();
                 if (!running) {
                     System.out.println("LEM: started runnning... [" + new Date().getTime() + "]");
                     running = true;
@@ -348,9 +350,6 @@ public class LeaderElectionManager {
      * </p>
      */
     public void assumeLeadership() {
-
-        // Shut down the Replica request coordinator (used for replication by replicas, not the primary)
-        server.getNetworkManager().shutdownCoordinatorRequest();
         this.running = false;
         this.midElection = false;
 
@@ -389,14 +388,26 @@ public class LeaderElectionManager {
         this.running = false;
         clearFailedLeader();
 
+        // Give the new Primary 1-2 seconds to finish its promotion logic and open its server sockets.
+        try {
+            System.out.println("LEM: Waiting for new Primary to initialize...");
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
         AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(newLeaderPID);
         if (record != null) {
-                ElectionHelper.promotePeer(this.server, record);
-                server.getPeerManager().synchronizeWithPrimary();
+            ElectionHelper.promotePeer(this.server, record);
+            // Since we nullified the request coordinator when the election started, we must restart it and connect to the new PRIMARY.
+            server.getNetworkManager().createReplicaRequestCoordinator();
+            server.getNetworkManager().getReplicaRequestCoordinator().start();
+            server.getPeerManager().synchronizeWithPrimary();
         } else {
             System.err.println("WARNING: Critical election failure. " +
                     "No AddrServerRecord found in the registry for PID: " + newLeaderPID + ".");
         }
+
     }
 
     /**

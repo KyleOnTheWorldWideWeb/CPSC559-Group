@@ -39,7 +39,11 @@ public class ReplicaRequestCoordinator extends Thread {
     private final Supplier<NIOMessageChannel> primaryChannelSupplier;
 
     /** The network PID of the process that instantiated this thread */
-    private final Long replicaPID;
+    private Long replicaPID;
+
+    public void setReplicaPID(Long pid) {
+        this.replicaPID = pid;
+    }
 
     /**
      * Constructs a new {@code ReplicaRequestCoordinator} thread responsible for managing
@@ -74,6 +78,11 @@ public class ReplicaRequestCoordinator extends Thread {
      */
     public void shutdown() {
         this.running = false;
+        this.interrupt(); // Wake up a sleeping thread so it can shutdown immediately.
+    }
+
+    public void pause() {
+
     }
 
     /**

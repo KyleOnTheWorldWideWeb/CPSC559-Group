@@ -27,8 +27,21 @@ public class AddressingServer {
     private PrimaryDiscoveryManager discoveryManager = null;
 
     /**
+     * Retrieves the {@link PrimaryDiscoveryManager} for this AddressingServer.
+     * <p>
+     * This manager is responsible for publishing the server's network details (hostname and ports)
+     * to a shared discovery file. This file is used by other replicas, chat servers, and clients
+     * to locate the current PRIMARY addressing server.
+     * </p>
+     * <p>
+     * <strong>Constraint:</strong> This method can only be called when the server is
+     * operating in the {@link ServerRole#PRIMARY} role. If a REPLICA attempts to access
+     * the discovery manager, an exception is thrown to prevent accidental or
+     * unauthorized writes to the shared state.
+     * </p>
      *
-     * @return
+     * @return the active {@code PrimaryDiscoveryManager} instance for this server.
+     * @throws IllegalStateException if this server's role is not {@code PRIMARY}.
      */
     public PrimaryDiscoveryManager getDiscoveryManager() {
         if (config.getRole() != ServerRole.PRIMARY) {
