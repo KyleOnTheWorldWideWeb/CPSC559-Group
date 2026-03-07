@@ -587,18 +587,20 @@ public class AddrServerNetworkManager {
                                     cleanupManager.getPeerManager().getChannels().put(channel, nioChannel);
                                 }
 
-                                // If synchronization fails, the persistent connection that was just opened is closed.
-                                // The persistent connection does not contain a unique PID until registration occurs below.
-                                if (message.getMsgType().equals(MessageTypes.SYNCHRONIZE)) {
-                                    if (senderRole.equals(Roles.CHATSERVER)) {
-
-                                    } else if (senderRole.equals(Roles.REPLICA)) {
-                                        readDispatcher.handleSynchronization(channel, nioChannel, message);
-                                    }
-                                }
 
                                 try {
-                                    readDispatcher.handleRegistration(channel, nioChannel, message);
+                                    // If synchronization fails, the persistent connection that was just opened is closed.
+                                    // The persistent connection does not contain a unique PID until registration occurs below.
+                                    if (message.getMsgType().equals(MessageTypes.SYNCHRONIZE)) {
+                                        if (senderRole.equals(Roles.CHATSERVER)) {
+
+                                        } else if (senderRole.equals(Roles.REPLICA)) {
+                                            readDispatcher.handleSynchronization(channel, nioChannel, message);
+                                        }
+                                    }
+                                    else {
+                                        readDispatcher.handleRegistration(channel, nioChannel, message);
+                                    }
                                     if (!cleanupManager.isPersistentConnection(channel)) {
                                         channel.close();
                                         key.cancel();

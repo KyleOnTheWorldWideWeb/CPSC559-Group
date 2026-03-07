@@ -146,7 +146,7 @@ public class ConnectionCleanupManager {
             NIOMessageChannel ch = getKnownPersistentChannel(channel);
             if (ch != null) {
                 Long failedPID = ch.getServerPID();
-                if (failedPID != 0L) { // OL represents an unregistered process - so registering the server is
+                if (failedPID != 0L) { // OL represents an unregistered process - so de-registering the server is
                                        // unnecessary
                     Long primaryPID = peerManager.getPrimaryPID();
                     if (chatServerManager.getChannels().containsKey(channel)) {

@@ -131,7 +131,7 @@ public class AddrServerRegistry {
     public boolean removeRecordByKey(Long pid) {
         AddrServerRecord record = addrServerRecords.remove(pid);
         if (record != null) {
-            System.out.printf("Successfully removed *AddrServerRecord* for Network Process with PID: %d", pid);
+            System.out.printf("Successfully removed *AddrServerRecord* for Network Process with PID: %d%n", pid);
             if (record.getRole() == ServerRole.PRIMARY) {
                 LeaderElectionManager mgr = server.getLeaderElectionManager();
                 System.out.print("WARNING: The removed server was the PRIMARY AddressingServer; ");

@@ -391,53 +391,31 @@ public class RegistrationCoordinator {
      * This ensures all other Replicas update their view of this peer's socket/state.
      */
     public void handleReplicaSynchronization(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg) {
-        // TODO: currently, this method assumes the PID received can only belong to one process. As such, it does not check to see if an NIOMessage channel already exists with that PID. Add that check
+        // TODO: currently, this method assumes the PID received can only belong to one process.
+        //  As such, it does not check to see if an NIOMessage channel already exists with that PID.
+        //  In the future, if we add reconnection logic (rather than removing a disconnected server and its record) we can update this method.
         AddrServerRecord record = msg.safeCastPayload(AddrServerRecord.class);
         Long replicaPID = record.getPID();
         // Check to see if the process attempting to synchronize is registered (internal record matches the received record).
         if (!this.addrServerRegistry.validateReplicaIdentity(record)) {
             System.err.printf("[%tT] [SYNCHRONIZE ERROR] Replica PID %d mismatch detected.%n", java.time.LocalTime.now(), replicaPID);
-            // Link the NIO channel to the PID the replica is claiming
-            // The cleanupPersistentConnection method requires this in order to remove any internal records.
-            nioChannel.setServerPID(replicaPID);
-            this.server.getCleanupManager().cleanupPersistentConnectionNIO(nioChannel, true);
+            // TODO: tell the contacting REPLICA to delete it's internal records and reconnect with a REGISTER message.
+            this.server.getCleanupManager().cleanupPersistentConnectionNIO(nioChannel, false);
         }
-        else {
-            // The record received matches the internal record.
-            // A persistent connection has already been registered, and the NIOMessageChannel's PID has been set
+        else { // The record received matches the internal record.
+            // We must now link the NIOChannel with this REPLICA by setting it's PID.
+            nioChannel.setServerPID(replicaPID);
+            // Add the channel to PeerManager since it is a persistent connection.
+            peerManager.getPeerChannels().put(channel, nioChannel);
             Long primaryPID = server.getConfig().getPID();
-            // If other replicas exist, we must ensure they have the record of this server.
-            if (this.addrServerRegistry.getRecords().size() > 1) {
-                // TODO: Might need to avoid sending this back to the replica that
-                // Since the PID has not been set for the synchronizing replica's NIOMessageChannel, it will not be included here.
-                Map<Long, NIOMessageChannel> replicaChannelMap = peerManager.getRegisteredReplicaChannelMap();
-                long messageID = server.getMessageIDGenerator().nextID();
-
-                // We use a simpler event because we don't need to send "All Records" back to a syncing peer
-                PendingEvent event = new PendingEvent(
-                        AckMessage.replicaSynchronized(messageID, primaryPID, replicaPID),
-                        replicaChannelMap,
-                        nioChannel,
-                        () -> System.out.println("Sync complete for PID: " + replicaPID),
-                        3, msg.getMessageID()
-                );
-
-                replicaCoordinator.addPendingEvent(messageID, event);
-                broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, event);
-            } else {
-                // Just send the ACK if we are alone
-                try {
-                    nioChannel.sendMessage(AckMessage.replicaRegistered(primaryPID, replicaPID).toJson());
-                } catch (IOException e) {
-                    cleanupManager.cleanupPersistentConnection(channel, true);
-                }
+            try {
+                nioChannel.sendMessage(AckMessage.replicaRegistered(primaryPID, replicaPID).toJson());
+            } catch (IOException e) {
+                cleanupManager.cleanupPersistentConnection(channel, true);
             }
-            // Link the NIO channel to the PID the replica is claiming.
-            // The cleanupPersistentConnection method requires this in order to remove any internal records.
-            nioChannel.setServerPID(replicaPID);
         }
-
-
     }
+
+
 
 }

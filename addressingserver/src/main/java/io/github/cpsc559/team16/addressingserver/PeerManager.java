@@ -361,14 +361,6 @@ public class PeerManager {
      * @param message the initial message (Registration or Synchronization) to be sent.
      * @return An {@link Optional} containing the connected {@code SocketChannel}, or empty if the connection failed.
      */
-    /**
-     * Core logic to establish a connection to the primary AddressingServer and transmit an initial message.
-     *
-     * @param host    the IP address of the PRIMARY AddressingServer.
-     * @param port    the port used by the PRIMARY for registration/synchronization.
-     * @param message the initial message (Registration or Synchronization) to be sent.
-     * @return An {@link Optional} containing the connected {@code SocketChannel}, or empty if the connection failed.
-     */
     private Optional<SocketChannel> transmitDiscoveryMessage(String host, int port, BaseAddrServerMessage<?> message) {
         try {
             SocketChannel channel = SocketChannel.open();
@@ -442,7 +434,84 @@ public class PeerManager {
         }
     }
 
+    /**
+     * Unifies the connection and handshake logic for both new registrations and
+     * post-election state synchronization.
+     * <p>
+     * This method determines the appropriate message (Register vs. Sync), transmits it
+     * via {@code transmitDiscoveryMessage}, and then ensures the resulting channel
+     * is registered with the {@code Selector} for ongoing communication.
+     * </p>
+     *
+     * @param isSynchronization {@code true} if the process is a REPLICA syncing with
+     * a new leader; {@code false} if it is performing
+     * initial startup registration.
+     * @return An {@link Optional} containing the {@link SocketChannel} if the connection
+     * and handshake were successful.
+     */
+    public boolean initiatePrimaryHandshake(boolean isSynchronization) {
+        AddrServerConfig config = server.getConfig();
+        String host = config.getPrimaryHostAddress();
+        int port = config.getPrimaryReplicaPort();
 
+        BaseAddrServerMessage<?> handshakeMsg;
+
+        // Stage 1: Prepare the specific message payload based on intent
+        if (isSynchronization) { // Context: Synchronizing with a new PRIMARY after failover.
+            AddrServerRecord myRecord = server.getAddrServerRegistry().getRecords().get(server.getConfig().getPID());
+            if (myRecord == null) {
+                System.err.println("[HANDSHAKE ERROR] Cannot sync: Local record not found for PID " + server.getConfig().getPID());
+                return false;
+            }
+            handshakeMsg = SyncRegisterMessage.fromReplica(server.getMessageIDGenerator().nextID(), myRecord);
+            System.out.println("Synchronization handshake prepared for PID: " + myRecord.getPID());
+        } else { // Context: Initial startup. Registering with PRIMARY for the first time.
+            handshakeMsg = RegisterMessage.fromReplica(
+                    server.getMessageIDGenerator().nextID(),
+                    getThisDockerAddress(),
+                    config.getClientPort(),
+                    config.getReplicaPort(),
+                    config.getChatServerPort()
+            );
+            System.out.println("Registration handshake prepared for new process.");
+        }
+
+        // Stage 2: Open the pipe, send the JSON, and add to peerChannels map
+        int attempts = 0;
+        int maxAttempts = 5;
+        Optional<SocketChannel> maybeChannel = Optional.empty();
+        // Note: transmitDiscoveryMessage sets blocking to false before returning
+        maybeChannel = transmitDiscoveryMessage(host, port, handshakeMsg);
+        while (maybeChannel.isEmpty() && attempts < maxAttempts) {
+            long sleepTime = (long) Math.pow(2, attempts) * 1000;
+            System.err.println("First attempt to register with primary addressing server failed. " +
+                    "Retrying in " + sleepTime +" seconds.");
+            try {
+                Thread.sleep(sleepTime);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("Retry sleep interrupted.");
+            }
+            maybeChannel = transmitDiscoveryMessage(host, port, handshakeMsg);
+            attempts++;
+        }
+
+        // Stage 3: Register with the Selector to allow the RequestManager to receive messages from the PRIMARY.
+        if (maybeChannel.isPresent()) {
+            SocketChannel channel = maybeChannel.get();
+            try {
+                this.server.getNetworkManager().openPersistentChannel(channel);
+            } catch (IOException e) {
+                System.err.println("[HANDSHAKE ERROR] Failed to register channel with Selector: " + e.getMessage());
+                // Cleanup the map entry if the Selector registration fails
+                peerChannels.remove(channel);
+                try { channel.close(); } catch (IOException ignored) {}
+                return false;
+            }
+            return true;
+        }
+        return false;
+    }
 
 //    /**
 //     * Initializes a connection to the primary AddressingServer and sends a registration request.
