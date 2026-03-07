@@ -50,19 +50,22 @@ public class ChatServerManager {
      * @param channel the {@code SocketChannel} representing the peer connection to remove.
      *                <strong>NOTE:</strong> This method does not close the SocketChannel connection. It is up to the calling
      *                code to enact this behaviour.
+     * @return true if a record for the remote process existed in the {@link ChatServerRegistry}; false otherwise.
      */
-    public void removeRemoteProcess(SocketChannel channel) {
+    public boolean removeRemoteProcess(SocketChannel channel) {
         NIOMessageChannel ch = this.chatServerChannels.get(channel);
-        if (ch != null) {
-            Long pid = ch.getServerPID();
-            if (pid != 0L) {
-                this.registry.removeRecordByKey(pid);
-                System.out.println("Removed the network communication channels for the ChatServer with PID: " + pid);
-            } else {
-                System.err.println("Removed a NIOMessageChannel and SocketChannel connection for a ChatServer that had no ChatServerRecord. It's network PID was - " + pid);
-            }
-            this.chatServerChannels.remove(channel);
-        }
+        if (ch == null) return false;
+
+        Long pidFromChannel = ch.getServerPID();
+
+        // Stage 1: Remove Channel whether the process is registered or not.
+        this.chatServerChannels.remove(channel);
+        try {
+            System.out.printf("Purging ChatServer connection [%s] for PID %d %n", channel.getRemoteAddress(), pidFromChannel);
+        } catch (IOException ignore) {}
+
+        // Stage 2: Remove any record that may exist for the peer connection from the registry
+        return this.registry.removeRecordByKey(pidFromChannel);
     }
 
     /**
@@ -78,13 +81,13 @@ public class ChatServerManager {
      * </p>
      *
      * @param channelToRemove the {@code SocketChannel} representing the connection to be removed and closed.
+     * @return true if a record for the remote process existed in the {@link ChatServerRegistry}; false otherwise.
      */
-    public void removeProcessCloseConnection(SocketChannel channelToRemove) {
-        this.removeRemoteProcess(channelToRemove);
-        try {
-            channelToRemove.close();
-        } catch (IOException ignored) {
-        };
+    public boolean removeProcessCloseConnection(SocketChannel channelToRemove) {
+        boolean recordRemoved = this.removeRemoteProcess(channelToRemove);
+        try { channelToRemove.close(); }
+        catch(IOException ignored) {};
+        return recordRemoved;
     }
 
 
@@ -99,15 +102,17 @@ public class ChatServerManager {
      * </p>
      *
      * @param failedPID the process ID of the failed chat server to remove
+     * @return true if a record for the remote process existed in the {@link ChatServerRegistry}; false otherwise.
      */
-    public void removeFailedChatServer(Long failedPID) {
-        for (SocketChannel channel : chatServerChannels.keySet()) {
-            if (chatServerChannels.get(channel).getServerPID().equals(failedPID)) {
-                removeProcessCloseConnection(channel);
-                return;
+    public boolean removeFailedChatServer(Long failedPID) {
+        // NIOChannel objects should always have an instance variable set that references the PID of the remote process.
+        // We iterate through all the channels(keys) and respective NIOMessageChannels(values) until we find a match.
+        for (Map.Entry<SocketChannel, NIOMessageChannel> entry : chatServerChannels.entrySet()) {
+            if (entry.getValue().getServerPID().equals(failedPID)) {
+                return removeProcessCloseConnection(entry.getKey()); // Successfully found and cleaned up via channel
             }
         }
-        this.registry.removeRecordByKey(failedPID);
+        return this.registry.removeRecordByKey(failedPID); // Channel did not exist, try and remove record anyways.
     }
 
 

@@ -76,12 +76,14 @@ public class ChatServerRegistry {
      *
      * @param pid the unique process ID of the chat server to remove from the registry.
      */
-    public void removeRecordByKey(Long pid) {
+    public boolean removeRecordByKey(Long pid) {
         ChatServerRecord record = chatServerRecords.remove(pid);
         if (record != null) {
-            System.out.printf("Successfully removed *ChatServerRecord* for Network Process with PID: %d - and Host Address: %s%n", pid, record.getHostAddress());
+            System.out.printf("Successfully removed *ChatServerRecord* for Network Process with PID: %d%n", pid);
+            return true;
         } else {
-            System.out.println("No ChatServerRecord found for PID: " + pid + " — nothing to remove.");
+            System.out.printf("No ChatServerRecord found for PID %d — nothing to remove.%n", pid);
+            return false;
         }
     }
 

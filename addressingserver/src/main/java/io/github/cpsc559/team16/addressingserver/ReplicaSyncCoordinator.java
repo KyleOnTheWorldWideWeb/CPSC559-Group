@@ -7,7 +7,6 @@ import io.github.cpsc559.team16.common.messaging.*;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -151,7 +150,7 @@ public class ReplicaSyncCoordinator {
                     this.cleanupManager.getChatServerManager().debugPrintAllServers();
                 }
                 else {
-                    this.peerManager.removeFailedServer(failedPID);
+                    this.peerManager.removeFailedAddrServer(failedPID);
                     this.peerManager.debugPrintAllServers();
                 }
             } catch (JsonProcessingException e) {

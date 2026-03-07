@@ -157,8 +157,8 @@ public class PeerManager {
      * This method performs the following actions:
      * <ul>
      *   <li>Removes the mapping between the {@code SocketChannel} and its corresponding {@code NIOMessageChannel}
-     *       from the internal collection of persistent connections (e.g., in the PeerManager or ChatServerManager).</li>
-     *   <li>Removes the associated record (such as an {@code AddrServerRecord} or {@code ChatServerRecord})
+     *       from the internal collection of persistent connections in the PeerManager.</li>
+     *   <li>Removes the associated {@code AddrServerRecord}
      *       that identifies the remote process connected via the {@code SocketChannel}.</li>
      * </ul>
      * </p>
@@ -166,22 +166,22 @@ public class PeerManager {
      * @param channel the {@code SocketChannel} representing the connection to remove.
      * <strong>NOTE:</strong> This method does not close the {@code SocketChannel}; closing the channel is the responsibility
      * of the caller.
+     * @return true if a record for the remote process existed in the {@link AddrServerRegistry}; false otherwise.
      */
-    public void removeRemoteProcess(SocketChannel channel) {
+    public boolean removeRemoteProcess(SocketChannel channel) {
         NIOMessageChannel ch = this.peerChannels.get(channel);
-        if (ch != null) {
-            Long pid = ch.getServerPID();
-            if (pid != 0L) {
-                this.registry.removeRecordByKey(pid);
-                try {
-                    System.out.printf("Successfully removed *communication channels* for Network Process with PID: %d " +
-                            "- and Host Address: %s%n", pid, channel.getRemoteAddress());
-                } catch (IOException ignore) {}
-            } else {
-                System.err.println("Removed a NIOMessageChannel and SocketChannel connection for an AddressingServer with a PID = 0L that had no AddrServerRecord.");
-            }
-            this.peerChannels.remove(channel);
-        }
+        if (ch == null) return false;
+
+        Long pidFromChannel = ch.getServerPID();
+
+        // Stage 1: Remove Channel whether the process is registered or not.
+        this.peerChannels.remove(channel);
+        try {
+            System.out.printf("Purging peer connection [%s] for PID %d %n", channel.getRemoteAddress(), pidFromChannel);
+        } catch (IOException ignore) {}
+
+        // Stage 2: Remove any record that may exist for the peer connection from the registry
+        return this.registry.removeRecordByKey(pidFromChannel);
     }
 
     /**
@@ -197,11 +197,13 @@ public class PeerManager {
      * </p>
      *
      * @param channelToRemove the {@code SocketChannel} representing the connection to be removed and closed.
+     * @return true if a record for the remote process existed in the {@link AddrServerRegistry}; false otherwise.
      */
-    public void removeProcessCloseConnection(SocketChannel channelToRemove) {
-        this.removeRemoteProcess(channelToRemove);
+    public boolean removeProcessCloseConnection(SocketChannel channelToRemove) {
+        boolean recordRemoved = this.removeRemoteProcess(channelToRemove);
         try { channelToRemove.close(); }
         catch(IOException ignored) {};
+        return recordRemoved;
     }
 
     /**
@@ -218,17 +220,17 @@ public class PeerManager {
      * </p>
      *
      * @param failedPID the process ID of the failed server to remove
+     * @return true if a record or channel corresponding to the PID was actually found and removed; false otherwise.
      */
-    public void removeFailedServer(Long failedPID) {
-        for (SocketChannel channel : peerChannels.keySet()) {
+    public boolean removeFailedAddrServer(Long failedPID) {
             // NIOChannel objects should always have an instance variable set that references the PID of the remote process.
             // We iterate through all the channels(keys) and respective NIOMessageChannels(values) until we find a match.
-            if (peerChannels.get(channel).getServerPID().equals(failedPID)) {
-                removeProcessCloseConnection(channel);
-                return;
+        for (Map.Entry<SocketChannel, NIOMessageChannel> entry : peerChannels.entrySet()) {
+            if (entry.getValue().getServerPID().equals(failedPID)) {
+                return removeProcessCloseConnection(entry.getKey());
             }
         }
-        this.registry.removeRecordByKey(failedPID);
+        return this.registry.removeRecordByKey(failedPID);
     }
 
     /**
@@ -424,8 +426,6 @@ public class PeerManager {
      * allowing the new PRIMARY to restore the replica's record without assigning a new identity.
      * </p>
      *
-     * @param primaryHostAddress the IP address of the newly elected PRIMARY AddressingServer.
-     * @param primaryReplicaPort the port used by the new PRIMARY for peer synchronization.
      * @return The SocketChannel used to sync with the PRIMARY {@code AddressingServer}.
      */
     public Optional<SocketChannel> synchronizeWithPrimary() {

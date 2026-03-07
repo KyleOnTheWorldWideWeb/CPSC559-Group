@@ -369,7 +369,7 @@ public class AddressingServer {
      *
      */
     public void setPidCounterToNetworkMax() {
-        this.pidCounter = getMaxPidInNetwork() + 1;
+        this.pidCounter = getMaxPidInNetwork();
     }
 
     /**

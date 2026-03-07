@@ -21,10 +21,11 @@ services:
       - AS_ROLE=${AS_ROLE:-PRIMARY}
     ports:
       # Static port mapping for the Primary Addressing Server
-      - "49800:49800"
-      - "49801:49801"
-      - "49802:49802"
-      - "5050:5050"
+      # Host:Container -> modify the host ports if you are experiencing issues with port mapping
+      - "30001:49800"
+      - "30002:49801"
+      - "30003:49802"
+      - "30004:5050"
     networks:
       - chat_network
     volumes:
@@ -50,6 +51,9 @@ services:
     profiles: [ "chatserver" ]
     build:
       dockerfile: Dockerfile.chatserver
+    ports:
+      - 30010:2424
+      - 30011:2425
     environment:
       - CS_PORT=${CS_PORT:-2424}
       - CS_PEER_PORT=${CS_PEER_PORT:-2425}
@@ -68,7 +72,7 @@ services:
     build:
       dockerfile: Dockerfile.client
     ports:
-      - "3000:3000"
+      - "3100"
     environment:
       - CLIENT_PORT=${CLIENT_PORT:-3000}
       - HOST_ADDRESS=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}

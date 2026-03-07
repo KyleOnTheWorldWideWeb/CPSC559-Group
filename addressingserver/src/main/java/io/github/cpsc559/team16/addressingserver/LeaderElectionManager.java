@@ -6,8 +6,10 @@ import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Date;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
+import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.messaging.ElectionMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
@@ -84,21 +86,22 @@ public class LeaderElectionManager {
      * Flag used to track if a "Bully" response has been received.
      * </p>
      */
-    private boolean bullyResponseReceived = false;
+    private volatile boolean bullyResponseReceived = false;
 
     /**
      * <p>
      * Flag used to track if a leader announcement has been received.
      * </p>
      */
-    private boolean leaderAnnouncementReceived = false;
+    private volatile boolean leaderAnnouncementReceived = false;
 
     /**
      * <p>
      * Flag indicating whether an election is in progress.
      * </p>
      */
-    private boolean midElection = false;
+    private volatile boolean midElection = false;
+
 
     //==========================================================================
     // Constructors and Election State Management
@@ -129,6 +132,9 @@ public class LeaderElectionManager {
         // Additional actions can be taken when mid-election is set.
         return this.midElection;
     }
+
+    /** Used as a lock to prevent multiple election threads from being created. */
+    private final AtomicBoolean electionLock = new AtomicBoolean(false);
 
     /**
      * <p>
@@ -166,10 +172,13 @@ public class LeaderElectionManager {
      * @param message    The parsed {@link BaseAddrServerMessage} containing the election details.
      */
     public void processElectionMessage(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> message) {
+        String payload = (String) message.getPayload();
+        // GUARD: If another thread has already promoted this process to PRIMARY, we ignore the stale election message.
+        if (this.config.getRole() == ServerRole.PRIMARY && "Election".equals(payload)) {
+            return;
+        }
         new Thread(() -> {
             long senderPID = message.getSenderPID();
-            String payload = (String) message.getPayload();
-
             switch (payload) {
                 case "Election" -> handleElection(senderPID, nioChannel);
                 case "Leader" -> handleLeaderAnnouncement(senderPID);
@@ -196,7 +205,6 @@ public class LeaderElectionManager {
     private void handleElection(Long senderPID, NIOMessageChannel peerChannel) {
         System.out.println("LEM: Received election message from PID: " + senderPID);
         setMidElection(true);
-
         // Only respond if sender's PID is lower than self.
         if (senderPID < getSelfPID()) {
             System.out.println("LEM: Responding to election message. Sending bully to PID: " + senderPID);
@@ -275,17 +283,21 @@ public class LeaderElectionManager {
      * </p>
      */
     public void initiateElection() {
+        // GUARD: Check the election lock, if it's false, lock it and continue, return otherwise.
+        if (!electionLock.compareAndSet(false, true)) {
+            return;
+        }
+        setMidElection(true);
         new Thread(() -> {
             System.out.println("LEM: Initiating election...");
             try {
-                setMidElection(true);
+
                 if (!running) {
                     System.out.println("LEM: started runnning... [" + new Date().getTime() + "]");
-                    running = true;
-                    bullyResponseReceived = false;
-                    leaderAnnouncementReceived = false;
-
-                    boolean higherExists = false;  // Track if a higher PID exists.
+                    this.running = true;
+                    this.bullyResponseReceived = false;
+                    this.leaderAnnouncementReceived = false;
+                    boolean higherPIDExists = false;  // Track if a higher PID exists.
 
                     // Retrieve all peer PIDs from the registry.
                     Collection<Long> peerPIDS = server.getAddrServerRegistry().getRecords().keySet();
@@ -293,23 +305,28 @@ public class LeaderElectionManager {
                     // Loop through all peer PIDs (excluding self).
                     for (Long peerPID : peerPIDS) {
                         if (!peerPID.equals(config.getPID())) {
-                            System.out.println("LEM: considering sending election message to peer with PID " + peerPID);
+                            System.out.println("LEM: considering sending election message to peer with PID - " + peerPID);
                             if (peerPID > getSelfPID()) {
-                                System.out.println("LEM: peer has higher pid " + peerPID);
-                                higherExists = true;
+                                System.out.println("LEM: peer PID is higher than my PID.");
+                                higherPIDExists = true;
                                 sendTo(generateElectionMessage(), peerPID);
                             }
                         }
                     }
 
                     // If no higher PID exists, declare self as leader.
-                    if (!higherExists) {
+                    if (!higherPIDExists) {
                         System.out.println("LEM: No higher PID found. Declaring self as leader.");
                         assumeLeadership();
                     } else {
                         System.out.println("LEM: Waiting for bullys from higher PIDs... for " + bullyResponseTimeout + "ms");
                         // Wait for a "Bully" response; if none, declare self as leader.
                         Thread.sleep(bullyResponseTimeout);
+                        // Check to see if a leader announcement was received while sleeping.
+                        if (leaderAnnouncementReceived) {
+                            System.out.println("LEM: Leader was announced during wait. PID " + getSelfPID() + " aborting promotion.");
+                            return;
+                        }
                         if (!bullyResponseReceived) {
                             System.out.println("LEM: no bully responses received within window.");
                             assumeLeadership();
@@ -326,6 +343,9 @@ public class LeaderElectionManager {
                 }
             } catch (InterruptedException e) {
                 System.err.println("Interrupted while waiting for response during election.");
+            } finally {
+                setMidElection(false);
+                electionLock.set(false);
             }
         }).start();
     }
@@ -351,11 +371,11 @@ public class LeaderElectionManager {
         // Shut down the Replica request coordinator (used for replication by replicas, not the primary)
         server.getNetworkManager().shutdownCoordinatorRequest();
         // Use before promoteSelf
-        clearFailedLeader();
+        clearFailedLeader(server.getPeerManager().getPrimaryPID());
         ElectionHelper.promoteSelf(this.server);
         this.setMidElection(false);
 
-        BaseAddrServerMessage leaderMessage = generateLeaderMessage();
+        ElectionMessage leaderMessage = generateLeaderMessage();
 
         // Notify all peers (excluding self) about the new leader.
         for (Long peerPID : server.getAddrServerRegistry().getRecords().keySet()) {
@@ -383,7 +403,8 @@ public class LeaderElectionManager {
             return;
         }
         this.running = false;
-        clearFailedLeader();
+        // Clear the record of the current PRIMARY since it has failed
+        clearFailedLeader(server.getPeerManager().getPrimaryPID());
 
         // Give the new Primary 1-2 seconds to finish its promotion logic and open its server sockets.
         try {
@@ -392,7 +413,7 @@ public class LeaderElectionManager {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-
+        // Retrieve the record of the REPLICA being promoted
         AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(newLeaderPID);
         if (record != null) {
             ElectionHelper.promotePeer(this.server, record);
@@ -418,10 +439,11 @@ public class LeaderElectionManager {
      *      <li>Cancels the selection key and closes the channel gracefully.</li>
      * </ul>
      */
-    public void clearFailedLeader() {
-        long failedPrimaryPID = server.getPeerManager().getPrimaryPID();
+    public void clearFailedLeader(long failedPrimaryPID) {
         if (failedPrimaryPID != 0L) {
-            server.getCleanupManager().sendShutdownRequestToPrimary(config.getPID(), failedPrimaryPID);
+            // TODO: Create a helper class that spawns a thread which attempts to connect to the failed primary several times (sleep between attempts).
+            // Hand the class the failed PRIMARY details at this point so it has a frozen snapshot of the network config.
+            //server.getCleanupManager().sendShutdownRequestToPrimary(config.getPID(), failedPrimaryPID);
             server.getCleanupManager().disconnectFromPrimaryQuietly();
             server.getAddrServerRegistry().removeRecordByKey(failedPrimaryPID);
         }
@@ -460,7 +482,7 @@ public class LeaderElectionManager {
      *
      * @return A {@link BaseAddrServerMessage} announcing the new leader.
      */
-    public BaseAddrServerMessage generateLeaderMessage() {
+    public ElectionMessage generateLeaderMessage() {
         return ElectionMessage.leader(getSelfPID());
     }
 

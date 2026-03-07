@@ -125,22 +125,30 @@ public class AddrServerRegistry {
      * </p>
      *
      * @param pid the unique process ID of the AddressingServer to remove from the registry.
+     * @return true if a record corresponding to the PID was actually found and removed; false otherwise.
+     *
      */
-    public void removeRecordByKey(Long pid) {
+    public boolean removeRecordByKey(Long pid) {
         AddrServerRecord record = addrServerRecords.remove(pid);
         if (record != null) {
-            System.out.printf("Successfully removed *AddrServerRecord* for Network Process with PID: %d - and Host Address: %s%n", pid, record.getHostAddress());
+            System.out.printf("Successfully removed *AddrServerRecord* for Network Process with PID: %d", pid);
+            if (record.getRole() == ServerRole.PRIMARY) {
+                LeaderElectionManager mgr = server.getLeaderElectionManager();
+                System.out.print("WARNING: The removed server was the PRIMARY AddressingServer; ");
+                if (mgr.isMidElection()) {
+                    System.out.println("an election is underway.");
+                } else {
+                    mgr.initiateElection();
+                    System.out.println("initiating an election.");
+                }
+
+            } else {
+                System.out.println("The removed server was a REPLICA AddressingServer.");
+            }
+            return true;
         } else {
             System.out.println("No AddrServerRecord found for PID: " + pid + " — nothing to remove.");
-        }
-
-        System.out.println("checking role of removed server.");
-
-        if (record.getRole() == ServerRole.PRIMARY) {
-            System.out.println("WARNING: The removed server was the PRIMARY AddressingServer. A new primary should be elected.");
-            server.getLeaderElectionManager().initiateElection();
-        } else {
-            System.out.println("The removed server was a REPLICA AddressingServer.");
+            return false;
         }
     }
 

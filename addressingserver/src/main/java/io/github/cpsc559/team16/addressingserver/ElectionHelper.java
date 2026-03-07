@@ -23,8 +23,7 @@ public final class ElectionHelper {
     public static void promoteSelf(AddressingServer server) {
         System.out.println("This addressing server has been promoted from REPLICA to PRIMARY...");
         // Shut down the ping manager (only REPLICA's ping their peers)
-        // TODO: See if ping manager needs to exist or not for the primary
-        //server.getPingManager().shutdown();
+        server.getPingManager().shutdown();
         // Set internal PID generator to ensure no active processes have their PID re-assigned.
         server.setPidCounterToNetworkMax();
         // Update config to reflect new PRIMARY status
