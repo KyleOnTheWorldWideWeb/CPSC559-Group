@@ -2,6 +2,8 @@ package io.github.cpsc559.team16.addressingserver;
 
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.dto.PrimaryAddress;
+import io.github.cpsc559.team16.common.messaging.Roles;
+import io.github.cpsc559.team16.common.utilities.NetworkUtils;
 import io.github.cpsc559.team16.common.utilities.PrimaryDiscoveryReader;
 
 import java.io.IOException;
@@ -83,22 +85,25 @@ public class AddrServerConfig {
      * </ul></p>
      */
     public AddrServerConfig() {
-        // Retrieve hostname dynamically.
-        try {
-            // In Docker, this returns the Container ID (used for inter-container comms)
-            this.hostAddress = InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException e) {
-            throw new RuntimeException("CRITICAL: AddressingServer could not resolve its unique Hostname. Check Docker networking.", e);
+        // Role is required at startup to identify the type of AddressingServer process.
+        String roleEnv = System.getenv().getOrDefault("AS_ROLE", "REPLICA").toUpperCase();
+        // Validation Guard
+        if (!Roles.isValid(roleEnv)) {
+            String errorMsg = String.format(
+                    "FATAL: Invalid AS_ROLE '%s' provided. Must be one of: %s, %s",
+                    roleEnv, Roles.PRIMARY, Roles.REPLICA
+            );
+            System.err.println(errorMsg);
+            throw new IllegalArgumentException(errorMsg);
         }
+        this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.REPLICA;
+        // Retrieve hostname dynamically.
+        this.hostAddress = NetworkUtils.getSerializedIdentity(roleEnv);
 
         // Use standard defaults for ports unless specified
         this.clientPort = Integer.parseInt(System.getenv().getOrDefault("AS_CLIENT_PORT", "49800"));
         this.replicaPort = Integer.parseInt(System.getenv().getOrDefault("AS_REPLICA_PORT", "49801"));
         this.chatServerPort = Integer.parseInt(System.getenv().getOrDefault("AS_CHATSERVER_PORT", "49802"));
-
-        // Role is the only required "Identity" variable
-        String roleEnv = System.getenv().getOrDefault("AS_ROLE", "REPLICA").toUpperCase();
-        this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.REPLICA;
 
         // Primary Details: Initialized as null/empty; will be filled by DiscoveryReader for all REPLICA processes
         this.primaryHostAddress = null;
@@ -229,7 +234,7 @@ public class AddrServerConfig {
      * Re-reads the shared discovery file to update the current known Primary.
      * This is called during initialization and after a detected failover.
      *
-     * @return true if a Primary was found and its details were loaded, false otherwise.
+     * @return true if a PRIMARY was found and its details were loaded, false otherwise.
      */
     public boolean refreshPrimaryDetails() {
         try {

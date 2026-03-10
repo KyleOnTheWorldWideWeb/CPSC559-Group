@@ -14,6 +14,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import io.github.cpsc559.team16.common.dto.PrimaryAddress;
+import io.github.cpsc559.team16.common.utilities.PrimaryDiscoveryReader;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.terminal.Terminal;
@@ -127,18 +129,63 @@ public class Client {
      * The hostname or IP address of the addressing server that facilitates the
      * initial connection to the chat server.
      */
-    private String asHostname;
-    public String getAsHostname() {
-        return asHostname;
+    private volatile String primaryHostAddress;
+    public String getPrimaryHostAddress() {
+        return primaryHostAddress;
     }
 
     /**
      * The port number of the addressing server used for connecting and retrieving
      * chat server information.
      */
-    private int asPort;
+    private volatile int asPort;
     public int getAsPort() {
         return asPort;
+    }
+
+    /**
+     * Re-reads the shared discovery file to update the current known Primary.
+     * Sets static variables PRIMARY host address and port for client connections.
+     *
+     * @return A {@link PrimaryAddress} if the shared file was found and its details were loaded; null otherwise.
+     */
+    public PrimaryAddress retrievePrimaryDetails() {
+        try {
+            PrimaryAddress details = PrimaryDiscoveryReader.readPrimaryDetails();
+            if (details != null) {
+                this.primaryHostAddress = details.hostAddress();
+                this.asPort = details.clientPort();
+                return details;
+            }
+        } catch (IOException e) {
+            System.err.println("Config: Error reading primary addressing server discovery file: " + e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Re-reads the shared discovery file to update the current known Primary.
+     * Sets instance variables for PRIMARY host address and port for client connections.
+     *
+     * @return true if a Primary was found and its details were loaded, false otherwise.
+     */
+    public boolean refreshPrimaryDetails() {
+        try {
+            PrimaryAddress details = PrimaryDiscoveryReader.readPrimaryDetails();
+            if (details != null) {
+                this.primaryHostAddress = details.hostAddress();
+                this.asPort = details.clientPort();
+                return true;
+            }
+        } catch (IOException e) {
+            System.err.println("Config: Error reading primary addressing server discovery file: " + e.getMessage());
+        }
+
+        // If we reach here, no primary was found. Clear old stale data.
+        this.primaryHostAddress = null;
+        this.asPort = -1;
+        return false;
     }
 
     // Chat server connection
@@ -354,10 +401,6 @@ public class Client {
      * 
      * @param username   The display name for this client. This will be used as the
      *                   sender's identifier in the chat system.
-     * @param serverName The hostname or IP address of the addressing server.
-     *                   This server is responsible for directing the client to the
-     *                   appropriate chat server.
-     * @param serverPort The port number on which the addressing server is running.
      * @param terminal   The terminal interface instance to be used for rendering
      *                   the
      *                   command-line interface. It enables interactive
@@ -368,11 +411,9 @@ public class Client {
      *                   with the
      *                   chat client.
      */
-    public Client(String username, String serverName, int serverPort, Terminal terminal, LineReader lineReader) {
+    public Client(String username, Terminal terminal, LineReader lineReader) {
         debug(DEBUG_BASIC, "Initializing client for user: " + username);
         this.username = username;
-        this.asHostname = serverName;
-        this.asPort = serverPort;
         this.terminal = terminal;
         this.lineReader = lineReader;
         this.connectionManager = new ConnectionManager(this);
@@ -419,6 +460,21 @@ public class Client {
         debug(DEBUG_BASIC, "Starting client...");
         terminate = false;
 
+        // Stage 1: Discovery Phase
+        int discoveryAttempts = 0;
+        while (!terminate && !refreshPrimaryDetails()) {
+            discoveryAttempts++;
+            debug(DEBUG_BASIC, "Waiting for Addressing Server network details (Attempt " + discoveryAttempts + ")...");
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                terminate = true;
+            }
+        }
+        if (terminate) return;
+        debug(DEBUG_BASIC, "Found PRIMARY Addressing Server at " + primaryHostAddress + ":" + asPort);
+
+        // Stage 2: Connection Phase
         try {
             connectionManager.connect();
             // Initialize and start worker threads
@@ -657,15 +713,12 @@ public class Client {
         } catch (Exception e) {
             Client.debug(Client.DEBUG_BASIC, "Error reading username, using default: Anonymous");
         }
-        // Read the server configuration from environment variables
-        String serverAddress = System.getenv().getOrDefault("ADDRESS_SERVER_IP", "localhost");
-        int serverPort = Integer.parseInt(System.getenv().getOrDefault("SERVER_PORT", "49800"));
 
-        Client.debug(Client.DEBUG_NORMAL, String.format("Client configuration - Username: %s, Server: %s:%d",
-                username, serverAddress, serverPort));
+
+        Client.debug(Client.DEBUG_NORMAL, String.format("Client configuration - Username: %s", username));
 
         // Instantiate and run the client with the provided configuration
-        Client client = new Client(username, serverAddress, serverPort, terminal, lineReader);
+        Client client = new Client(username, terminal, lineReader);
         client.run();
     }
 }

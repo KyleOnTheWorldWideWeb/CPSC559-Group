@@ -17,6 +17,7 @@ import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.messaging.*;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+import io.github.cpsc559.team16.common.utilities.NetworkUtils;
 
 /**
  * Manages peer registration, update propagation, and persistent communication
@@ -398,7 +399,7 @@ public class PeerManager {
         AddrServerConfig config = server.getConfig();
         RegisterMessage<AddrServerRecord> register =
                 RegisterMessage.fromReplica(server.getMessageIDGenerator().nextID(),
-                        getThisDockerAddress(), config.getClientPort(),
+                        NetworkUtils.getSerializedIdentity(Roles.REPLICA), config.getClientPort(),
                         config.getReplicaPort(), config.getChatServerPort());
 
         System.out.println("Registration handshake message prepared for new process.");

@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.SocketAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -18,8 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
-import io.github.cpsc559.team16.common.messaging.NotificationMessage;
+import io.github.cpsc559.team16.common.dto.PrimaryAddress;
+import io.github.cpsc559.team16.common.messaging.*;
+import io.github.cpsc559.team16.common.utilities.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -27,13 +28,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
-import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
-import io.github.cpsc559.team16.common.messaging.MessageDeserializer;
-import io.github.cpsc559.team16.common.messaging.RegisterMessage;
-import io.github.cpsc559.team16.common.utilities.BaseMessage;
-import io.github.cpsc559.team16.common.utilities.ChatLog;
-import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
-import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
 
 /**
  * The main ChatServer class implements a non-blocking I/O chat server that:
@@ -157,20 +151,18 @@ public class ChatServer {
      */
     private static int ID;
 
-    /**
-     * Host address of the Addressing Server, retrieved from the environment
-     * variable
-     * {@code ADDRESS_SERVER_IP}. Defaults to {@code 127.0.0.1} if not set.
-     */
-    private static final String ADDRESSING_SERVER_HOST = System.getenv().getOrDefault("ADDRESS_SERVER_IP", "127.0.0.1");
 
     /**
-     * Port on which the Addressing Server is listening.
-     * Retrieved from the environment variable {@code AS_CHATSERVER_PORT}, or
-     * defaults to 49802.
+     * Host address of the Addressing Server.
+     * Retrieved dynamically using the {@link PrimaryDiscoveryReader}
      */
-    private static final int ADDRESSING_SERVER_PORT = Integer
-            .parseInt(System.getenv().getOrDefault("AS_CHATSERVER_PORT", "49802"));
+    private static volatile String primaryHostAddress;
+
+    /**
+     * Port on which the Addressing Server is listening for ChatServer connections.
+     * Retrieved dynamically using the {@link PrimaryDiscoveryReader}
+     */
+    private static volatile int asPort;
 
     /**
      * Port used for accepting client connections.
@@ -256,6 +248,37 @@ public class ChatServer {
      * @param type    the type of connection it accepts (CLIENT or SERVER)
      */
     private static record ServerBinding(ServerSocketChannel channel, ConnectionType type) {
+    }
+
+    /**
+     * Re-reads the shared discovery file to update the current known Primary.
+     * Sets static variables {@code primaryHostAddress} and {@code asPort}
+     * PRIMARY host address and port for client connections for the ChatServer.
+     *
+     * @return A {@link PrimaryAddress} if the shared file was found and its details were loaded; null otherwise.
+     */
+    public static PrimaryAddress retrievePrimaryDetails() {
+        try {
+            PrimaryAddress details = PrimaryDiscoveryReader.readPrimaryDetails();
+            if (details != null) {
+                primaryHostAddress = details.hostAddress();
+                asPort = details.clientPort();
+                return details;
+            }
+        } catch (IOException e) {
+            System.err.println("Config: Error reading primary addressing server discovery file: " + e.getMessage());
+        }
+
+        return null;
+    }
+
+    private static String getThisDockerAddress() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException e) {
+            System.out.println("[Replica] Could not retrieve internal Docker address - defaulting to 'localhost'");
+            return "localhost";
+        }
     }
 
     /**
@@ -594,10 +617,25 @@ public class ChatServer {
      *                 the channel
      */
     private static void connectToAddressingServer(Selector selector) {
+        // Stage 1: Discovery Phase
+        int discoveryAttempts = 0;
+        while (retrievePrimaryDetails() == null) {
+            discoveryAttempts++;
+            debug(DEBUG_BASIC, "Waiting for Addressing Server network details (Attempt " + discoveryAttempts + ")...");
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        debug(DEBUG_BASIC, "Found PRIMARY Addressing Server at " + primaryHostAddress + ":" + asPort);
+
+        // Stage 2: Connection Phase
         try {
             SocketChannel channel = SocketChannel.open();
             channel.configureBlocking(false);
-            channel.connect(new InetSocketAddress(ADDRESSING_SERVER_HOST, ADDRESSING_SERVER_PORT));
+            channel.connect(new InetSocketAddress(primaryHostAddress, asPort));
 
             ConnectionContext ctx = new ConnectionContext(channel);
             ctx.type = ConnectionType.ADDRESSING_SERVER;
@@ -617,22 +655,14 @@ public class ChatServer {
             // BaseAddrServerMessage<ChatServerRecord> registrationMsg = new
             // BaseAddrServerMessage<>(
             // "REGISTER", "ChatServerRecord", 0L, "CHATSERVER", "PRIMARY", record);
-            String publicAddress = System.getenv("PUBLIC_ADDRESS");
-            // Add a fallback if the environment variable isn't set
-            if (publicAddress == null || publicAddress.isEmpty()) {
-                // In Docker, getHostName() returns the unique Container ID which can be used for internal DNS routing
-                publicAddress = InetAddress.getLocalHost().getHostName();
-                System.out.println(
-                        "WARNING: PUBLIC_ADDRESS not set in environment, using detected address: " + publicAddress);
-            } else {
-                System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
-            }
+            // Retrieve hostname dynamically.
+            String publicAddress = NetworkUtils.getSerializedIdentity(Roles.CHATSERVER);
             // This creates a registration message and a properly formed chat server record
             // all in one.
             RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(publicAddress,
                     CLIENT_PORT,
                     PEER_LISTEN_PORT,
-                    ADDRESSING_SERVER_PORT,
+                    asPort,
                     MAX_CLIENTS);
 
             String json = registrationMsg.toJson() + "\n";
@@ -1100,51 +1130,6 @@ public class ChatServer {
      * @param key the {@link SelectionKey} corresponding to the channel being closed
      * @throws IOException if closing the socket channel fails
      */
-
-//    private static void closeConnection(SelectionKey key) throws IOException {
-//        SocketChannel socketChannel = (SocketChannel) key.channel();
-//
-//        ConnectionContext ctx = (ConnectionContext) key.attachment();
-//        if (ctx.username != null) {
-//            ClientHandler.unregisterUsername(ctx.username);
-//            // Notify addressing server about client disconnection
-//            if (ctx.type == ConnectionType.CLIENT) {
-//                notifyAddressingServerClientCount();
-//            }
-//        }
-//
-//        if (ctx.type == ConnectionType.SERVER) {
-//            ConnectionContext lostCtx = connectedPeers.get(ctx.peerID);
-//            int peerId = ctx.peerID;
-//
-//            // Try reconnection first
-//            attemptRecconnectingToPeer(lostCtx);
-//            connectedPeers.remove(peerId);
-//
-//            // Then notify addressing server about the disconnection
-//            // Only do this if reconnection fails or after reconnection attempts
-//            if (handlerMap.get(ConnectionType.ADDRESSING_SERVER) != null) {
-//                ((AddressingServerHandler) handlerMap.get(ConnectionType.ADDRESSING_SERVER))
-//                        .notifyPeerCrash(peerId);
-//                debug(DEBUG_BASIC, "Notified addressing server about disconnected peer " + peerId);
-//            }
-//        } else if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
-//            debug(DEBUG_BASIC, "Lost connection to Addressing Server. Attempting to reconnect...");
-//            // Start a reconnection attempt to the addressing server
-//            attemptReconnectingToAddressingServer();
-//        }
-//
-//        try {
-//            SocketAddress remoteAddr = socketChannel.getRemoteAddress();
-//            debug(DEBUG_NORMAL, "Closing connection to " + remoteAddr);
-//        } catch (IOException e) {
-//            debug(DEBUG_NORMAL, "Channel was already closed or not available during cleanup.");
-//        }
-//        key.cancel();
-//        if (socketChannel.isOpen())
-//            socketChannel.close();
-//    }
-
     private static void closeConnection(SelectionKey key) {
         if (key == null) return;
 
@@ -1318,7 +1303,7 @@ public class ChatServer {
                 // Create a new connection to the addressing server
                 SocketChannel channel = SocketChannel.open();
                 channel.configureBlocking(false);
-                channel.connect(new InetSocketAddress(ADDRESSING_SERVER_HOST, ADDRESSING_SERVER_PORT));
+                channel.connect(new InetSocketAddress(primaryHostAddress, asPort));
 
                 ConnectionContext ctx = new ConnectionContext(channel);
                 ctx.type = ConnectionType.ADDRESSING_SERVER;
@@ -1345,7 +1330,7 @@ public class ChatServer {
                         publicAddress,
                         CLIENT_PORT,
                         PEER_LISTEN_PORT,
-                        ADDRESSING_SERVER_PORT,
+                        asPort,
                         MAX_CLIENTS);
 
                 String json = registrationMsg.toJson() + "\n";

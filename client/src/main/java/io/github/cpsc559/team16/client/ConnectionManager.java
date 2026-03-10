@@ -234,7 +234,7 @@ public class ConnectionManager {
 
     public String[] registerWithAddressingServer() throws IOException {
 
-        String hostname = client.getAsHostname();
+        String hostname = client.getPrimaryHostAddress();
         int port = client.getAsPort();
         Client.debug(Client.DEBUG_NORMAL, "Attempting to resolve and connect to: " + hostname + ":" + port);
 
@@ -290,5 +290,7 @@ public class ConnectionManager {
             }
         }
     }
+
+
     
 }

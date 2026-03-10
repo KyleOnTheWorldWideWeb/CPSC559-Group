@@ -42,7 +42,7 @@ services:
       service: addressingserver
     profiles: [ "addressingserver-backup" ]
     environment:
-      - AS_ROLE=BACKUP
+      - AS_ROLE=REPLICA
     ports: !reset []
 
   chatserver:
@@ -58,11 +58,10 @@ services:
       - CS_PEER_PORT=${CS_PEER_PORT:-2425}
       - AS_CHATSERVER_PORT=${AS_CHATSERVER_PORT:-49802}
       - DEBUG_LEVEL=${DEBUG_LEVEL:-0}
-      # We leave PUBLIC_ADDRESS out entirely to ensure the internal Docker DNS is used
     networks:
       - chat_network
     volumes:
-      - ./data:/shared
+      - ./data:/shared:ro # read-only access for Chat Servers
 
   client:
     image: client:latest
@@ -79,7 +78,7 @@ services:
     tty: true
     stdin_open: true
     volumes:
-      - ./data:/shared
+      - ./data:/shared:ro # read-only access for Clients
 
 networks:
   chat_network:
