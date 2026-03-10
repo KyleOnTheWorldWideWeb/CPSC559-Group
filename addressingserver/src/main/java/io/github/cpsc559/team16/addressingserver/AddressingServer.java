@@ -1,7 +1,9 @@
 package io.github.cpsc559.team16.addressingserver;
 // External Dependencies
+
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.channels.SocketChannel; // Used for conditionals that don't rely on non-null checks
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -105,7 +107,9 @@ public class AddressingServer {
         this.replicaRequestManager = replicaRequestManager;
     }
 
-    public ReplicaRequestManager getReplicaRequestManager () { return this.replicaRequestManager; }
+    public ReplicaRequestManager getReplicaRequestManager() {
+        return this.replicaRequestManager;
+    }
 
     /**
      * Background thread responsible for periodically requesting synchronization data from the {@code PRIMARY} server.
@@ -131,7 +135,9 @@ public class AddressingServer {
      */
     ReplicaRequestCoordinator replicaRequestCoordinator;
 
-    public ReplicaRequestCoordinator getReplicaRequestCoordinator () { return this.replicaRequestCoordinator; }
+    public ReplicaRequestCoordinator getReplicaRequestCoordinator() {
+        return this.replicaRequestCoordinator;
+    }
 
 
     /**
@@ -344,11 +350,11 @@ public class AddressingServer {
      * Returns the highest process ID (PID) currently assigned in the network,
      * considering both {@code AddressingServer}s and {@code ChatServer}s.
      * <p>
-     *     This method is used to ensure that all future PIDs assigned during
-     *     registration events (e.g. new servers joining the network) are strictly
-     *     greater than any currently active PID. This prevents PID reuse and
-     *     maintains global uniqueness of process identifiers across both (addr and chat)
-     *     system roles. Distinct PIDs are essential for interprocess communication.
+     * This method is used to ensure that all future PIDs assigned during
+     * registration events (e.g. new servers joining the network) are strictly
+     * greater than any currently active PID. This prevents PID reuse and
+     * maintains global uniqueness of process identifiers across both (addr and chat)
+     * system roles. Distinct PIDs are essential for interprocess communication.
      * </p>
      *
      * @return the highest PID found in either the {@code AddrServerRegistry} or {@code ChatServerRegistry}.
@@ -366,7 +372,6 @@ public class AddressingServer {
      * elected {@code PRIMARY} {@code AddressingServer} must resume assigning
      * unique process IDs without conflicting with existing network processes.
      * </p>
-     *
      */
     public void setPidCounterToNetworkMax() {
         this.pidCounter = getMaxPidInNetwork();
@@ -408,7 +413,6 @@ public class AddressingServer {
     }
 
 
-
     /**
      * Constructs an AddressingServer with an {@code AddrServerConfig} object storing its network details.
      * <p>
@@ -447,16 +451,20 @@ public class AddressingServer {
     }
 
 
-    public void registerPrimaryAddrServer() throws IOException {
+    public void registerPrimaryAddrServer() {
 
         Long pid = generatePID();
         config.setPID(pid);
 
         String host = config.getHostAddress();
         if (host == null || host.isEmpty() || host.equals("localhost")) {
-            host = InetAddress.getLocalHost().getHostName(); // Use Docker container ID/hostname
+            try {
+                host = InetAddress.getLocalHost().getHostName();
+            } catch (UnknownHostException e) {
+                System.err.println("[PRIMARY ERROR] Failed to resolve local hostname: " + e.getMessage());
+                host = "localhost"; // Use fallback hostname
+            }
         }
-
         System.out.println("PRIMARY initializing with Hostname: " + host + " and PID: " + pid);
 
         // Update Local Registry (Self-Register by creating an AddrServerRecord)
@@ -468,7 +476,7 @@ public class AddressingServer {
                 config.getChatServerPort(),
                 config.getRole()
         );
-
+        // Publish details to shared volume for network discovery
         try {
             PrimaryDiscoveryManager discovery = new PrimaryDiscoveryManager(config);
             discovery.publish();
@@ -502,14 +510,13 @@ public class AddressingServer {
         if (this.replicaRequestCoordinator != null) {
             this.replicaRequestCoordinator.shutdown();
         }
-        this.replicaRequestCoordinator =  new ReplicaRequestCoordinator(
+        this.replicaRequestCoordinator = new ReplicaRequestCoordinator(
                 this.genMID,
                 this::setReplicaRequestManager, // Save reference to internal field
                 this.peerManager::getPrimaryNIOChannel
         );
         return this.replicaRequestCoordinator;
     }
-
 
 
     /**
@@ -535,72 +542,72 @@ public class AddressingServer {
      * @see PeerManager#registerWithPrimary(String, int, int, int, int)
      * @see AddrServerNetworkManager#openPersistentChannel(SocketChannel)
      */
-    public void registerReplicaAddrServer() throws IOException {
-        // Retrieve the details for the primary addressing server
-        int discoveryAttempts = 0;
-        int maxDiscoveryAttempts = 10; // Total 20 seconds
-        boolean fileFound = false;
-
-        System.out.println("Replica starting: Searching for Primary discovery file...");
-
-        while (discoveryAttempts < maxDiscoveryAttempts) {
-            if (config.refreshPrimaryDetails()) {
-                fileFound = true;
-                break;
-            }
-
-            discoveryAttempts++;
-            System.out.printf("Discovery file not found. Attempt %d/%d. Retrying in 2s...%n",
-                    discoveryAttempts, maxDiscoveryAttempts);
-
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("Startup discovery interrupted", e);
-            }
-        }
-
-        if (!fileFound) {
-            System.err.println("CRITICAL: Primary discovery file missing after timeout. Shutting down this process.");
-            System.exit(1);
-        }
-
-        Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
-                config.getPrimaryHostAddress(), config.getPrimaryReplicaPort(),
-                config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
-
-        // Retry connection using exponential backoff
-        int attempts = 0;
-        while (maybeChannel.isEmpty() && attempts < 5) {
-
-            long sleepTime = (long) Math.pow(2, attempts) * 1000;
-            System.err.println("First attempt to register with primary addressing server failed. " +
-                    "Retrying in " + sleepTime +" seconds.");
-            try {
-                Thread.sleep(sleepTime);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                System.err.println("Retry sleep interrupted.");
-            }
-            maybeChannel = peerManager.registerWithPrimary(
-                    config.getPrimaryHostAddress(), config.getPrimaryReplicaPort(),
-                    config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
-            attempts++;
-        }
-
-        if (maybeChannel.isPresent()) {
-            SocketChannel channel = maybeChannel.get();
-            try {
-                networkManager.openPersistentChannel(channel);
-            } catch (IOException ioe) {
-                System.err.println("Error occurred while opening persistent channel to PRIMARY: " + ioe.getMessage());
-            }
-        } else {
-            System.err.println("Failed to register with PRIMARY after 2 attempts.");
-            // Optional: we can escalate the issue by starting a leader election.
-        }
-    }
+//    public void registerReplicaAddrServer() throws IOException {
+//        // Retrieve the details for the primary addressing server
+//        int discoveryAttempts = 0;
+//        int maxDiscoveryAttempts = 10; // Total 20 seconds
+//        boolean fileFound = false;
+//
+//        System.out.println("Replica starting: Searching for Primary discovery file...");
+//
+//        while (discoveryAttempts < maxDiscoveryAttempts) {
+//            if (config.refreshPrimaryDetails()) {
+//                fileFound = true;
+//                break;
+//            }
+//
+//            discoveryAttempts++;
+//            System.out.printf("Discovery file not found. Attempt %d/%d. Retrying in 2s...%n",
+//                    discoveryAttempts, maxDiscoveryAttempts);
+//
+//            try {
+//                Thread.sleep(2000);
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt();
+//                throw new IOException("Startup discovery interrupted", e);
+//            }
+//        }
+//
+//        if (!fileFound) {
+//            System.err.println("CRITICAL: Primary discovery file missing after timeout. Shutting down this process.");
+//            System.exit(1);
+//        }
+//
+//        Optional<SocketChannel> maybeChannel = peerManager.registerWithPrimary(
+//                config.getPrimaryHostAddress(), config.getPrimaryReplicaPort(),
+//                config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
+//
+//        // Retry connection using exponential backoff
+//        int attempts = 0;
+//        while (maybeChannel.isEmpty() && attempts < 5) {
+//
+//            long sleepTime = (long) Math.pow(2, attempts) * 1000;
+//            System.err.println("First attempt to register with primary addressing server failed. " +
+//                    "Retrying in " + sleepTime +" seconds.");
+//            try {
+//                Thread.sleep(sleepTime);
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt();
+//                System.err.println("Retry sleep interrupted.");
+//            }
+//            maybeChannel = peerManager.registerWithPrimary(
+//                    config.getPrimaryHostAddress(), config.getPrimaryReplicaPort(),
+//                    config.getClientPort(), config.getReplicaPort(), config.getChatServerPort());
+//            attempts++;
+//        }
+//
+//        if (maybeChannel.isPresent()) {
+//            SocketChannel channel = maybeChannel.get();
+//            try {
+//                networkManager.openPersistentChannel(channel);
+//            } catch (IOException ioe) {
+//                System.err.println("Error occurred while opening persistent channel to PRIMARY: " + ioe.getMessage());
+//            }
+//        } else {
+//            System.err.println("Failed to register with PRIMARY after 2 attempts.");
+//            // Optional: we can escalate the issue by starting a leader election.
+//        }
+//    }
 
     /**
      * Close all connections in the {@link AddrServerNetworkManager}.
@@ -649,94 +656,55 @@ public class AddressingServer {
         boolean firstIteration = true;
 
         while (true) {
-            try {
-                AddressingServer server = new AddressingServer();
-                String initialServerRole = System.getenv("AS_ROLE");
-                String currentServerRole = firstIteration ? initialServerRole : "REPLICA";
+            AddressingServer server = new AddressingServer();
+            String initialServerRole = System.getenv("AS_ROLE");
+            String currentServerRole = firstIteration ? initialServerRole : "REPLICA";
 
-                if (currentServerRole.equals(Roles.PRIMARY)) {
-                    System.out.println("Launching AddressingServer as PRIMARY");
-                    server.registerPrimaryAddrServer();
-                } else {
-                    System.out.println("Launching AddressingServer as REPLICA");
-                    // This is where dynamic address retrieval of the primary addressing server is
-                    // done via a domain a record hosted on a public server with a static address.
-                    server.registerReplicaAddrServer();
+            if (currentServerRole.equals(Roles.PRIMARY)) {
+                System.out.println("Launching AddressingServer as PRIMARY");
+                server.registerPrimaryAddrServer();
+            } else {
+                System.out.println("Launching AddressingServer as REPLICA");
+                boolean connected = server.getPeerManager().registerWithPrimary();
+                if (!connected) {
+                    System.err.println("Critical: Could not connect to PRIMARY after retries. Restarting initialization...");
+                    firstIteration = false;
+                    try {
+                        TimeUnit.SECONDS.sleep(2);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    continue; // Re-attempt initial connection & registration
                 }
-
-                System.out.println("AddressingServer: Starting PingManager...");
-                Thread pingThread = new Thread(() -> server.getPingManager().run());
-                pingThread.setDaemon(true);
-                pingThread.start();
-
-                try {
-                    server.start();         // blocks in main event loop of AddrServerNetworkManager
-                } catch (IOException e) {
-                    System.err.println("Server exited due to IOException: " + e.getMessage());
-                }
-
-                // If server didn’t request a restart and we are at this point -> exit the JVM
-                if (!server.isRestartRequested()) {
-                    System.out.println("Server exited normally. Shutting down.");
-                    break;
-                }
-
-                System.out.println("Restart requested. Reinitializing as REPLICA...");
-
-            } catch (IOException ioe) {
-                System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());
-                ioe.printStackTrace();
+                System.out.println("REPLICA registration successful.");
             }
+
+            System.out.println("AddressingServer: Starting PingManager...");
+            Thread pingThread = new Thread(() -> server.getPingManager().run());
+            pingThread.setDaemon(true);
+            pingThread.start();
+
+            try {
+                server.start();         // blocks in main event loop of AddrServerNetworkManager
+            } catch (IOException e) {
+                System.err.println("Server exited due to IOException: " + e.getMessage());
+            }
+
+            // If server didn’t request a restart and we are at this point -> exit the JVM
+            if (!server.isRestartRequested()) {
+                System.out.println("Server exited normally. Shutting down.");
+                break;
+            }
+
+            System.out.println("Restart requested. Reinitializing as REPLICA...");
+
             firstIteration = false; // All restarts become replicas
             try {
                 TimeUnit.MILLISECONDS.sleep(500); // brief pause before retry
-            } catch (InterruptedException ignored) {}
+            } catch (InterruptedException ignored) {
+            }
 
         }
-//            AddressingServer server = new AddressingServer();
-//        String serverRole = System.getenv("AS_ROLE");
-//        if (serverRole != null) {
-//            if (serverRole.equals("PRIMARY")) {
-//                System.out.println("AS_ROLE is set to: " + serverRole);
-//                // Server role is already set when the server is instantiated, using AddrServerConfig and environment variables
-//                server.registerPrimaryAddrServer(); // Puts the addressing server into the AddrServerRegistry
-//            } else {
-//                System.out.println("AS_ROLE is set to: " + serverRole);
-//                // TODO - retrieve the address of the primary addressing server from the Domain A record
-//                server.registerReplicaAddrServer();
-//                // TODO - A thread(s) must be spun up for this method call.
-//                //  Since this invocation causes an infinite loop, the main thread will get hung up.
-//                //  And the Replica won't enter the main event loop and function as intended.
-//                //server.getPingManager().run();
-//            }
-//            try {
-//                server.start();
-//                while (true) {
-//                    AddressingServer newServer = new AddressingServer();
-//
-//                    try {
-//                        newServer.start();  // Blocks inside startEventLoop()
-//                    } catch (IOException e) {
-//                        System.err.println("Fatal error in event loop: " + e.getMessage());
-//                    }
-//
-//                    if (!server.isRestartRequested()) {
-//                        break; // Only restart if restart was explicitly requested
-//                    }
-//
-//                    System.out.println("Restart requested. Restarting server as fresh replica.");
-//                    // Optional: pause briefly
-//                    try {
-//                        TimeUnit.MILLISECONDS.sleep(500);
-//                    } catch (InterruptedException ignored) {}
-//                }
-//            } catch (IOException ioe) {
-//                System.err.println("Error during AddressingServer main event loop, process halted.\nError message: " + ioe.getMessage());
-//                ioe.printStackTrace();
-//                server.requestRestart();
-//            }
-//        }
-        //}
 
 
     }

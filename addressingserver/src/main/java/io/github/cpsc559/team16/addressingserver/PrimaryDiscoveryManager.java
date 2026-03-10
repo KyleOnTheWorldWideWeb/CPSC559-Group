@@ -58,7 +58,7 @@ public class PrimaryDiscoveryManager {
                 config.getReplicaPort(),
                 config.getChatServerPort(),
                 config.getClientPort());
-
+        System.out.printf("[DISCOVERY] PID %d is publishing identity: %s%n", config.getPID(), content);
         Path finalPath = Paths.get(DISCOVERY_PATH);
         Path tempPath = Paths.get(TEMP_PATH);
 

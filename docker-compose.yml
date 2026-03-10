@@ -14,7 +14,6 @@ services:
     restart: on-failure
     environment:
       # Defaults to hardcoded values if no .env file is present
-      - AS_HOST_ADDRESS=${AS_HOST_ADDRESS:-addressingserver}
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
       - AS_REPLICA_PORT=${AS_REPLICA_PORT:-49801}
       - AS_CHATSERVER_PORT=${AS_CHATSERVER_PORT:-49802}
@@ -52,13 +51,12 @@ services:
     build:
       dockerfile: Dockerfile.chatserver
     ports:
-      - 30010:2424
-      - 30011:2425
+      - 30100:2424
+      - 30101:2425
     environment:
-      - CS_PORT=${CS_PORT:-2424}
+      - CS_CLIENT_PORT=${CS_CLIENT_PORT:-2424}
       - CS_PEER_PORT=${CS_PEER_PORT:-2425}
-      - CS_ADDRSERVER_PORT=${CS_ADDRSERVER_PORT:-49802}
-      - ADDRESS_SERVER_IP=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
+      - AS_CHATSERVER_PORT=${AS_CHATSERVER_PORT:-49802}
       - DEBUG_LEVEL=${DEBUG_LEVEL:-0}
       # We leave PUBLIC_ADDRESS out entirely to ensure the internal Docker DNS is used
     networks:
@@ -72,12 +70,10 @@ services:
     build:
       dockerfile: Dockerfile.client
     ports:
-      - "3100"
+      - "30200:30000"
     environment:
-      - CLIENT_PORT=${CLIENT_PORT:-3000}
-      - HOST_ADDRESS=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
-      - ADDRESS_SERVER_IP=${PRIMARY_ADDRESS_SERVER_IP:-addressingserver}
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
+      - CLIENT_PORT=${CLIENT_PORT:-3000}
     networks:
       - chat_network
     tty: true

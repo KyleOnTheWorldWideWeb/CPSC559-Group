@@ -1,9 +1,12 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import io.github.cpsc559.team16.common.dto.ServerRole;
+import io.github.cpsc559.team16.common.dto.PrimaryAddress;
 import io.github.cpsc559.team16.common.utilities.PrimaryDiscoveryReader;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 public class AddrServerConfig {
 
@@ -48,7 +51,6 @@ public class AddrServerConfig {
      *     <li>PRIMARY - the leader process in charge of coordinating connections in the network.</li>
      *     <li>REPLICA - a `Passive Replica` receiving and retrieving updates.</li>
      * </ul>
-     *
      */
     private ServerRole role;
 
@@ -81,13 +83,20 @@ public class AddrServerConfig {
      * </ul></p>
      */
     public AddrServerConfig() {
-        // Look for the specific network named assigned to this container
-        this.hostAddress = System.getenv().getOrDefault("AS_HOST_ADDRESS", "localhost");
+        // Retrieve hostname dynamically.
+        try {
+            // In Docker, this returns the Container ID (used for inter-container comms)
+            this.hostAddress = InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException e) {
+            throw new RuntimeException("CRITICAL: AddressingServer could not resolve its unique Hostname. Check Docker networking.", e);
+        }
 
+        // Use standard defaults for ports unless specified
         this.clientPort = Integer.parseInt(System.getenv().getOrDefault("AS_CLIENT_PORT", "49800"));
         this.replicaPort = Integer.parseInt(System.getenv().getOrDefault("AS_REPLICA_PORT", "49801"));
         this.chatServerPort = Integer.parseInt(System.getenv().getOrDefault("AS_CHATSERVER_PORT", "49802"));
 
+        // Role is the only required "Identity" variable
         String roleEnv = System.getenv().getOrDefault("AS_ROLE", "REPLICA").toUpperCase();
         this.role = roleEnv.equals("PRIMARY") ? ServerRole.PRIMARY : ServerRole.REPLICA;
 
@@ -100,6 +109,7 @@ public class AddrServerConfig {
      * Changes the role of an AddressingServer in the DS.
      * <p>During failover, a new PRIMARY addressing server must
      * be elected and change its role to reflect its new status.</p>
+     *
      * @param role The type of ServerRole for this AddressingServer.
      */
     public void setRole(ServerRole role) {
@@ -112,7 +122,6 @@ public class AddrServerConfig {
      *     <li>PRIMARY - the leader process in charge of coordinating connections in the network.</li>
      *     <li>REPLICA - a `Passive Replica` receiving and retrieving updates.</li>
      * </ul>
-     *
      */
     public ServerRole getRole() {
         return role;
@@ -182,6 +191,7 @@ public class AddrServerConfig {
 
     /**
      * Returns the host address of the current Primary Addressing Server.
+     *
      * @return the IP or hostname of the Primary.
      */
     public String getPrimaryHostAddress() {
@@ -190,6 +200,7 @@ public class AddrServerConfig {
 
     /**
      * Updates the recorded address of the Primary Addressing Server.
+     *
      * @param address the new Primary host address.
      */
     public void setPrimaryHostAddress(String address) {
@@ -198,6 +209,7 @@ public class AddrServerConfig {
 
     /**
      * Returns the port used by the Primary for peer/replica handshakes.
+     *
      * @return the peer port of the Primary.
      */
     public int getPrimaryReplicaPort() {
@@ -206,6 +218,7 @@ public class AddrServerConfig {
 
     /**
      * Updates the recorded peer port of the Primary Addressing Server.
+     *
      * @param port the new Primary peer port.
      */
     public void setPrimaryReplicaPort(int port) {
@@ -215,11 +228,12 @@ public class AddrServerConfig {
     /**
      * Re-reads the shared discovery file to update the current known Primary.
      * This is called during initialization and after a detected failover.
+     *
      * @return true if a Primary was found and its details were loaded, false otherwise.
      */
     public boolean refreshPrimaryDetails() {
         try {
-            PrimaryDiscoveryReader.PrimaryAddress details = PrimaryDiscoveryReader.readPrimaryDetails();
+            PrimaryAddress details = PrimaryDiscoveryReader.readPrimaryDetails();
             if (details != null) {
                 this.primaryHostAddress = details.hostAddress();
                 this.primaryReplicaPort = details.replicaPort();

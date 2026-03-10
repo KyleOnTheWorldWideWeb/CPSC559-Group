@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import io.github.cpsc559.team16.common.dto.PrimaryAddress;
 
 /**
  * <h1>PrimaryDiscoveryReader</h1>
@@ -22,10 +23,6 @@ public class PrimaryDiscoveryReader {
 
     private static final String DISCOVERY_PATH = "/shared/primary_address.txt";
 
-    /**
-     * Data Transfer Object (DTO) to hold the parsed address information.
-     */
-    public record PrimaryAddress(String hostAddress, int replicaPort, int chatServerPort, int clientPort) {}
 
     /**
      * Reads the discovery file from the shared volume and parses its content.

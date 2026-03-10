@@ -33,7 +33,7 @@ public class ConnectionManager {
 
     // Connection management
     /**
-     * Tracks the number of reconnection attempts made by the client.
+     * Tracks the number of reconnection attempts made by the client.F
      * It is reset after a successful reconnection.
      */
     public int reconnectTries = 0;

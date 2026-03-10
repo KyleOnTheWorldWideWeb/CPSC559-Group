@@ -595,8 +595,10 @@ public class AddrServerNetworkManager {
                                         if (senderRole.equals(Roles.CHATSERVER)) {
 
                                         } else if (senderRole.equals(Roles.REPLICA)) {
+                                            System.out.println();
                                             readDispatcher.handleSynchronization(channel, nioChannel, message);
                                         }
+                                        else { System.err.println("Received SYNCHRONIZE request from a process with an unrecognized role."); }
                                     }
                                     else {
                                         readDispatcher.handleRegistration(channel, nioChannel, message);

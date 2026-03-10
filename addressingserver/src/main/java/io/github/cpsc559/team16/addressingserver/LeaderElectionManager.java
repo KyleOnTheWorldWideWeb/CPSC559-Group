@@ -406,18 +406,19 @@ public class LeaderElectionManager {
         // Clear the record of the current PRIMARY since it has failed
         clearFailedLeader(server.getPeerManager().getPrimaryPID());
 
-        // Give the new Primary 1-2 seconds to finish its promotion logic and open its server sockets.
+        // Give the new Primary 5 seconds to finish its promotion logic and open its server sockets.
         try {
             System.out.println("LEM: Waiting for new Primary to initialize...");
-            Thread.sleep(2000);
+            Thread.sleep(5000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
         // Retrieve the record of the REPLICA being promoted
         AddrServerRecord record = server.getAddrServerRegistry().getRecords().get(newLeaderPID);
         if (record != null) {
-            ElectionHelper.promotePeer(this.server, record);
-            server.getPeerManager().synchronizeWithPrimary();
+            System.out.println("Promoting another REPLICA process to PRIMARY...");
+            record.setRole(ServerRole.PRIMARY);
+            server.getPeerManager().synchronizeWithPrimary(record);
         } else {
             System.err.println("WARNING: Critical election failure. " +
                     "No AddrServerRecord found in the registry for PID: " + newLeaderPID + ".");

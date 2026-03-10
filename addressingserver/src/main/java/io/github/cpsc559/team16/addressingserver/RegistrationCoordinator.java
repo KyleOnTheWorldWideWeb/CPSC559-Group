@@ -409,6 +409,7 @@ public class RegistrationCoordinator {
             peerManager.getPeerChannels().put(channel, nioChannel);
             Long primaryPID = server.getConfig().getPID();
             try {
+                System.out.printf("Synchronization for PID %d confirmed, sending ACK.%n", replicaPID);
                 nioChannel.sendMessage(AckMessage.replicaRegistered(primaryPID, replicaPID).toJson());
             } catch (IOException e) {
                 cleanupManager.cleanupPersistentConnection(channel, true);

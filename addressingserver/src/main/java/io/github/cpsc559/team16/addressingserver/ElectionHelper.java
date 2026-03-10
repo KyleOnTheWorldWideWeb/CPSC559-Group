@@ -35,6 +35,9 @@ public final class ElectionHelper {
             myRecord.setRole(ServerRole.PRIMARY);
         }
 
+        // Update connection details for the primary addressing server.
+        server.getConfig().setPrimaryReplicaPort(server.getConfig().getReplicaPort());
+        server.getConfig().setPrimaryHostAddress(server.getConfig().getHostAddress());
         // Since we don't have a DNS, the new Primary writes its info to the shared volume NOW.
         try {
             PrimaryDiscoveryManager discovery = server.getDiscoveryManager();
@@ -45,18 +48,8 @@ public final class ElectionHelper {
             System.err.println("New PRIMARY could not publish discovery file: " + ioe.getMessage());
         }
 
-        // Update connection details for the primary addressing server.
-        server.getConfig().setPrimaryReplicaPort(server.getConfig().getReplicaPort());
-        server.getConfig().setPrimaryHostAddress(server.getConfig().getHostAddress());
         System.out.println("Promotion Complete. Now serving as PRIMARY.");
     }
 
-    public static void promotePeer(AddressingServer server, AddrServerRecord record) {
-        System.out.println("Promoting an separate network process from REPLICA to PRIMARY...");
-        record.setRole(ServerRole.PRIMARY);
-        // Update connection details for the primary addressing server.
-        server.getConfig().setPrimaryReplicaPort(record.getPeerPort());
-        server.getConfig().setPrimaryHostAddress(record.getHostAddress());
-    }
 
 }

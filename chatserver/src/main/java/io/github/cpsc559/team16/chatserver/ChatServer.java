@@ -166,11 +166,11 @@ public class ChatServer {
 
     /**
      * Port on which the Addressing Server is listening.
-     * Retrieved from the environment variable {@code CS_ADDRSERVER_PORT}, or
+     * Retrieved from the environment variable {@code AS_CHATSERVER_PORT}, or
      * defaults to 49802.
      */
     private static final int ADDRESSING_SERVER_PORT = Integer
-            .parseInt(System.getenv().getOrDefault("CS_ADDRSERVER_PORT", "49802"));
+            .parseInt(System.getenv().getOrDefault("AS_CHATSERVER_PORT", "49802"));
 
     /**
      * Port used for accepting client connections.

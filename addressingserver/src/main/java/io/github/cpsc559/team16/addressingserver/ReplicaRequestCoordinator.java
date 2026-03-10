@@ -24,7 +24,7 @@ public class ReplicaRequestCoordinator extends Thread {
     /** Manager used to initiate sync requests to the primary AddressingServer. */
     private ReplicaRequestManager requestManager = null;
 
-    /** A callback used to register the ReplicaRequestManager externally (e.g., in the AddressingServer). */
+    /** A callback used to register the ReplicaRequestManager externally (e.g. in the AddressingServer). */
     private final Consumer<ReplicaRequestManager> onReady;
 
     /** This is set externally once registration is complete. */
@@ -123,25 +123,10 @@ public class ReplicaRequestCoordinator extends Thread {
      */
     @Override
     public void run() {
-        while (running) {
-            // Connection Phase: If we don't have an active manager, we need to try and get one.
-            if (requestManager == null) {
-                primaryChannel = primaryChannelSupplier.get();
-                if (primaryChannel != null && primaryChannel.getSocketChannel().isOpen()) {
-                    this.requestManager = new ReplicaRequestManager(messageIDGenerator, primaryChannel);
-                    this.onReady.accept(requestManager);
-                } else {
-                    try {
-                        Thread.sleep(2000);
-                        continue; // Skip to next iteration to try connecting again
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        return; // We have retry logic inside the AddrServerNetworkManager main loop (for replicas)
-                    }
-                }
-            }
+        this.requestManager = new ReplicaRequestManager(messageIDGenerator, primaryChannelSupplier);
+        this.onReady.accept(requestManager);
 
-            // Action Phase: We have a manager, so now we can sync this REPLICA's records with the PRIMARY
+        while (running) {
             try {
                 if (requestManager.incrementSyncCounter()) {
                     requestManager.requestAllServerRecords();
@@ -152,11 +137,6 @@ public class ReplicaRequestCoordinator extends Thread {
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 break;
-            } catch (Exception e) {
-                // If the socket dies, we reset the manager.
-                // The next loop iteration will go back to "Connection Phase"
-                System.err.println("Sync failed. Connection likely lost. Resetting...");
-                this.requestManager = null;
             }
         }
     }
