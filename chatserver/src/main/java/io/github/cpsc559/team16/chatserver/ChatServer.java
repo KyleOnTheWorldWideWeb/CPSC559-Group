@@ -18,9 +18,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static io.github.cpsc559.team16.common.utilities.DebugLogger.*;
+import io.github.cpsc559.team16.common.dto.ConnectionType;
 import io.github.cpsc559.team16.common.dto.PrimaryAddress;
 import io.github.cpsc559.team16.common.messaging.*;
 import io.github.cpsc559.team16.common.utilities.*;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -43,86 +46,6 @@ import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 // @SuppressWarnings("unused")
 public class ChatServer {
 
-    /**
-     * The current debug level for controlling verbosity of server logs.
-     * <p>
-     * This is configurable at runtime using the environment variable
-     * <b>DEBUG_LEVEL</b>.
-     * If the environment variable is not set, the default level is
-     * {@code DEBUG_EXTREME} (5),
-     * meaning all debug messages will be printed.
-     * </p>
-     * <p>
-     * Example usage in shell to reduce output to basic info only:
-     *
-     * <pre>{@code
-     * export DEBUG_LEVEL=1
-     * }</pre>
-     * </p>
-     */
-    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "5"));
-
-    // Debug level constants
-
-    /**
-     * Debug level: No debug output. Use in production mode where logs are minimal.
-     */
-    private static final int DEBUG_NONE = 0; // No debug output (production mode)
-
-    /**
-     * Debug level: Basic events such as startup, shutdown, and major transitions.
-     */
-    private static final int DEBUG_BASIC = 1; // Basic info: startup, shutdown, major events
-
-    /**
-     * Debug level: Normal runtime activity such as new connections or message
-     * processing.
-     */
-    private static final int DEBUG_NORMAL = 2; // Normal operation details: connections, requests
-
-    /**
-     * Debug level: Step-by-step logic, including function entry points and internal
-     * decisions.
-     */
-    private static final int DEBUG_DETAILED = 3; // Detailed flow: entering methods, decision points
-
-    /**
-     * Debug level: Low-level I/O activity like byte reads/writes and selector
-     * state.
-     */
-    private static final int DEBUG_LOW_LEVEL = 4; // Low-level operations: byte-level I/O, parsing
-
-    /**
-     * Debug level: Maximum verbosity including every possible detail.
-     * Useful for diagnosing edge cases or unexpected behavior.
-     */
-    private static final int DEBUG_EXTREME = 5; // Extreme detail: everything, for deep debugging
-
-    /**
-     * Logs a debug message to standard output if the message level is
-     * less than or equal to the configured {@link #DEBUG_LEVEL}.
-     * <p>
-     * Each message is prefixed with a tag representing its severity.
-     * This helps developers visually filter relevant messages while debugging.
-     * </p>
-     *
-     * @param level   the severity level of the message (0–5)
-     * @param message the message to log
-     */
-
-    private static void debug(int level, String message) {
-        if (level <= DEBUG_LEVEL) {
-            String prefix = switch (level) {
-                case 1 -> "[BASIC] ";
-                case 2 -> "[NORMAL] ";
-                case 3 -> "[DETAILED] ";
-                case 4 -> "[LOW_LEVEL] ";
-                case 5 -> "[EXTREME] ";
-                default -> "[INFO] ";
-            };
-            System.out.println(prefix + message);
-        }
-    }
 
     /**
      * Path to the file that stores the persistent chat log.
@@ -206,18 +129,6 @@ public class ChatServer {
      */
     private static volatile boolean registered = false;
 
-    /**
-     * Enum representing different types of connections this server can manage.
-     * <ul>
-     * <li>{@code CLIENT} — incoming user/client connection</li>
-     * <li>{@code SERVER} — connection to or from another peer chat server</li>
-     * <li>{@code ADDRESSING_SERVER} — initial registration and update
-     * coordination</li>
-     * </ul>
-     */
-    enum ConnectionType {
-        CLIENT, SERVER, ADDRESSING_SERVER
-    }
 
     /**
      * Maps each {@link ConnectionType} to its respective handler implementation.
@@ -963,6 +874,14 @@ public class ChatServer {
         if (bytesRead == -1) {
             ctx.partialData.setLength(0);
             debug(DEBUG_NORMAL, "End of stream reached, closing connection");
+
+            // NEW FAILOVER LOGIC FOR RECONNECTING TO THE PRIMARY ADDRESSING SERVER
+            if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                debug(DEBUG_BASIC, "CRITICAL: Addressing Server connection lost. Triggering failover....");
+                startFailoverPivot();
+                return;
+            }
+
             closeConnection(key);
             return;
         }
@@ -1299,6 +1218,22 @@ public class ChatServer {
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 debug(DEBUG_NORMAL, "Addressing Server reconnection attempt " + attempt);
+
+                // Retrieve the host address for the new PRIMARY using the shared discovery volume
+                PrimaryAddress details = retrievePrimaryDetails();
+                // If the election isn't done, wait and try again
+                if (details == null) {
+                    debug(DEBUG_LOW_LEVEL, "Discovery file not ready yet (Election may be in progress). Retrying...");
+                    try {
+                        // Give the leader election time to complete and write new network details to the shared volume
+                        Thread.sleep(RETRY_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        debug(DEBUG_NORMAL, "Failover retry sleep interrupted. Aborting recovery.");
+                        break;
+                    }
+                    continue;
+                }
 
                 // Create a new connection to the addressing server
                 SocketChannel channel = SocketChannel.open();
@@ -1671,4 +1606,76 @@ public class ChatServer {
         }
     }
 
+    /**
+     * Safely terminates all existing connections to the Addressing Server.
+     * <p>
+     * Note: Unlike {@link #closeConnection(SelectionKey)}, this method does not
+     * perform peer-crash notifications because the Addressing Server is the
+     * entity being replaced. It focuses on a clean physical teardown to prevent
+     * stale socket descriptors during a failover pivot.
+     * </p>
+     */
+    private static void cleanupAddressingConnections() {
+        debug(DEBUG_DETAILED, "Sweeping selector for stale Addressing Server keys...");
+
+        for (SelectionKey key : selector.keys()) {
+            if (!key.isValid()) continue;
+
+            ConnectionContext ctx = (ConnectionContext) key.attachment();
+
+            // We only target the Addressing Server connection for this specific sweep
+            if (ctx != null && ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                try {
+                    debug(DEBUG_NORMAL, "Force-closing stale Addressing Server connection.");
+
+                    // 1. Cancel the key to remove it from the next select() cycle
+                    key.cancel();
+
+                    // 2. Close the channel to release the file descriptor/port
+                    if (key.channel() instanceof SocketChannel sc && sc.isOpen()) {
+                        sc.close();
+                    }
+                } catch (IOException e) {
+                    debug(DEBUG_LOW_LEVEL, "Addressing cleanup: Channel already closed.");
+                }
+            }
+        }
+        // Wake up the selector so it immediately processes the cancellations
+        selector.wakeup();
+    }
+
+    /**
+     * Pivots the connection to a NEW Primary after a failover/election.
+     */
+    public static void pivotToNewPrimary() {
+        debug(DEBUG_BASIC, "Primary change detected. Refreshing coordinates and reconnecting...");
+        // Stage 1: Clear out any existing Addressing Server keys so we don't have dead connections
+        cleanupAddressingConnections();
+        // Stage 2: Trigger a reconnection attempt to the new PRIMARY
+        attemptReconnectingToAddressingServer();
+    }
+
+
+    /**
+     * Pivots the connection to a NEW Primary after a failover/election.
+     * Initiates the recovery process in a supervised background thread.
+     */
+    public static void startFailoverPivot() {
+        Thread recoveryThread = new Thread(() -> {
+            try {
+                pivotToNewPrimary();
+            } catch (Exception e) {
+                debug(DEBUG_BASIC, "FATAL: Failover recovery thread crashed: " + e.getMessage());
+                e.printStackTrace();
+                // Optional: You could trigger a system exit or a secondary retry here
+            }
+        }, "Failover-Recovery-Thread");
+
+        // This ensures that if the thread fails, we at least get a log entry
+        recoveryThread.setUncaughtExceptionHandler((t, e) -> {
+            debug(DEBUG_BASIC, "Uncaught exception in " + t.getName() + ": " + e.getMessage());
+        });
+
+        recoveryThread.start();
+    }
 }
