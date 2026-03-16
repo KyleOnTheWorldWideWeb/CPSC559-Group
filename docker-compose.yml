@@ -51,13 +51,12 @@ services:
     build:
       dockerfile: Dockerfile.chatserver
     ports:
-      - 30100:2424
-      - 30101:2425
+      - 30100-3200:2424
+      - 30201-3300:2425
     environment:
       - CS_CLIENT_PORT=${CS_CLIENT_PORT:-2424}
       - CS_PEER_PORT=${CS_PEER_PORT:-2425}
-      - AS_CHATSERVER_PORT=${AS_CHATSERVER_PORT:-49802}
-      - DEBUG_LEVEL=${DEBUG_LEVEL:-0}
+      - DEBUG_LEVEL=${DEBUG_LEVEL:-1}
     networks:
       - chat_network
     volumes:
@@ -69,7 +68,7 @@ services:
     build:
       dockerfile: Dockerfile.client
     ports:
-      - "30200:30000"
+      - "30301:30000"
     environment:
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
       - CLIENT_PORT=${CLIENT_PORT:-3000}

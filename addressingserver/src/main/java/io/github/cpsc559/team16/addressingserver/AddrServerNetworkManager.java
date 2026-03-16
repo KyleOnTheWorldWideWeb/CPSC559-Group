@@ -593,10 +593,9 @@ public class AddrServerNetworkManager {
                                     // The persistent connection does not contain a unique PID until registration occurs below.
                                     if (message.getMsgType().equals(MessageTypes.SYNCHRONIZE)) {
                                         if (senderRole.equals(Roles.CHATSERVER)) {
-
+                                            readDispatcher.handleSynchronization(channel, nioChannel, message, Roles.CHATSERVER);
                                         } else if (senderRole.equals(Roles.REPLICA)) {
-                                            System.out.println();
-                                            readDispatcher.handleSynchronization(channel, nioChannel, message);
+                                            readDispatcher.handleSynchronization(channel, nioChannel, message, Roles.REPLICA);
                                         }
                                         else { System.err.println("Received SYNCHRONIZE request from a process with an unrecognized role."); }
                                     }

@@ -72,8 +72,9 @@ public class ChatServer {
      * Unique identifier (PID) assigned to this chat server by the Addressing
      * Server.
      */
-    private static int ID;
+    private static volatile long ID;
 
+    private static final MessageIDGenerator msgIDGenerator = new MessageIDGenerator(() -> (long) ChatServer.ID);
 
     /**
      * Host address of the Addressing Server.
@@ -1261,14 +1262,11 @@ public class ChatServer {
                     System.out.println("Using PUBLIC_ADDRESS from environment: " + publicAddress);
                 }
 
-                RegisterMessage<ChatServerRecord> registrationMsg = RegisterMessage.fromChatServer(
-                        publicAddress,
-                        CLIENT_PORT,
-                        PEER_LISTEN_PORT,
-                        asPort,
-                        MAX_CLIENTS);
 
-                String json = registrationMsg.toJson() + "\n";
+                ChatServerRecord myRecord = new ChatServerRecord(ID, publicAddress, CLIENT_PORT, PEER_LISTEN_PORT, asPort, MAX_CLIENTS);
+                SyncRegisterMessage<ChatServerRecord> synchronizeMsg = SyncRegisterMessage.fromChatServer(msgIDGenerator.nextID(),myRecord);
+
+                String json = synchronizeMsg.toJson() + "\n";
                 ctx.writeQueue.add(ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8)));
 
                 channel.register(selector, SelectionKey.OP_CONNECT, ctx);
@@ -1387,7 +1385,7 @@ public class ChatServer {
      * @return the server's unique process ID
      */
 
-    public static int getID() {
+    public static long getID() {
         return ID;
     }
 

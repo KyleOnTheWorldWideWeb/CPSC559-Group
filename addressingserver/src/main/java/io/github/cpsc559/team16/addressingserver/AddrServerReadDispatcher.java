@@ -590,8 +590,13 @@ public class AddrServerReadDispatcher {
 
     }
 
-    public void handleSynchronization(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg) {
-        this.server.getRegistrationCoordinator().handleReplicaSynchronization(channel, nioChannel, msg);
+    public void handleSynchronization(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg, String role) {
+        if (role.equals(Roles.CHATSERVER)) {
+            this.server.getRegistrationCoordinator().handleSynchronization(channel, nioChannel, msg, role);
+        }
+        else {
+            this.server.getRegistrationCoordinator().handleReplicaSynchronization(channel, nioChannel, msg);
+        }
     }
 
 

@@ -3,8 +3,7 @@ package io.github.cpsc559.team16.chatserver;
 import java.nio.channels.SelectionKey;
 import java.util.Map;
 
-import static io.github.cpsc559.team16.client.Client.DEBUG_BASIC;
-import static io.github.cpsc559.team16.client.Client.DEBUG_DETAILED;
+import static io.github.cpsc559.team16.common.utilities.DebugLogger.*;
 
 /**
  * Monitors the heartbeat of connected peer servers and clients, ensuring that
@@ -60,21 +59,6 @@ public class HeartbeatMonitor implements Runnable {
         this.peerMap = peerMap;
     }
 
-    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "1"));
-
-    private static void debug(int level, String message) {
-        if (level <= DEBUG_LEVEL) {
-            String prefix = switch (level) {
-                case 1 -> "[BASIC] ";
-                case 2 -> "[NORMAL] ";
-                case 3 -> "[DETAILED] ";
-                case 4 -> "[LOW_LEVEL] ";
-                case 5 -> "[EXTREME] ";
-                default -> "[INFO] ";
-            };
-            System.out.println(prefix + "[HEARTBEAT] " + message);
-        }
-    }
 
     @Override
     public void run() {

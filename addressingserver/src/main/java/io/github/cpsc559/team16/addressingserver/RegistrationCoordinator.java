@@ -6,8 +6,10 @@ import java.util.Map;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ServerRecord;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
+import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
 /**
@@ -385,7 +387,6 @@ public class RegistrationCoordinator {
         broadcastManager.broadcastASRecordToReplicas(messageID, primaryPID, record, event);
     }
 
-    // TODO: go over this and make sure the logic is tight. I think some of it will have to go in AddrServerReadDispatcher
     /**
      * Handles the synchronization process for a REPLICA that already has an identity.
      * This ensures all other Replicas update their view of this peer's socket/state.
@@ -417,6 +418,51 @@ public class RegistrationCoordinator {
         }
     }
 
+    /**
+     * Handles the synchronization process for a REPLICA that already has an identity.
+     * This ensures all other Replicas update their view of this peer's socket/state.
+     */
+    public void handleSynchronization(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg, String role) {
+        boolean isValidIdentity = false;
+        ServerRecord record = null;
+        if (role.equals(Roles.CHATSERVER)) {
+            record = msg.safeCastPayload(ChatServerRecord.class);
+            isValidIdentity = this.chatServerRegistry.validateChatServerIdentity((ChatServerRecord) record);
+        }
+        else {
+            record = msg.safeCastPayload(AddrServerRecord.class);
+            isValidIdentity = this.addrServerRegistry.validateReplicaIdentity((AddrServerRecord) record);
+        }
+
+        Long pid = record.getPID();
+        // Check to see if the process attempting to synchronize is registered (internal record matches the received record).
+        if (!isValidIdentity) {
+            System.err.printf("[%tT] [SYNCHRONIZE ERROR] PID %d mismatch detected.%n", java.time.LocalTime.now(), pid);
+            // TODO: tell the contacting REPLICA to delete it's internal records and reconnect with a REGISTER message.
+            this.server.getCleanupManager().cleanupPersistentConnectionNIO(nioChannel, false);
+        }
+        else { // The record received matches the internal record.
+            // We must now link the NIOChannel with this REPLICA by setting its PID.
+            nioChannel.setServerPID(pid);
+            Long primaryPID = server.getConfig().getPID();
+            AckMessage<Long> ackMessage;
+            if (role.equals(Roles.CHATSERVER)) {
+                chatServerManager.getChannels().put(channel, nioChannel);
+                ackMessage = AckMessage.chatServerRegistered(primaryPID, pid);
+            }
+            else {
+                // Add the channel to PeerManager since it is a persistent connection.
+                peerManager.getPeerChannels().put(channel, nioChannel);
+                ackMessage = AckMessage.replicaRegistered(primaryPID, pid);
+            }
+            try {
+                System.out.printf("Synchronization for PID %d confirmed, sending ACK.%n", pid);
+                nioChannel.sendMessage(ackMessage.toJson());
+            } catch (IOException e) {
+                cleanupManager.cleanupPersistentConnection(channel, true);
+            }
+        }
+    }
 
 
 }
