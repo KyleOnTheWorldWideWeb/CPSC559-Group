@@ -51,8 +51,8 @@ services:
     build:
       dockerfile: Dockerfile.chatserver
     ports:
-      - 30100-3200:2424
-      - 30201-3300:2425
+      - 30100-30200:2424
+      - 30201-30300:2425
     environment:
       - CS_CLIENT_PORT=${CS_CLIENT_PORT:-2424}
       - CS_PEER_PORT=${CS_PEER_PORT:-2425}

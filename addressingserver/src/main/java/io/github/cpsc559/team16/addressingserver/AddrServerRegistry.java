@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
+import io.github.cpsc559.team16.common.logging.ServerDebugLogger;
 
 public class AddrServerRegistry {
 
@@ -54,7 +55,7 @@ public class AddrServerRegistry {
      */
     public void putAddrServerRecord(Long id, AddrServerRecord record) {
         addrServerRecords.put(id, record);
-        debugPrintServer(record);
+        ServerDebugLogger.printAddrServerAction("Inserting", record);
     }
 
     /**
@@ -71,12 +72,11 @@ public class AddrServerRegistry {
         }
         AddrServerRecord existing = addrServerRecords.get(id);
         if (existing != null) {
-            debugPrintUpdateServerPID(record);
+            ServerDebugLogger.printAddrServerAction("Updating", record);
         } else {
-            debugPrintInsertServerPID(record);
+            ServerDebugLogger.printAddrServerAction("Inserting", record);
         }
         addrServerRecords.put(id, record);
-        debugPrintServer(record);
     }
 
     /**
@@ -234,40 +234,54 @@ public class AddrServerRegistry {
         return null;
     }
 
+//    /**
+//     * Logs the details of this AddrServerRecord object to the console for debugging purposes.
+//     */
+//    public void debugPrintServer(AddrServerRecord s) {
+//        System.out.println("---------- AddrServerRecord Record -----------");
+//        System.out.printf("Network PID : %s%n", s.getPID());
+//        System.out.printf("Host Address : %s%n", s.getHostAddress());
+//        System.out.printf("Client Port  : %d%n", s.getClientPort());
+//        System.out.printf("Peer Port    : %d%n", s.getPeerPort());
+//        System.out.printf("ChatServer Port : %d%n", s.getChatServerPort());
+//        System.out.printf("Role : %s%n", s.getRole());
+//        System.out.println("---------------------------------------------------");
+//    }
+
+//    public void debugPrintAllServers() {
+//        System.out.println("|------------- Currently Registered AddressingServer's -------------|");
+//        for (AddrServerRecord s : this.addrServerRecords.values()) {
+//            debugPrintServer(s);
+//        }
+//        System.out.println("|--------------------------------------------------------------------|");
+//    }
+
+
     /**
-     * Logs the details of this AddrServerRecord object to the console for debugging purposes.
+     * Triggers a detailed diagnostic print of all currently registered Addressing Servers.
+     * <p>
+     * This method extracts the underlying {@link AddrServerRecord} collection and
+     * delegates the formatting and I/O operations to the {@link ServerDebugLogger}.
+     * Use this primarily for verifying network topology and role assignments (Primary/Backup)
+     * during failover events.
+     * </p>
      */
-    public void debugPrintServer(AddrServerRecord s) {
-        System.out.println("---------- AddrServerRecord Record -----------");
-        System.out.printf("Network PID : %s%n", s.getPID());
-        System.out.printf("Host Address : %s%n", s.getHostAddress());
-        System.out.printf("Client Port  : %d%n", s.getClientPort());
-        System.out.printf("Peer Port    : %d%n", s.getPeerPort());
-        System.out.printf("ChatServer Port : %d%n", s.getChatServerPort());
-        System.out.printf("Role : %s%n", s.getRole());
-        System.out.println("---------------------------------------------------");
-    }
-
     public void debugPrintAllServers() {
-        System.out.println("|------------- Currently Registered AddressingServer's -------------|");
-        for (AddrServerRecord s : this.addrServerRecords.values()) {
-            debugPrintServer(s);
-        }
-        System.out.println("|--------------------------------------------------------------------|");
+        ServerDebugLogger.printAllAddrServers(this.getRecords().values());
     }
 
-    public void debugPrintInsertServerPID(AddrServerRecord s) {
-        System.out.println("\t------ Inserting AddrServer Record -------");
-        System.out.printf("\tProcess ID : %s%n", s.getPID());
-        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
-        System.out.println("\t------------------------------------------");
-    }
-
-    public void debugPrintUpdateServerPID(AddrServerRecord s) {
-        System.out.println("\t------ Updating AddrServer Record -------");
-        System.out.printf("\tProcess ID : %s%n", s.getPID());
-        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
-        System.out.println("\t------------------------------------------");
-    }
+//    public void debugPrintInsertServerPID(AddrServerRecord s) {
+//        System.out.println("\t------ Inserting AddrServer Record -------");
+//        System.out.printf("\tProcess ID : %s%n", s.getPID());
+//        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
+//        System.out.println("\t------------------------------------------");
+//    }
+//
+//    public void debugPrintUpdateServerPID(AddrServerRecord s) {
+//        System.out.println("\t------ Updating AddrServer Record -------");
+//        System.out.printf("\tProcess ID : %s%n", s.getPID());
+//        System.out.printf("\tHost Address : %s%n", s.getHostAddress());
+//        System.out.println("\t------------------------------------------");
+//    }
 
 }

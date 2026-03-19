@@ -587,15 +587,15 @@ public class AddrServerNetworkManager {
                                     cleanupManager.getPeerManager().getChannels().put(channel, nioChannel);
                                 }
 
-
                                 try {
                                     // If synchronization fails, the persistent connection that was just opened is closed.
-                                    // The persistent connection does not contain a unique PID until registration occurs below.
+                                    // The persistent connection (NIO socket) does not contain a unique PID until
+                                    // it is assigned during registration or synchronization.
                                     if (message.getMsgType().equals(MessageTypes.SYNCHRONIZE)) {
                                         if (senderRole.equals(Roles.CHATSERVER)) {
-                                            readDispatcher.handleSynchronization(channel, nioChannel, message, Roles.CHATSERVER);
+                                            readDispatcher.handleSynchronizationRequest(channel, nioChannel, message, Roles.CHATSERVER);
                                         } else if (senderRole.equals(Roles.REPLICA)) {
-                                            readDispatcher.handleSynchronization(channel, nioChannel, message, Roles.REPLICA);
+                                            readDispatcher.handleSynchronizationRequest(channel, nioChannel, message, Roles.REPLICA);
                                         }
                                         else { System.err.println("Received SYNCHRONIZE request from a process with an unrecognized role."); }
                                     }

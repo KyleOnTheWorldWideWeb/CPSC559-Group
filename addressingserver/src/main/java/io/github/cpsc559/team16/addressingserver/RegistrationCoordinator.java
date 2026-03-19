@@ -419,10 +419,30 @@ public class RegistrationCoordinator {
     }
 
     /**
-     * Handles the synchronization process for a REPLICA that already has an identity.
-     * This ensures all other Replicas update their view of this peer's socket/state.
+     * Executes the synchronization handshake for a server that already possesses a network identity.
+     * <p>
+     * This method facilitates "Self-Healing" of the distributed system by allowing a previously
+     * registered process to re-establish its connection (e.g. after a failover or network flicker).
+     * It performs the following critical steps:
+     * <ul>
+     * <li><b>Validation:</b> Verifies the provided {@link ServerRecord} against the local registry
+     * to ensure the PID and topology match the known state.</li>
+     * <li><b>Identity Binding:</b> Associates the new {@link NIOMessageChannel} with the
+     * remote process's PID to enable stateful tracking.</li>
+     * <li><b>Promotion:</b> Migrates the channel into the active connection map (PeerManager
+     * or ChatServerManager) based on the specific server role.</li>
+     * <li><b>Acknowledgment:</b> Issues a synchronization ACK to the remote process to
+     * confirm the identity has been successfully re-bound.</li>
+     * </ul>
+     * </p>
+     *
+     * @param channel    the raw {@link SocketChannel} from the remote process.
+     * @param nioChannel the {@link NIOMessageChannel} being promoted to an active state.
+     * @param msg        the base message containing the {@link ServerRecord} payload.
+     * @param role       the architectural role of the sender, determining which registry and
+     * manager are used for validation and mapping.
      */
-    public void handleSynchronization(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg, String role) {
+    public void synchronizeServer(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg, String role) {
         boolean isValidIdentity = false;
         ServerRecord record = null;
         if (role.equals(Roles.CHATSERVER)) {
@@ -438,25 +458,26 @@ public class RegistrationCoordinator {
         // Check to see if the process attempting to synchronize is registered (internal record matches the received record).
         if (!isValidIdentity) {
             System.err.printf("[%tT] [SYNCHRONIZE ERROR] PID %d mismatch detected.%n", java.time.LocalTime.now(), pid);
-            // TODO: tell the contacting REPLICA to delete it's internal records and reconnect with a REGISTER message.
+            // TODO: tell the remote process to delete it's internal records and reconnect with a REGISTER message.
             this.server.getCleanupManager().cleanupPersistentConnectionNIO(nioChannel, false);
         }
         else { // The record received matches the internal record.
-            // We must now link the NIOChannel with this REPLICA by setting its PID.
+            // We must now associate this NIOChannel with the remote process that is synchronizing.
             nioChannel.setServerPID(pid);
             Long primaryPID = server.getConfig().getPID();
             AckMessage<Long> ackMessage;
             if (role.equals(Roles.CHATSERVER)) {
                 chatServerManager.getChannels().put(channel, nioChannel);
                 ackMessage = AckMessage.chatServerRegistered(primaryPID, pid);
+                System.out.printf("Synchronization with REPLICA (PID %d) confirmed, sending ACK.%n", pid);
             }
             else {
                 // Add the channel to PeerManager since it is a persistent connection.
                 peerManager.getPeerChannels().put(channel, nioChannel);
                 ackMessage = AckMessage.replicaRegistered(primaryPID, pid);
+                System.out.printf("Synchronization with ChatServer (PID %d) confirmed, sending ACK.%n", pid);
             }
             try {
-                System.out.printf("Synchronization for PID %d confirmed, sending ACK.%n", pid);
                 nioChannel.sendMessage(ackMessage.toJson());
             } catch (IOException e) {
                 cleanupManager.cleanupPersistentConnection(channel, true);

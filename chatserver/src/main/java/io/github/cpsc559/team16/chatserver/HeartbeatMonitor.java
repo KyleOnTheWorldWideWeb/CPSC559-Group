@@ -3,7 +3,7 @@ package io.github.cpsc559.team16.chatserver;
 import java.nio.channels.SelectionKey;
 import java.util.Map;
 
-import static io.github.cpsc559.team16.common.utilities.DebugLogger.*;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 /**
  * Monitors the heartbeat of connected peer servers and clients, ensuring that
@@ -53,9 +53,9 @@ public class HeartbeatMonitor implements Runnable {
     private final long monitorStartTime = System.currentTimeMillis();
     private static final long STARTUP_GRACE_PERIOD = 20_000; // 20 seconds
 
-    private final Map<Integer, ConnectionContext> peerMap;
+    private final Map<Long, ConnectionContext> peerMap;
 
-    public HeartbeatMonitor(Map<Integer, ConnectionContext> peerMap) {
+    public HeartbeatMonitor(Map<Long, ConnectionContext> peerMap) {
         this.peerMap = peerMap;
     }
 
@@ -81,11 +81,11 @@ public class HeartbeatMonitor implements Runnable {
 
             long now = System.currentTimeMillis();
 
-            for (Map.Entry<Integer, ConnectionContext> entry : peerMap.entrySet()) {
-                int peerID = entry.getKey();
+            for (Map.Entry<Long, ConnectionContext> entry : peerMap.entrySet()) {
+                long peerID = entry.getKey();
                 ConnectionContext ctx = entry.getValue();
 
-                if (peerID == -1 || ctx.peerID == -1) {
+                if (peerID == -1 || ctx.peerPID == -1) {
                     debug(3, "Skipping unidentified peer connection...");
                     continue;
                 }

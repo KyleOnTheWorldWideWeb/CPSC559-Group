@@ -1,4 +1,4 @@
-package io.github.cpsc559.team16.common.utilities;
+package io.github.cpsc559.team16.common.logging;
 
 /**
  * Utility class for controlling verbosity of server logs.

@@ -86,14 +86,13 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      *
      * @param clientPort       The port used for client communication.
      * @param peerPort         The port used for peer-to-peer chat server communication.
-     * @param addrServerPort   The port used to connect to the AddressingServer.
      * @param maxClientCount   The server's maximum client capacity.
      * @return A {@code RegisterMessage} containing a {@code ChatServerRecord} payload.
      */
-    public static RegisterMessage<ChatServerRecord> fromChatServer(String hostAddress, int clientPort, int peerPort, int addrServerPort,
+    public static RegisterMessage<ChatServerRecord> fromChatServer(String hostAddress, int clientPort, int peerPort,
                                                                    int maxClientCount) {
         ChatServerRecord record = new ChatServerRecord(
-                DEFAULT_PID, hostAddress, clientPort, peerPort, addrServerPort, maxClientCount);
+                DEFAULT_PID, hostAddress, clientPort, peerPort, maxClientCount);
         return new RegisterMessage<>(ObjectTypes.CHAT_SERVER_RECORD, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
 
@@ -117,14 +116,13 @@ public class RegisterMessage<T> extends BaseAddrServerMessage<T> {
      * @param hostAddress      The network (IP) address of the address server.
      * @param clientPort       The port used for client communication.
      * @param peerPort         The port used for peer-to-peer chat server communication.
-     * @param addrServerPort   The port used to connect to the AddressingServer.
      * @param maxClientCount   The server's maximum client capacity.
      * @return A {@code RegisterMessage} containing a {@code ChatServerRecord} payload.
      */
-    public static RegisterMessage<ChatServerRecord> fromChatServerWithAddress(String hostAddress, int clientPort, int peerPort, int addrServerPort,
+    public static RegisterMessage<ChatServerRecord> fromChatServerWithAddress(String hostAddress, int clientPort, int peerPort,
                                                                    int maxClientCount) {
         ChatServerRecord record = new ChatServerRecord(
-                DEFAULT_PID, hostAddress, clientPort, peerPort, addrServerPort, maxClientCount);
+                DEFAULT_PID, hostAddress, clientPort, peerPort, maxClientCount);
         return new RegisterMessage<>(ObjectTypes.CHAT_SERVER_RECORD, Roles.CHATSERVER, Roles.PRIMARY, record);
     }
 

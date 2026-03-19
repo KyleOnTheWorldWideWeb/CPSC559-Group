@@ -1,7 +1,6 @@
 package io.github.cpsc559.team16.addressingserver;
 
 import java.io.IOException;
-import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -9,6 +8,7 @@ import java.util.concurrent.Executors;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.logging.ServerDebugLogger;
 import io.github.cpsc559.team16.common.messaging.*;
 
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
@@ -239,7 +239,7 @@ public class AddrServerReadDispatcher {
                     this.broadcastManager.broadcastChatServerRecord(pid, updatedRecord); // Broadcast the updated
                                                                                          // (client count) record to all
                                                                                          // servers.
-                    this.server.getChatServerRegistry().debugPrintServer(updatedRecord);
+                    ServerDebugLogger.printChatServer(updatedRecord);
                 } else {
                     System.out.println("All ChatServer's are either FULL or INACTIVE");
                 }
@@ -590,13 +590,20 @@ public class AddrServerReadDispatcher {
 
     }
 
-    public void handleSynchronization(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg, String role) {
-        if (role.equals(Roles.CHATSERVER)) {
-            this.server.getRegistrationCoordinator().handleSynchronization(channel, nioChannel, msg, role);
-        }
-        else {
-            this.server.getRegistrationCoordinator().handleReplicaSynchronization(channel, nioChannel, msg);
-        }
+    /**
+     * Routes a synchronization request to the centralized RegistrationCoordinator.
+     * <p>
+     * This method acts as a thin delegation layer, decoupling the network event
+     * dispatching from the complex business logic of server identity validation.
+     * </p>
+     *
+     * @param channel    the raw socket channel of the connecting process
+     * @param nioChannel the message-oriented wrapper for the socket
+     * @param msg        the incoming synchronization message
+     * @param role       the claimed role of the sender (e.g., CHATSERVER or REPLICA)
+     */
+    public void handleSynchronizationRequest(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> msg, String role) {
+        this.server.getRegistrationCoordinator().synchronizeServer(channel, nioChannel, msg, role);
     }
 
 

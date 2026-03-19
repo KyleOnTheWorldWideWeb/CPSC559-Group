@@ -15,11 +15,8 @@ import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.messaging.MessageTypes;
-import io.github.cpsc559.team16.common.messaging.ServerFailureMessage;
-import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.messaging.ObjectTypes;
-
-import static io.github.cpsc559.team16.chatserver.ChatServer.processSingleChatServerRecord;
+import io.github.cpsc559.team16.common.dto.ConnectionType;
 
 /**
  * Handles all incoming messages from the Addressing Server.
@@ -149,7 +146,7 @@ class AddressingServerHandler implements ConnectionHandler {
             int newID = Integer.parseInt(payload);
 
             // Set ID first
-            ChatServer.setID(newID);
+            ChatServer.setPID(newID);
 
             String CHATLOG_FILE = "src/main/java/com/Logs/chatlog_" + newID + ".log";
             String INDEX_FILE = "src/main/java/com/Logs/index_" + newID + ".json";
@@ -285,8 +282,8 @@ class AddressingServerHandler implements ConnectionHandler {
                         continue;
 
                     ConnectionContext peerCtx = (ConnectionContext) peerKey.attachment();
-                    if (peerCtx != null && peerCtx.type == ChatServer.ConnectionType.SERVER
-                            && peerCtx.peerID == failedPeerId) {
+                    if (peerCtx != null && peerCtx.type == ConnectionType.SERVER
+                            && peerCtx.peerPID == failedPeerId) {
                         debug(DEBUG_NORMAL, "[ADDR_SERVER] Closing connection to failed peer: " + failedPeerId);
                         try {
                             peerKey.cancel();
@@ -319,7 +316,7 @@ class AddressingServerHandler implements ConnectionHandler {
      *
      * @param crashedPeerId the ID of the peer that has crashed
      */
-    public void notifyPeerCrash(int crashedPeerId) {
+    public void notifyPeerCrash(long crashedPeerId) {
         try {
             // SAFETY CHECK: Do not notify for PID -1.
             // A PID of -1 means the connection failed before the handshake finished.
@@ -334,7 +331,7 @@ class AddressingServerHandler implements ConnectionHandler {
             // Using the common utility classes from your imports
             io.github.cpsc559.team16.common.messaging.ServerFailureMessage<Long> crashMessage =
                     io.github.cpsc559.team16.common.messaging.ServerFailureMessage.chatServerFailed(
-                            ChatServer.getID(),
+                            ChatServer.getPID(),
                             io.github.cpsc559.team16.common.messaging.Roles.CHATSERVER,
                             io.github.cpsc559.team16.common.messaging.Roles.PRIMARY,
                             (long) crashedPeerId
@@ -354,7 +351,7 @@ class AddressingServerHandler implements ConnectionHandler {
                 if (attachment instanceof ConnectionContext) {
                     ConnectionContext ctx = (ConnectionContext) attachment;
 
-                    if (ctx.type == ChatServer.ConnectionType.ADDRESSING_SERVER) {
+                    if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
                         // Queue the message to be sent via the non-blocking write logic
                         synchronized (ctx.writeQueue) {
                             ctx.writeQueue.add(java.nio.ByteBuffer.wrap(

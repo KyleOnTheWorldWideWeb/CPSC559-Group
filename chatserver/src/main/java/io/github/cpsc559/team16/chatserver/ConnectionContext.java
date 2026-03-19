@@ -70,7 +70,7 @@ public class ConnectionContext {
     public Queue<ByteBuffer> writeQueue = new LinkedList<>();
     public StringBuilder partialData = new StringBuilder();
 
-    public int peerID = -1;
+    public long peerPID = -1;
     public String username;
 
     public String host; // IP or hostname

@@ -17,7 +17,7 @@ import io.github.cpsc559.team16.common.utilities.ChatLog;
 import io.github.cpsc559.team16.common.utilities.ChatLogUpdate;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 import io.github.cpsc559.team16.common.utilities.ServerServerMessage;
-import static io.github.cpsc559.team16.common.utilities.DebugLogger.*;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 /**
  * Handles incoming messages specifically for interactions between server
  * instances in the chat system.
@@ -169,12 +169,12 @@ class ServerHandler implements ConnectionHandler {
                 if (msg.getCommand().equals("REQUEST_CHATLOG")) {
 
                     try {
-                        int senderPid = Integer.parseInt(msg.getSender());
-                        ctx.peerID = senderPid;
+                        long senderPID = Integer.parseInt(msg.getSender());
+                        ctx.peerPID = senderPID;
 
-                        if (!ChatServer.getConnectedPeers().containsKey(senderPid)) {
-                            ChatServer.getConnectedPeers().put(senderPid, ctx);
-                            debug(DEBUG_BASIC, "[PEER] Added incoming peer PID=" + senderPid + " to connectedPeers");
+                        if (!ChatServer.getConnectedPeers().containsKey(senderPID)) {
+                            ChatServer.getConnectedPeers().put(senderPID, ctx);
+                            debug(DEBUG_BASIC, "[PEER] Added incoming peer PID=" + senderPID + " to connectedPeers");
                         }
 
                     } catch (NumberFormatException e) {
@@ -188,12 +188,12 @@ class ServerHandler implements ConnectionHandler {
 
                 } else if (msg.getCommand().equals("RESPONSE_CHATLOG")) {
 
-                    int senderPid = Integer.parseInt(msg.getSender());
-                    ctx.peerID = senderPid;
+                    long senderPID = Integer.parseInt(msg.getSender());
+                    ctx.peerPID = senderPID;
 
-                    if (!ChatServer.getConnectedPeers().containsKey(senderPid)) {
-                        ChatServer.getConnectedPeers().put(senderPid, ctx);
-                        debug(DEBUG_BASIC, "[PEER] Added incoming peer PID=" + senderPid + " to connectedPeers");
+                    if (!ChatServer.getConnectedPeers().containsKey(senderPID)) {
+                        ChatServer.getConnectedPeers().put(senderPID, ctx);
+                        debug(DEBUG_BASIC, "[PEER] Added incoming peer PID=" + senderPID + " to connectedPeers");
                     }
                     mergeChatlog(msg);
                     System.out.println("merged chatlog with peer: " + msg.getSender());
@@ -201,7 +201,7 @@ class ServerHandler implements ConnectionHandler {
                 } else if (msg.getCommand().equals("PING")) {
                     debug(DEBUG_NORMAL, "Received PING from " + msg.getSender());
                     ServerServerMessage pong = new ServerServerMessage(
-                            String.valueOf(ChatServer.getID()),
+                            String.valueOf(ChatServer.getPID()),
                             msg.getSender(),
                             "PONG",
                             "");
@@ -354,7 +354,7 @@ class ServerHandler implements ConnectionHandler {
         }
 
         return new ServerServerMessage(
-                String.valueOf(ChatServer.getID()), // sender PID
+                String.valueOf(ChatServer.getPID()), // sender PID
                 receiverPid, // receiver PID
                 "RESPONSE_CHATLOG", // command
                 logContents.toString() // chat log as content
