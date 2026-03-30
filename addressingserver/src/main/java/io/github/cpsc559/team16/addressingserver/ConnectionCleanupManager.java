@@ -364,7 +364,7 @@ public class ConnectionCleanupManager {
      * </p>
      *
      */
-    private void broadcastFailureToReplicas(BaseAddrServerMessage<?> message, Long senderPID, Long failedPID,
+    public void broadcastFailureToReplicas(BaseAddrServerMessage<?> message, Long senderPID, Long failedPID,
             String failedServerRole) {
         // Serialize the message and return if a failure occurs. This would only happen
         // because of a
@@ -423,7 +423,7 @@ public class ConnectionCleanupManager {
      *                         {@link Roles#CHATSERVER} or an addressing server
      *                         role)
      */
-    private void broadcastFailureToChatServers(BaseAddrServerMessage<?> message, Long senderPID, Long failedPID,
+    public void broadcastFailureToChatServers(BaseAddrServerMessage<?> message, Long senderPID, Long failedPID,
             String failedServerRole) {
         // Create the message with the proper {@code ObjectType} so the receiver knows
         // which kind of record/connection to remove.
@@ -485,7 +485,7 @@ public class ConnectionCleanupManager {
      *                         {@link Roles#CHATSERVER} or an addressing server
      *                         role)
      */
-    private void broadcastServerFailure(Long senderPID, Long failedPID, String failedServerRole) {
+    public void broadcastServerFailure(Long senderPID, Long failedPID, String failedServerRole) {
         ServerFailureMessage<Long> message;
         if (failedServerRole.equals(Roles.CHATSERVER)) {
             message = ServerFailureMessage.chatServerFailed(senderPID, Roles.PRIMARY, failedServerRole, failedPID);

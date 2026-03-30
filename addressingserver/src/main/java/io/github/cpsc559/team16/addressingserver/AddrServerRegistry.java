@@ -162,7 +162,6 @@ public class AddrServerRegistry {
     public void purgeStaleRecords(Set<Long> activePids) {
         int initialSize = addrServerRecords.size();
         addrServerRecords.keySet().removeIf(pid -> !activePids.contains(pid));
-
         int removedRecordCount = initialSize - addrServerRecords.size();
         if (removedRecordCount  > 0) {
             debug(DEBUG_NORMAL, "Purged " + removedRecordCount  + " stale Addressing Server records from the peer registry.");

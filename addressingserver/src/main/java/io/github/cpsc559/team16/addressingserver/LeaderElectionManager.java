@@ -384,7 +384,43 @@ public class LeaderElectionManager {
                 System.out.println("LEM: Sent leader message to peer with PID " + peerPID);
             }
         }
+
+        new java.util.Timer().schedule(
+                new java.util.TimerTask() {
+                    @Override
+                    public void run() {
+                        performRegistryAudit();
+                    }
+                },
+                10000 // 10-second delay to accommodate network process synchronization requests.
+        );
     }
+
+    /**
+     * Initiates a comprehensive audit of all registries within the Addressing Server.
+     * <p>
+     * This method acts as the "cleanup" phase of a successful leader election.
+     * It triggers a reconciliation of both the internal Addressing Server (Peer)
+     * registry and the Chat Server registry. Any stale or "ghost" records found
+     * during this process are purged and their failure is broadcasted to the
+     * rest of the cluster.
+     * </p>
+     * <p>
+     * After an 8-second 'settle' period following an election, the new leader process
+     * used this method to ensure its internal records match the physical network state.
+     * It purges any nodes that exist in the database but failed to establish
+     * a TCP connection during the transition.
+     * </p>
+     */
+    public void performRegistryAudit() {
+        Long myPid = this.config.getPID();
+        ConnectionCleanupManager cleanupMgr = this.server.getCleanupManager();
+
+        // Now both follow the same pattern
+        this.server.getPeerManager().auditRegistryConnections(myPid, cleanupMgr);
+        this.server.getChatServerManager().auditRegistryConnections(myPid, cleanupMgr);
+    }
+
 
     /**
      * <p>

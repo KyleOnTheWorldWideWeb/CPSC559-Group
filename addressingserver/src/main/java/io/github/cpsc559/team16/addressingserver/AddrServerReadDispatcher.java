@@ -435,6 +435,7 @@ public class AddrServerReadDispatcher {
                     case (RequestObjectTypes.ALL_SERVER_RECORDS) -> {
                         executorService.submit(() -> {
                             try {
+                                this.server.getLeaderElectionManager().performRegistryAudit();
                                 broadcastManager.sendAllRecordsToReplica(this.getPID(), nioChannel,
                                         this.server.getChatServerRegistry().getRecords(),
                                         this.server.getAddrServerRegistry().getRecords());
@@ -448,6 +449,7 @@ public class AddrServerReadDispatcher {
                     case (RequestObjectTypes.CHAT_SERVER_RECORDS) -> {
                         executorService.submit(() -> {
                             try {
+                                chatServerManager.auditRegistryConnections(this.getPID(), cleanupManager);
                                 broadcastManager.sendAllChatServerRecordsToReplica(this.getPID(), nioChannel,
                                         this.server.getChatServerRegistry().getRecords());
                             } catch (IOException e) {
@@ -460,6 +462,7 @@ public class AddrServerReadDispatcher {
                     case (RequestObjectTypes.ADDR_SERVER_RECORDS) -> {
                         executorService.submit(() -> {
                             try {
+                                peerManager.auditRegistryConnections(this.getPID(), cleanupManager);
                                 broadcastManager.sendAllAddrServerRecordsToReplica(this.getPID(), nioChannel,
                                         this.server.getAddrServerRegistry().getRecords());
                             } catch (IOException e) {

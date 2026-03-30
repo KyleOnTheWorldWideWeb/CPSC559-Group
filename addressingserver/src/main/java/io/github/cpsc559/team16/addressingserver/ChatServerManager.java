@@ -3,11 +3,15 @@ package io.github.cpsc559.team16.addressingserver;
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.logging.ServerDebugLogger;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
+import io.github.cpsc559.team16.common.messaging.Roles;
+import io.github.cpsc559.team16.common.messaging.ServerFailureMessage;
 import io.github.cpsc559.team16.common.messaging.UpdateMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
@@ -121,6 +125,55 @@ public class ChatServerManager {
         return this.registry.removeRecordByKey(failedPID); // Channel did not exist, try and remove record anyways.
     }
 
+    /**
+     * Synchronizes the ChatServer registry with the current network state by identifying
+     * and removing "ghost" records.
+     * <p>
+     * A ghost record occurs when a ChatServer crashes simultaneously with the Primary
+     * Addressing Server. Since the record exists in the replicated registry but the
+     * physical TCP connection is gone, this method performs a proactive reconciliation.
+     * </p>
+     * * <p>The audit follows a three-stage process:</p>
+     * <ul>
+     * <li><b>Stage 1:</b> Collects PIDs from all active {@code NIOMessageChannel} connections.</li>
+     * <li><b>Stage 2:</b> Filters the registry to identify PIDs that exist in the records
+     * but lack an active connection.</li>
+     * <li><b>Stage 3:</b> Triggers a formal system-wide failure broadcast for each ghost
+     * and purges the stale record from the local registry.</li>
+     * </ul>
+     *
+     * @param myPid      The PID of the current server (the new Primary) performing the audit.
+     * @param cleanupManager The manager used to broadcast failure messages to the rest of the network.
+     */
+    public void auditRegistryConnections(Long myPid, ConnectionCleanupManager cleanupManager) {
+        // Stage 1: Create a set containing the PIDs of all ChatServers who have active connections to the PRIMARY.
+        Set<Long> connectedPids = chatServerChannels.values().stream()
+                .map(NIOMessageChannel::getServerPID)
+                .collect(Collectors.toSet());
+
+        // Add my (the PRIMARY addressing server) PID to ensure my record is not tagged for removal.
+        connectedPids.add(myPid);
+
+        // Stage 2: Identify any "Ghosts" (ChatServer processes who are in the registry but NOT in active connections)
+        Set<Long> failedPids = this.registry.getRecords().keySet().stream()
+                .filter(pid -> !connectedPids.contains(pid))  // if pid not in connectedPids, then collect the pid
+                .collect(Collectors.toSet());
+
+        if (failedPids.isEmpty()) {
+            debug(DEBUG_DETAILED, "ChatServer Registry audit complete: No stale records found.");
+            return;
+        }
+
+        debug(DEBUG_BASIC, "[ChatServerManager] An audit of the ChatServerRegistry detected ghost records. Triggering failure broadcast.");
+
+        // Stage 3: Remove all failed ChatServer processes from the registry and broadcast their failure
+        for (Long failedPid : failedPids) {
+            debug(DEBUG_BASIC, "Handling ghost record for PID: " + failedPid + ".");
+            ServerFailureMessage<Long> msg = ServerFailureMessage.chatServerFailed(myPid, Roles.PRIMARY, Roles.CHATSERVER, failedPid);
+            cleanupManager.broadcastFailureToReplicas(msg, myPid, failedPid, Roles.CHATSERVER);
+            this.registry.removeRecordByKey(failedPid);
+        }
+    }
 
     /**
      * Updates or inserts a record into the shared ChatServerRegistry registry.
