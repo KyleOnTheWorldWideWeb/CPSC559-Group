@@ -392,7 +392,7 @@ public class LeaderElectionManager {
                         performRegistryAudit();
                     }
                 },
-                10000 // 10-second delay to accommodate network process synchronization requests.
+                8000 // 8-second delay to accommodate network process synchronization requests.
         );
     }
 

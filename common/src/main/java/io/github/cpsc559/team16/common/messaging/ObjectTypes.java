@@ -130,7 +130,9 @@ public class ObjectTypes {
              * into the network - a unique process ID is generated, a record is created, stored and broadcasted to all other
              * servers in the network, and finally, a response is sent to the newly registered process with it's PID as the payload.
               */
-            case AckObjectTypes.REGISTERED -> Long.class;
+            case AckObjectTypes.REGISTERED,
+                 AckObjectTypes.SYNCHRONIZED-> Long.class;
+            
 
             case AckObjectTypes.REPLICATED -> Boolean.class;
 

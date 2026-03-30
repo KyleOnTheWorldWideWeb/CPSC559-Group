@@ -435,7 +435,19 @@ public class AddressingServer {
 
         this.replicaSyncCoordinator = new ReplicaSyncCoordinator(peerManager, broadcastManager, cleanupManager);
         this.cleanupManager.setReplicaCoordinator(replicaSyncCoordinator);
-        this.registrationCoordinator = new RegistrationCoordinator(this);
+
+        this.registrationCoordinator = new RegistrationCoordinator(
+                config,
+                peerManager,
+                chatServerManager,
+                broadcastManager,
+                replicaSyncCoordinator,
+                cleanupManager,
+                chatServerRegistry,
+                addrServerRegistry,
+                this::generatePID,
+                genMID
+        );
 
 
         try {

@@ -1,5 +1,7 @@
 package io.github.cpsc559.team16.common.messaging;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 
@@ -14,6 +16,19 @@ import io.github.cpsc559.team16.common.dto.AddrServerRecord;
  * @param <T> The type of the payload, such as {@code ChatServerRecord} or {@code AddrServerRecord}.
  */
 public class SyncRegisterMessage<T> extends BaseAddrServerMessage<T> {
+
+    // Jackson Constructor
+    @JsonCreator
+    public SyncRegisterMessage(
+            @JsonProperty("messageID") long messageID,
+            @JsonProperty("msgType") String msgType,
+            @JsonProperty("objectType") String objectType,
+            @JsonProperty("senderPID") long senderPID,
+            @JsonProperty("senderRole") String senderRole,
+            @JsonProperty("targetRole") String targetRole,
+            @JsonProperty("payload") T payload) {
+        super(messageID, msgType, objectType, senderPID, senderRole, targetRole, payload);
+    }
 
     /**
      * Constructs a "SYNCHRONIZE" message.

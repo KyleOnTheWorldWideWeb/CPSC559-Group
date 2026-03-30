@@ -45,15 +45,10 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
      * @param targetRole The role of the process being acknowledged (e.g., CHATSERVER, REPLICA).
      * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
-
-    public AckMessage(
-        @JsonProperty("objectType") String objectType, 
-        @JsonProperty("senderPID") long senderPID, 
-        @JsonProperty("senderRole") String senderRole, 
-        @JsonProperty("targetRole") String targetRole, 
-        @JsonProperty("payload") T payload) {
+    public AckMessage(String objectType, long senderPID, String senderRole, String targetRole, T payload) {
         super(0, MessageTypes.ACK, objectType, senderPID, senderRole, targetRole, payload);
     }
+
 
     /**
      * Constructs a new acknowledgment message.
@@ -65,14 +60,7 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
      * @param targetRole The role of the process being acknowledged (e.g. CHATSERVER, REPLICA).
      * @param payload A short payload string. It can be anything you want, but you'll have to handle it appropriately.
      */
-
-    public AckMessage(
-    @JsonProperty("messageID") long messageID,
-     @JsonProperty("objectType") String objectType,
-     @JsonProperty("senderPID") long senderPID,
-     @JsonProperty("senderRole") String senderRole,
-     @JsonProperty("targetRole") String targetRole,
-     @JsonProperty("payload") T payload ) {
+    public AckMessage(long messageID, String objectType, long senderPID, String senderRole, String targetRole, T payload) {
         super(messageID, MessageTypes.ACK, objectType, senderPID, senderRole, targetRole, payload);
     }
 
@@ -85,7 +73,6 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
      * @param targetRole The role of the intended recipient.
      * @return A basic {@code AckMessage} with payload "OK".
      */
-
     public static AckMessage<String> ok(long senderPID, String senderRole, String targetRole) {
         return new AckMessage<>(AckObjectTypes.OK, senderPID, senderRole, targetRole, "OK");
     }
@@ -179,11 +166,11 @@ public class AckMessage<T> extends BaseAddrServerMessage<T> {
     }
 
     public static AckMessage<Long> chatServerDeregistered(long senderPID, Long payload) {
-
-
         return new AckMessage<>(AckObjectTypes.DEREGISTERED, senderPID, Roles.PRIMARY, Roles.CHATSERVER, payload);
+    }
 
-
+    public static AckMessage<Long> chatServerSynchronized(long messageID, long senderPID, long targetPID) {
+        return new AckMessage<>(messageID, AckObjectTypes.SYNCHRONIZED, senderPID, Roles.PRIMARY, Roles.CHATSERVER, targetPID);
     }
 
 }

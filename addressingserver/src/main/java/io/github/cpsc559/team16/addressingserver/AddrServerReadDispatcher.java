@@ -9,6 +9,7 @@ import java.util.concurrent.Executors;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.logging.DebugLogger;
 import io.github.cpsc559.team16.common.logging.ServerDebugLogger;
 import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 import io.github.cpsc559.team16.common.messaging.*;
@@ -192,10 +193,14 @@ public class AddrServerReadDispatcher {
      * <NOTE> Can probably remove the channel parameters, but I'm keeping them for
      * now in case an ACK needs to trigger an action.</NOTE>
      */
+    /**
+     * <NOTE> Can probably remove the channel parameters, but I'm keeping them for
+     * now in case an ACK needs to trigger an action.</NOTE>
+     */
     private void handleAck(SocketChannel channel, NIOMessageChannel nioChannel, BaseAddrServerMessage<?> ackMessage) {
         switch (ackMessage.getObjectType()) {
             case AckObjectTypes.REGISTERED -> {
-                //System.out.println("ACK ENTERED");
+                //DebugLogger.debug(DebugLogger.DEBUG_DETAILED, "ACK ENTERED");
                 // This should ONLY ever be received by a REPLICA from the PRIMARY
                 // AddressingServer
                 // A Registration ACK is always sent with the pid as a string for the process as
@@ -207,18 +212,18 @@ public class AddrServerReadDispatcher {
                 // We didn't know the PRIMARY AddressingServer PID when making that initial
                 // connection -> Set it now
                 nioChannel.setServerPID(ackMessage.getSenderPID());
-                System.out.println("Registration ACK received. This process has been assigned PID #"
+                DebugLogger.debug(DebugLogger.DEBUG_NORMAL, "Registration ACK received. This process has been assigned PID #"
                         + server.getConfig().getPID());
             }
             case AckObjectTypes.REPLICATED -> {
-                System.out.println("Replicated ACK message received.");
+                DebugLogger.debug(DebugLogger.DEBUG_NORMAL, "Replicated ACK message received.");
                 handleReplicationAck(ackMessage);
             }
             case AckObjectTypes.SYNCHRONIZED -> {
-                System.out.println("Synchronized ACK message received; connected to PRIMARY.");
+                DebugLogger.debug(DebugLogger.DEBUG_NORMAL, "Synchronization ACK message received; connected to the new PRIMARY.");
             }
 
-            default -> System.err.println("Unrecognized ACK response: " + ackMessage.getObjectType());
+            default -> DebugLogger.debug(DebugLogger.DEBUG_BASIC, "Unrecognized ACK response: " + ackMessage.getObjectType());
         }
     }
 

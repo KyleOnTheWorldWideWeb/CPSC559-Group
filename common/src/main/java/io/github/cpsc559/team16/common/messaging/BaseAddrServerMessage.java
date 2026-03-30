@@ -1,5 +1,7 @@
 package io.github.cpsc559.team16.common.messaging;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -66,7 +68,7 @@ public class BaseAddrServerMessage<T> {
      * A message ID of 0L represents a message that was not created with a message ID.
      * </p>
      */
-    private long messageID;
+    private final long messageID;
 
     /**
      * Defines the type of action required for the message.
@@ -89,7 +91,7 @@ public class BaseAddrServerMessage<T> {
      * about the data being transmitted.
      * </p>
      */
-    private String msgType;
+    private final String msgType;
 
     /**
      * Defines the type (Class) of data contained within the message payload.
@@ -110,24 +112,21 @@ public class BaseAddrServerMessage<T> {
      * distinguishing between different types of data even within the same {@code msgType} category.
      * </p>
      */
-    private String objectType;
+    private final String objectType;
 
     /** The process ID (PID) of the sender of the message. */
-    private long senderPID;
+    private final long senderPID;
 
     /** The role of the sender in the distributed system (PRIMARY, REPLICA, CHATSERVER, CLIENT). */
-    private String senderRole;
+    private final String senderRole;
 
     /** The intended recipient role of the message (PRIMARY, REPLICA, CHATSERVER, CLIENT). */
-    private String targetRole;
+    private final String targetRole;
 
     /** The actual data being transmitted in the message. */
-    private T payload;
+    private final T payload;
 
-    /**
-     * Default constructor required for Jackson JSON serialization/deserialization.
-     */
-    public BaseAddrServerMessage() {}
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Constructs a new message with the provided parameters.
@@ -141,7 +140,15 @@ public class BaseAddrServerMessage<T> {
      * @param payload    The actual data being sent.
      *
      */
-    public BaseAddrServerMessage(long messageID, String msgType, String objectType, long senderPID, String senderRole, String targetRole, T payload) {
+    @JsonCreator
+    public BaseAddrServerMessage(
+            @JsonProperty("messageID") long messageID,
+            @JsonProperty("msgType") String msgType,
+            @JsonProperty("objectType") String objectType,
+            @JsonProperty("senderPID") long senderPID,
+            @JsonProperty("senderRole") String senderRole,
+            @JsonProperty("targetRole") String targetRole,
+            @JsonProperty("payload") T payload) {
         this.messageID = messageID;
         this.msgType = msgType;
         this.objectType = objectType;
@@ -151,6 +158,8 @@ public class BaseAddrServerMessage<T> {
         this.payload = payload;
     }
 
+
+    // Getters
     public long getMessageID() { return messageID; }
     public String getMsgType() { return msgType; }
     public String getObjectType() { return objectType; }
@@ -166,7 +175,7 @@ public class BaseAddrServerMessage<T> {
      * @throws JsonProcessingException If an error occurs during serialization.
      */
     public String toJson() throws JsonProcessingException {
-        return new ObjectMapper().writeValueAsString(this);
+        return objectMapper.writeValueAsString(this);
     }
 
 
@@ -179,7 +188,6 @@ public class BaseAddrServerMessage<T> {
      * @throws JsonProcessingException If an error occurs during deserialization.
      */
     public static <T> BaseAddrServerMessage<T> fromJson(String json, Class<T> payloadClass) throws JsonProcessingException {
-        ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.readValue(json, objectMapper.getTypeFactory().constructParametricType(BaseAddrServerMessage.class, payloadClass));
     }
 

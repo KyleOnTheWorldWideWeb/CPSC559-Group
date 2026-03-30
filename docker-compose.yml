@@ -7,9 +7,10 @@ services:
 
   # Service for the initial Primary Addressing Server
   addressingserver:
-    image: addressingserver:latest
+    image: addressing-server:dev
     profiles: [ "addressingserver", "main-single" ]
     build:
+      context: .
       dockerfile: Dockerfile.addressingserver
     restart: on-failure
     environment:
@@ -46,9 +47,10 @@ services:
     ports: !reset []
 
   chatserver:
-    image: chatserver:latest
+    image: chat-server:dev
     profiles: [ "chatserver" ]
     build:
+      context: .
       dockerfile: Dockerfile.chatserver
     ports:
       - 30100-30200:2424
@@ -63,9 +65,10 @@ services:
       - ./data:/shared:ro # read-only access for Chat Servers
 
   client:
-    image: client:latest
+    image: client:dev
     profiles: [ "client" ]
     build:
+      context: .
       dockerfile: Dockerfile.client
     ports:
       - "30301:30000"

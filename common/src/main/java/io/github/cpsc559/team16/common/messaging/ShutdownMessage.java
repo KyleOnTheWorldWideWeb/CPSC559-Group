@@ -1,6 +1,9 @@
 package io.github.cpsc559.team16.common.messaging;
 
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * A message instructing a remote process to exit and shutdown.
  * <p>
@@ -10,6 +13,19 @@ package io.github.cpsc559.team16.common.messaging;
  * </p>
  */
 public class ShutdownMessage extends BaseAddrServerMessage<Long> {
+
+    // Jackson Constructor
+    @JsonCreator
+    public ShutdownMessage(
+            @JsonProperty("messageID") long messageID,
+            @JsonProperty("msgType") String msgType,
+            @JsonProperty("objectType") String objectType,
+            @JsonProperty("senderPID") long senderPID,
+            @JsonProperty("senderRole") String senderRole,
+            @JsonProperty("targetRole") String targetRole,
+            @JsonProperty("payload") Long payload) {
+        super(messageID, msgType, objectType, senderPID, senderRole, targetRole, payload);
+    }
 
     private static final String OBJECT_TYPE = "Shutdown";
 
