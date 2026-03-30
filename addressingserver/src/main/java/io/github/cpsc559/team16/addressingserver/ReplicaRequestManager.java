@@ -166,6 +166,33 @@ public class ReplicaRequestManager {
         send(message);
     }
 
+    /**
+     * Broadcasts a request to the Primary Addressing Server to retrieve a complete
+     * collection of PIDs for all currently registered Addressing Servers (Peers).
+     * <p>
+     * This is typically used to synchronize local state and identify stale
+     * Addressing Server records that are no longer active in the network.
+     * </p>
+     */
+    public void requestAllAddrServerPids() {
+        RequestMessage<Void> message = RequestMessage.requestAllPeerPids(genMID.nextID(), genMID.getPID());
+        send(message);
+    }
+
+    /**
+     * Broadcasts a request to the Primary Addressing Server to retrieve a complete
+     * collection of PIDs for all currently registered Chat Servers.
+     * <p>
+     * This allows the local server to verify its peer registry against the Primary's
+     * "source of truth" and purge any records for Chat Servers that have
+     * disconnected without a proper shutdown.
+     * </p>
+     */
+    public void requestAllChatServerPids() {
+        RequestMessage<Void> message = RequestMessage.requestAllChatServerPids(genMID.nextID(), genMID.getPID());
+        send(message);
+    }
+
 
     /**
      * Increments the sync request counter and determines whether to trigger a full sync.

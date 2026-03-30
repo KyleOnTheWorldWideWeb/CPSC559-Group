@@ -81,5 +81,12 @@ public class RequestMessage<T> extends BaseAddrServerMessage<T> {
         return new RequestMessage<>(messageID, RequestObjectTypes.ALL_SERVER_RECORDS, senderPID, Roles.REPLICA, Roles.PRIMARY, null);
     }
 
+    public static RequestMessage<Void> requestAllPeerPids(long messageID, long senderPID) {
+        return new RequestMessage<>(messageID, RequestObjectTypes.ALL_PEER_PIDS, senderPID, Roles.REPLICA, Roles.PRIMARY, null);
+    }
+
+    public static RequestMessage<Void> requestAllChatServerPids(long messageID, long senderPID) {
+        return new RequestMessage<>(messageID, RequestObjectTypes.ALL_CS_PIDS, senderPID, Roles.REPLICA, Roles.PRIMARY, null);
+    }
 
 }

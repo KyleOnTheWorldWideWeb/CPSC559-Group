@@ -12,7 +12,7 @@ import java.util.function.Supplier;
  * <p>
  * It operates independently from the main event loop, and handles retrying until a valid connection
  * to the primary is established. Once connected, it uses a {@link ReplicaRequestManager} to issue
- * structured requests for system state updates (e.g., {@link io.github.cpsc559.team16.common.dto.ChatServerRecord}s,
+ * structured requests for system state updates (e.g. {@link io.github.cpsc559.team16.common.dto.ChatServerRecord}s,
  * {@link io.github.cpsc559.team16.common.dto.AddrServerRecord}s).
  * </p>
  * <p>
@@ -76,43 +76,6 @@ public class ReplicaRequestCoordinator extends Thread {
     }
 
 
-//    @Override
-//    public void run() {
-//        while (running && requestManager == null) {
-//            primaryChannel = primaryChannelSupplier.get();
-//            if (primaryChannel != null) {
-//                this.requestManager = new ReplicaRequestManager(messageIDGenerator, primaryChannel);
-//                this.onReady.accept(requestManager);
-//                break;
-//            }
-//            try {
-//                Thread.sleep(1000); // Try again shortly
-//            } catch (InterruptedException ie) {
-//                Thread.currentThread().interrupt();
-//                return; // Exit cleanly
-//            }
-//        }
-//
-//
-//        while (running) {
-//            try {
-//                if (requestManager.incrementSyncCounter()) {        // Update all records (Chat and Addr) every 6 cycles
-//                    requestManager.requestAllServerRecords();
-//                }
-//                else { requestManager.requestAllChatServerRecords();} // update only chat server records every cycle
-//
-//                Thread.sleep(20000); // ~1 request every 20 seconds (can be adjusted)
-//            } catch (InterruptedException ie) {
-//                Thread.currentThread().interrupt();
-//                break;
-//            } catch (Exception e) {
-//                System.err.println("ReplicaRequestCoordinator encountered an error: " + e.getMessage());
-//                e.printStackTrace();
-//            }
-//        }
-//    }
-
-
     /**
      * The main loop for the {@code ReplicaRequestCoordinator}.
      * <p>
@@ -129,8 +92,10 @@ public class ReplicaRequestCoordinator extends Thread {
         while (running) {
             try {
                 if (requestManager.incrementSyncCounter()) {
+                    requestManager.requestAllAddrServerPids();
                     requestManager.requestAllServerRecords();
                 } else {
+                    requestManager.requestAllChatServerPids();
                     requestManager.requestAllChatServerRecords();
                 }
                 Thread.sleep(20000);

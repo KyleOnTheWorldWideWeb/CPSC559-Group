@@ -431,7 +431,7 @@ public class AddressingServer {
         this.peerManager = new PeerManager(this);
 
         this.cleanupManager = new ConnectionCleanupManager(peerManager, chatServerManager, genMID);
-        this.broadcastManager = new BroadcastManager(peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
+        this.broadcastManager = new BroadcastManager(genMID, peerManager.getChannels(), chatServerManager.getChannels(), cleanupManager);
 
         this.replicaSyncCoordinator = new ReplicaSyncCoordinator(peerManager, broadcastManager, cleanupManager);
         this.cleanupManager.setReplicaCoordinator(replicaSyncCoordinator);

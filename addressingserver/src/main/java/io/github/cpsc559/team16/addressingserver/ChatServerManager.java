@@ -6,9 +6,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
+import io.github.cpsc559.team16.common.logging.ServerDebugLogger;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
 import io.github.cpsc559.team16.common.messaging.UpdateMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 public class ChatServerManager {
 
@@ -105,13 +108,16 @@ public class ChatServerManager {
      * @return true if a record for the remote process existed in the {@link ChatServerRegistry}; false otherwise.
      */
     public boolean removeFailedChatServer(Long failedPID) {
+        debug(DEBUG_NORMAL, "Attempting to remove failed ChatServer: PID " + failedPID);
         // NIOChannel objects should always have an instance variable set that references the PID of the remote process.
         // We iterate through all the channels(keys) and respective NIOMessageChannels(values) until we find a match.
         for (Map.Entry<SocketChannel, NIOMessageChannel> entry : chatServerChannels.entrySet()) {
             if (entry.getValue().getServerPID().equals(failedPID)) {
+                debug(DEBUG_DETAILED, "Found active channel for ChatServer PID " + failedPID + ". Closing connection.");
                 return removeProcessCloseConnection(entry.getKey()); // Successfully found and cleaned up via channel
             }
         }
+        debug(DEBUG_NORMAL, "No active channel found for ChatServer PID " + failedPID + ". Attempting direct registry removal.");
         return this.registry.removeRecordByKey(failedPID); // Channel did not exist, try and remove record anyways.
     }
 

@@ -27,6 +27,15 @@ public class MessageTypes {
     public static final String UPDATE = "UPDATE";
 
     /**
+     * Represents a standard response from the Primary Addressing Server.
+     * <p>
+     * This constant is used as the {@code objectType} in messages sent by the
+     * Primary to return requested data (like the current server list) to a Chat Server or Replica.
+     * </p>
+     */
+    public static final String PRIMARY_RESPONSE = "PRIMARY_RESPONSE";
+
+    /**
      * Message type for request messages.
      * <p>
      * TODO - (Aidan) I put this in for the Client and the ChatServer. I don't actually use it,

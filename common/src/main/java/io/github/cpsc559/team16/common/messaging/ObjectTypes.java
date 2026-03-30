@@ -3,6 +3,7 @@ package io.github.cpsc559.team16.common.messaging;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.dto.ElectionVote;
+import jdk.jshell.execution.Util;
 
 /**
  * Constants representing standardized object types used in message payloads.
@@ -27,6 +28,7 @@ public class ObjectTypes {
      * The object type for a ChatServer record.
      */
     public static final String CHAT_SERVER_RECORD = "ChatServerRecord";
+
 
     /**
      * The object type for representing client count values.
@@ -119,6 +121,9 @@ public class ObjectTypes {
             case    RequestObjectTypes.SINGLE_AS_RECORD,
                     RequestObjectTypes.SINGLE_CS_RECORD-> Long.class;
 
+            // Primary response types
+            case    ResponseObjectTypes.ALL_PEER_PIDS,
+                    ResponseObjectTypes.ALL_CS_PIDS -> java.util.Set.class;
 
             /*
              * REGISTERED is the ACK response given by the Primary AddressingServer when a process is successfully registered

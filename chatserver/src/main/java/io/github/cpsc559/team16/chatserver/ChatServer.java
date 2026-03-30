@@ -6,10 +6,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -285,40 +282,49 @@ public class ChatServer {
                 SelectionKey key = keys.next();
                 keys.remove();
 
-                if (!key.isValid()) {
+                try {
+                    if (!key.isValid()) {
+                        Object attachment = key.attachment();
+                        if (attachment instanceof ConnectionContext ctx && ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                            debug(DEBUG_BASIC, "PRIMARY Addressing Server key became invalid. Initiating pivot...");
+                            startFailoverPivot();
+                        }
+                        continue;
+                    }
+
+                    // 1. SILENTLY IGNORE LISTENERS
+                    // These are the server sockets on 2424/2425.
+                    if (key.isAcceptable()) {
+                        continue;
+                    }
+
                     Object attachment = key.attachment();
-                    if (attachment instanceof ConnectionContext ctx && ctx.type == ConnectionType.ADDRESSING_SERVER) {
-                        debug(DEBUG_BASIC, "PRIMARY Addressing Server key became invalid. Initiating pivot...");
+
+                    // 2. CHECK ATTACHMENT
+                    if (!(attachment instanceof ConnectionContext ctx)) {
+                        continue;
+                    }
+
+                    // 3. SEPARATE ADDRESSING SERVER FROM OTHERS
+                    if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                        if (key.isConnectable()) {
+                            handleConnect(key);
+                        } else if (key.isWritable()) {
+                            handleWrite(key);
+                        } else if (key.isReadable()) {
+                            handleRead(key);
+                        }
+                    } else {
+                        // This is a Peer or Client that attempted a connection while this server is registering.
+                        debug(DEBUG_DETAILED, "Queueing event for " + ctx.type + " (deferred until registered)");
+                    }
+                } catch (IOException ex) {
+                    debug(DEBUG_BASIC, "Connection error during registration: " + ex.getMessage());
+                    if (key.attachment() instanceof ConnectionContext ctx && ctx.type == ConnectionType.ADDRESSING_SERVER) {
+                        debug(DEBUG_BASIC, "Primary Addressing Server failed during startup. Pivoting...");
                         startFailoverPivot();
                     }
-                    continue;
-                }
-
-                // 1. SILENTLY IGNORE LISTENERS
-                // These are the server sockets on 2424/2425.
-                if (key.isAcceptable()) {
-                    continue;
-                }
-
-                Object attachment = key.attachment();
-
-                // 2. CHECK ATTACHMENT
-                if (!(attachment instanceof ConnectionContext ctx)) {
-                    continue;
-                }
-
-                // 3. SEPARATE ADDRESSING SERVER FROM OTHERS
-                if (ctx.type == ConnectionType.ADDRESSING_SERVER) {
-                    if (key.isConnectable()) {
-                        handleConnect(key);
-                    } else if (key.isWritable()) {
-                        handleWrite(key);
-                    } else if (key.isReadable()) {
-                        handleRead(key);
-                    }
-                } else {
-                    // This is a Peer or Client that attempted a connection while this server is registering.
-                    debug(DEBUG_DETAILED, "Queueing event for " + ctx.type + " (deferred until registered)");
+                    closeConnection(key);
                 }
             }
         }
@@ -458,6 +464,9 @@ public class ChatServer {
 
                     connectToPeerServer(selector, ctx.host, ctx.port, ctx.peerPID, ctx.retryCount);
                     return; // Exit quietly! No exception thrown to main yet.
+                }
+                else {
+                    notifyPrimaryOfPeerFailure(ctx.peerPID, "Connection Refused (Max Retries Reached)");
                 }
             }
 
@@ -727,9 +736,9 @@ public class ChatServer {
             return;
         }
 
-        // 3. Tie Breaker: Only connect if my PID is lower than theirs
-        if (PID > peerPID) {
-            debug(DEBUG_NORMAL, "My PID (" + PID + ") is higher than " + peerPID +
+        // 3. Tie Breaker: Only attempt a connection if my PID is higher than theirs
+        if (PID < peerPID) {
+            debug(DEBUG_NORMAL, "My PID (" + PID + ") is lower than " + peerPID +
                     ". Waiting for them to initiate the connection.");
             return;
         }
@@ -789,6 +798,12 @@ public class ChatServer {
      *                 Addressing Server
      */
     public static void connectToPeerServer(Selector selector, String host, int port, long peerPID, int currentRetry) {
+        if (host == null || host.trim().isEmpty() || host.equals("null")) {
+            debug(DEBUG_BASIC, "Aborting peer connection attempt to server with PID " + peerPID
+                    + ": Host address is empty/null.");
+            notifyPrimaryOfPeerFailure(peerPID, "Bogus peer network address");
+            return;
+        }
         debug(DEBUG_BASIC, String.format("Attempting to connect to peer server PID=%d at %s:%d", peerPID, host, port));
 
         try {
@@ -809,9 +824,12 @@ public class ChatServer {
             debug(DEBUG_NORMAL, String.format(
                     "Initiated non-blocking connection to peer PID=%d at %s:%d — registered for OP_CONNECT",
                     peerPID, host, port));
-        } catch (IOException e) {
+        } catch (UnresolvedAddressException uae) {
+            debug(DEBUG_BASIC, "DNS Failure for peer " + peerPID + " (" + host + "). Reporting to Primary.");
+            notifyPrimaryOfPeerFailure(peerPID, "Unresolved Host");
+        } catch (IOException ioe) {
             debug(DEBUG_BASIC,
-                    String.format("Failed to connect to peer server at %s:%d — %s", host, port, e.getMessage()));
+                    String.format("Failed to connect to peer server at %s:%d — %s", host, port, ioe.getMessage()));
             return;
         }
 
@@ -1059,6 +1077,23 @@ public class ChatServer {
     }
 
 
+    /**
+     * Notifies the Primary Addressing Server that a specific Peer has crashed
+     * or provided an unreachable address.
+     * * @param peerPID The Process ID of the faulty/disconnected peer.
+     * @param reason  A description for the logs (e.g., "Crash" or "Bogus Address").
+     */
+    public static void notifyPrimaryOfPeerFailure(long peerPID, String reason) {
+        if (peerPID == -1) return;
+
+        AddressingServerHandler addrHandler = (AddressingServerHandler) handlerMap.get(ConnectionType.ADDRESSING_SERVER);
+        if (addrHandler != null) {
+            addrHandler.notifyPeerCrash(peerPID);
+            debug(DEBUG_BASIC, String.format("Notified Addressing Server of %s: PID %d", reason, peerPID));
+        } else {
+            debug(DEBUG_DETAILED, "Could not notify Primary: AddressingServerHandler not initialized.");
+        }
+    }
 
     /**
      * Closes a socket connection and performs cleanup based on its connection type.
@@ -1126,11 +1161,7 @@ public class ChatServer {
 
         // 3. NOTIFY ADDRESSING SERVER (only if it was a peer)
         if (ctx.type == ConnectionType.SERVER && ctx.peerPID != -1) {
-            AddressingServerHandler addrHandler = (AddressingServerHandler) handlerMap.get(ConnectionType.ADDRESSING_SERVER);
-            if (addrHandler != null) {
-                addrHandler.notifyPeerCrash(ctx.peerPID);
-                debug(DEBUG_BASIC, "Notified Addressing Server of crash: PID " + ctx.peerPID);
-            }
+            notifyPrimaryOfPeerFailure(ctx.peerPID, "peer chat server failure");
         }
 
         // 4. PHYSICAL TEARDOWN

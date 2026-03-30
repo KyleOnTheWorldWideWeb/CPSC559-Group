@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.logging.ServerDebugLogger;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 public class AddrServerRegistry {
 
@@ -149,6 +150,22 @@ public class AddrServerRegistry {
         } else {
             System.out.println("No AddrServerRecord found for PID: " + pid + " — nothing to remove.");
             return false;
+        }
+    }
+
+    /**
+     * Compares the local registry keys against a set of active PIDs and
+     * removes any records that are no longer present in the network.
+     *
+     * @param activePids The set of PIDs currently recognized by the Primary.
+     */
+    public void purgeStaleRecords(Set<Long> activePids) {
+        int initialSize = addrServerRecords.size();
+        addrServerRecords.keySet().removeIf(pid -> !activePids.contains(pid));
+
+        int removedRecordCount = initialSize - addrServerRecords.size();
+        if (removedRecordCount  > 0) {
+            debug(DEBUG_NORMAL, "Purged " + removedRecordCount  + " stale Addressing Server records from the peer registry.");
         }
     }
 

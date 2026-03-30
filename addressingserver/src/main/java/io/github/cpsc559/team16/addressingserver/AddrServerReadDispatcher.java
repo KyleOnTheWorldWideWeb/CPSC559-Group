@@ -2,6 +2,7 @@ package io.github.cpsc559.team16.addressingserver;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -9,7 +10,9 @@ import io.github.cpsc559.team16.common.dto.AddrServerRecord;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
 import io.github.cpsc559.team16.common.logging.ServerDebugLogger;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 import io.github.cpsc559.team16.common.messaging.*;
+
 
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
@@ -144,6 +147,7 @@ public class AddrServerReadDispatcher {
             case MessageTypes.SERVERFAILURE -> handleServerFailure(channel, nioChannel, message);
             case MessageTypes.ELECTION -> handleElection(channel, nioChannel, message);
             case MessageTypes.SHUTDOWN -> handleShutdownRequest(message);
+            case MessageTypes.PRIMARY_RESPONSE -> handlePrimaryResponse(nioChannel, message);
             default -> System.err.println("Unrecognized message type: " + message.getMsgType());
         }
     }
@@ -338,6 +342,43 @@ public class AddrServerReadDispatcher {
     }
 
     /**
+     * Processes incoming response messages from the Primary Addressing Server.
+     * <p>
+     * This handler identifies the requested data type (e.g., PID sets for active servers)
+     * and uses {@code safeCastPayload} to retrieve the collection before triggering
+     * the appropriate registry cleanup.
+     * </p>
+     *
+     * @param nioChannel      The channel from which the message was received.
+     * @param responseMessage The base message object containing the response payload.
+     */
+    private void handlePrimaryResponse(NIOMessageChannel nioChannel,
+                                       BaseAddrServerMessage<?> responseMessage) {
+
+        // Ensure the sender is actually the PRIMARY before processing
+        if (!responseMessage.getSenderRole().equals(Roles.PRIMARY)) {
+            debug(DEBUG_BASIC, "Received PrimaryResponse from non-primary role: " + responseMessage.getSenderRole());
+            return;
+        }
+
+        switch (responseMessage.getObjectType()) {
+            case ResponseObjectTypes.ALL_PEER_PIDS -> {
+                Set<Long> activePeerPids = responseMessage.safeCastPayload(Set.class);
+                if (activePeerPids != null) {
+                    this.server.getAddrServerRegistry().purgeStaleRecords(activePeerPids);
+                }
+            }
+            case ResponseObjectTypes.ALL_CS_PIDS -> {
+                Set<Long> activeChatPids = responseMessage.safeCastPayload(Set.class);
+                if (activeChatPids != null) {
+                    this.server.getChatServerRegistry().purgeStaleRecords(activeChatPids);
+                }
+            }
+            default -> debug(DEBUG_LOW_LEVEL, "No handler defined for PrimaryResponse object type: " + responseMessage.getObjectType());
+        }
+    }
+
+    /**
      * Handles a request message based on the sender role and object type.
      *
      * @param channel        The channel from which the request originated.
@@ -424,6 +465,30 @@ public class AddrServerReadDispatcher {
                             } catch (IOException e) {
                                 System.err.printf(
                                         "IOException triggered while responding to ADDR_SERVER_RECORDS request (PID: %d). Triggering connection cleanup.%n",
+                                        nioChannel.getServerPID());
+                            }
+                        });
+                    }
+                    case (RequestObjectTypes.ALL_PEER_PIDS) -> {
+                        executorService.submit(() -> {
+                            try {
+                                broadcastManager.sendAddrServerPidsToReplica(this.getPID(), nioChannel,
+                                        this.server.getAddrServerRegistry().getRecords().keySet());
+                            } catch (IOException e) {
+                                System.err.printf(
+                                        "IOException triggered while responding to ALL_PEER_PIDS request (PID: %d). Triggering connection cleanup.%n",
+                                        nioChannel.getServerPID());
+                            }
+                        });
+                    }
+                    case (RequestObjectTypes.ALL_CS_PIDS) -> {
+                        executorService.submit(() -> {
+                            try {
+                                broadcastManager.sendChatServerPidsToReplica(this.getPID(), nioChannel,
+                                        this.server.getAddrServerRegistry().getRecords().keySet());
+                            } catch (IOException e) {
+                                System.err.printf(
+                                        "IOException triggered while responding to ALL_CS_PIDS request (PID: %d). Triggering connection cleanup.%n",
                                         nioChannel.getServerPID());
                             }
                         });

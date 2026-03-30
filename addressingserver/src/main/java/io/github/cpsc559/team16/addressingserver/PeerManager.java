@@ -18,6 +18,7 @@ import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.messaging.*;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 import io.github.cpsc559.team16.common.utilities.NetworkUtils;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 /**
  * Manages peer registration, update propagation, and persistent communication
@@ -229,13 +230,17 @@ public class PeerManager {
      * @return true if a record or channel corresponding to the PID was actually found and removed; false otherwise.
      */
     public boolean removeFailedAddrServer(Long failedPID) {
+        debug(DEBUG_NORMAL, "Attempting to remove failed AddrServer: PID " + failedPID);
         // NIOChannel objects should always have an instance variable set that references the PID of the remote process.
         // We iterate through all the channels(keys) and respective NIOMessageChannels(values) until we find a match.
         for (Map.Entry<SocketChannel, NIOMessageChannel> entry : peerChannels.entrySet()) {
             if (entry.getValue().getServerPID().equals(failedPID)) {
+                debug(DEBUG_DETAILED, "Found active peer channel for AddrServer PID " + failedPID + ". Closing connection.");
                 return removeProcessCloseConnection(entry.getKey());
             }
         }
+
+        debug(DEBUG_NORMAL, "No active channel found for AddrServer PID " + failedPID + ". Performing registry fallback removal.");
         return this.registry.removeRecordByKey(failedPID);
     }
 
