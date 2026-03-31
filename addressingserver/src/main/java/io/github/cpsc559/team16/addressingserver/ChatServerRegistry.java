@@ -7,8 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import io.github.cpsc559.team16.common.dto.ChatServerRecord;
 import io.github.cpsc559.team16.common.logging.ServerDebugLogger;
 
-import static io.github.cpsc559.team16.common.logging.DebugLogger.DEBUG_NORMAL;
-import static io.github.cpsc559.team16.common.logging.DebugLogger.debug;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 public class ChatServerRegistry {
 

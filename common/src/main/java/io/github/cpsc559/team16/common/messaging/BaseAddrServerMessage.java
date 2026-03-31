@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.Set;
+
 
 /**
  * Represents a standardized message format used for communication between Addressing Servers,
@@ -220,5 +222,29 @@ public class BaseAddrServerMessage<T> {
         return (U) payload;
     }
 
+
+    /**
+     * Safely casts and converts a payload into a Set of Longs.
+     * <p>
+     * This is a specialized helper for object types that return Sets (like ALL_PEER_PIDS).
+     * It ensures that any numeric types deserialized by Jackson as Integers are
+     * correctly converted to Longs to match the Registry's key (PID) types.
+     * </p>
+     *
+     * @return A Set of Longs, or an empty set if the payload is null.
+     */
+    @SuppressWarnings("unchecked")
+    public Set<Long> safeCastPayloadToLongSet() {
+        Object rawPayload = safeCastPayload(Set.class);
+        if (rawPayload instanceof Set<?> rawSet) {
+            Set<Long> longSet = new java.util.HashSet<>();
+            for (Object obj : rawSet) {
+                // Handles Integer, Long, or String representations of PIDs
+                longSet.add(Long.valueOf(obj.toString()));
+            }
+            return longSet;
+        }
+        return new java.util.HashSet<>();
+    }
 
 }

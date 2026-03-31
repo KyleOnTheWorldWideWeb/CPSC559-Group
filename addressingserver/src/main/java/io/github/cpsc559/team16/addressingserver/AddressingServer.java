@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.dto.ServerRole;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
+
 import io.github.cpsc559.team16.common.messaging.MessageIDGenerator;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
@@ -420,6 +422,11 @@ public class AddressingServer {
      * </p>
      */
     public AddressingServer() {
+        String debugEnv = System.getenv().getOrDefault("AS_DEBUG_LEVEL", "2");
+        int debugLevel = Integer.parseInt(debugEnv);
+        setDebugLevel(debugLevel);
+        System.out.println("DEBUG SYSTEM INITIALIZED TO LEVEL: " + debugLevel);
+
         this.config = new AddrServerConfig();
         this.genMID = new MessageIDGenerator(this.config::getPID);
 

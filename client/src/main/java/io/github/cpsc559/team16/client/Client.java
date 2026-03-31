@@ -15,6 +15,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import io.github.cpsc559.team16.common.dto.PrimaryAddress;
+import io.github.cpsc559.team16.common.logging.DebugLogger;
 import io.github.cpsc559.team16.common.utilities.PrimaryDiscoveryReader;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
@@ -22,6 +23,7 @@ import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 /**
  * A client implementation for an IRC-style chat application.
@@ -55,48 +57,7 @@ import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
  */
 // @SuppressWarnings("unused")
 public class Client {
-
-    /**
-     * Debug level configuration from environment variable.
-     * Defaults to 1 (BASIC) if not specified.
-     * Levels:
-     * 0 - No debug output (production mode)
-     * 1 - Basic info: startup, shutdown, major events
-     * 2 - Normal operation details: connections, requests
-     * 3 - Detailed flow: entering methods, decision points
-     * 4 - Low-level operations: byte-level I/O, parsing
-     * 5 - Extreme detail: everything, for deep debugging
-     */
-    private static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "5"));
-
-    // Debug level constants
-    public static final int DEBUG_NONE = 0; // No debug output (production mode)
-    public static final int DEBUG_BASIC = 1; // Basic info: startup, shutdown, major events
-    public static final int DEBUG_NORMAL = 2; // Normal operation details: connections, requests
-    public static final int DEBUG_DETAILED = 3; // Detailed flow: entering methods, decision points
-    public static final int DEBUG_LOW_LEVEL = 4; // Low-level operations: byte-level I/O, parsing
-    public static final int DEBUG_EXTREME = 5; // Extreme detail: everything, for deep debugging
-
-    /**
-     * Logs a debug message if the current debug level is sufficient.
-     * 
-     * @param level   The debug level of the message (0-5)
-     * @param message The message to log
-     */
-    public static void debug(int level, String message) {
-        if (level <= DEBUG_LEVEL) {
-            String prefix = switch (level) {
-                case 1 -> "[BASIC] ";
-                case 2 -> "[NORMAL] ";
-                case 3 -> "[DETAILED] ";
-                case 4 -> "[LOW_LEVEL] ";
-                case 5 -> "[EXTREME] ";
-                default -> "[INFO] ";
-            };
-            System.out.println(prefix + message);
-        }
-    }
-
+    
     // Client state
     /**
      * The username assigned to the client for display purposes in the chat
@@ -664,7 +625,7 @@ public class Client {
      * to "localhost").</li>
      * <li>SERVER_PORT: Specifies the port of the addressing server (defaults to
      * 49800).</li>
-     * <li>DEBUG_LEVEL: Specifies the level of debug output (0-5, defaults to
+     * <li>CLIENT_DEBUG_LEVEL: Specifies the level of debug output (0-5, defaults to
      * 0).</li>
      * </ul>
      * </li>
@@ -689,7 +650,11 @@ public class Client {
      * @param args Command line arguments (not used in this implementation).
      */
     public static void main(String[] args) {
-        Client.debug(Client.DEBUG_BASIC, "Starting client application");
+        String debugEnv = System.getenv().getOrDefault("CLIENT_DEBUG_LEVEL", "2");
+        int debugLevel = Integer.parseInt(debugEnv);
+        setDebugLevel(debugLevel);
+        System.out.println("DEBUG SYSTEM INITIALIZED TO LEVEL: " + debugLevel);
+        debug(DEBUG_BASIC, "Starting client application");
 
         // Initialize terminal for username input
         Terminal terminal = null;
@@ -711,11 +676,11 @@ public class Client {
             terminal.writer().print("\033[H\033[2J");
             terminal.writer().flush();
         } catch (Exception e) {
-            Client.debug(Client.DEBUG_BASIC, "Error reading username, using default: Anonymous");
+            debug(DEBUG_BASIC, "Error reading username, using default: Anonymous");
         }
 
 
-        Client.debug(Client.DEBUG_NORMAL, String.format("Client configuration - Username: %s", username));
+        debug(DEBUG_NORMAL, String.format("Client configuration - Username: %s", username));
 
         // Instantiate and run the client with the provided configuration
         Client client = new Client(username, terminal, lineReader);

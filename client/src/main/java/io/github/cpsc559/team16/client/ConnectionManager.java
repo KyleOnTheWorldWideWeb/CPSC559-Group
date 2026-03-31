@@ -13,6 +13,8 @@ import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
 import io.github.cpsc559.team16.common.messaging.RegisterMessage;
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
 
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
+
 /**
  * A class responsible for managing the connection between the client and the chat server.
  * <p>
@@ -84,7 +86,7 @@ public class ConnectionManager {
     public void connect() throws IOException {
         if (!client.isTerminated()) {
             try {
-                Client.debug(Client.DEBUG_NORMAL, "trying to connect to server");
+                debug(DEBUG_NORMAL, "trying to connect to server");
 
                 // Establish server connection
                 String[] substrings = null;
@@ -98,7 +100,7 @@ public class ConnectionManager {
                 int chatServerPort = Integer.parseInt(substrings[2]);
 
                 // Step 2: Connect to chat server
-                Client.debug(Client.DEBUG_NORMAL, "Connecting to chat server at " + chatServerAddress + ":" + chatServerPort);
+                debug(DEBUG_NORMAL, "Connecting to chat server at " + chatServerAddress + ":" + chatServerPort);
                 client.setChatServer(new Socket(chatServerAddress, chatServerPort));
                 client.setOut(new PrintWriter(client.getChatServer().getOutputStream(), true)); // autoFlush = true
                 client.setIn(new BufferedReader(new InputStreamReader(client.getChatServer().getInputStream())));
@@ -108,10 +110,10 @@ public class ConnectionManager {
                 registration.setCommand("REGISTER");
                 client.getOut().println(registration.toJson());
 
-                Client.debug(Client.DEBUG_BASIC, "Successfully connected to chat server");
+                debug(DEBUG_BASIC, "Successfully connected to chat server");
                 // System.out.println("CONNECTED");
             } catch (IOException e) {
-                Client.debug(Client.DEBUG_BASIC, "Connection error: " + e.getMessage());
+                debug(DEBUG_BASIC, "Connection error: " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 System.err.println("Error parsing chat server address: " + e.getMessage());
@@ -160,19 +162,19 @@ public class ConnectionManager {
      *                     handles persistent connection issues.
      */
     public void reconnect() {
-        Client.debug(Client.DEBUG_BASIC, "Starting reconnection process");
+        debug(DEBUG_BASIC, "Starting reconnection process");
         client.setConnected(false);
 
         while (reconnectTries < MAX_RECONNECT_TRIES) {
             try {
-                Client.debug(Client.DEBUG_NORMAL, "Reconnection attempt " + (reconnectTries + 1) + " of " + MAX_RECONNECT_TRIES);
+                debug(DEBUG_NORMAL, "Reconnection attempt " + (reconnectTries + 1) + " of " + MAX_RECONNECT_TRIES);
                 connect();
                 reconnectTries = 0; // Reset counter on successful connection
-                Client.debug(Client.DEBUG_BASIC, "Reconnection successful");
+                debug(DEBUG_BASIC, "Reconnection successful");
                 return;
             } catch (Exception e) {
                 reconnectTries++;
-                Client.debug(Client.DEBUG_NORMAL, "Reconnection attempt failed: " + e.getMessage());
+                debug(DEBUG_NORMAL, "Reconnection attempt failed: " + e.getMessage());
                 try {
                     Thread.sleep(5000); // Wait before retrying
                 } catch (InterruptedException ie) {
@@ -180,13 +182,13 @@ public class ConnectionManager {
                 }
             }
         }
-        Client.debug(Client.DEBUG_BASIC, "Max reconnection attempts reached");
+        debug(DEBUG_BASIC, "Max reconnection attempts reached");
 
         try {
             connect(); // Will re-connect to sys through Addressing Server
-            Client.debug(Client.DEBUG_BASIC, "Connected to new chat server after Addressing Server redirect.");
+            debug(DEBUG_BASIC, "Connected to new chat server after Addressing Server redirect.");
         } catch (IOException e) {
-            Client.debug(Client.DEBUG_BASIC, "Unable to connect to any chat server. Client shutdown.");
+            debug(DEBUG_BASIC, "Unable to connect to any chat server. Client shutdown.");
             // Add user-friendly error message to display log
             synchronized (client.getDisplayLog()) {
                 ClientServerMessage errorMsg = new ClientServerMessage("System", "all", -1,
@@ -236,13 +238,13 @@ public class ConnectionManager {
 
         String hostname = client.getPrimaryHostAddress();
         int port = client.getAsPort();
-        Client.debug(Client.DEBUG_NORMAL, "Attempting to resolve and connect to: " + hostname + ":" + port);
+        debug(DEBUG_NORMAL, "Attempting to resolve and connect to: " + hostname + ":" + port);
 
         // Open a socket to the addressing server
         try (Socket addressSocket = new Socket(hostname, port)) {
             addressSocket.setSoTimeout(5000); // Timeout after 5 seconds
 
-            Client.debug(Client.DEBUG_NORMAL, "trying to connect to addressing server");
+            debug(DEBUG_NORMAL, "trying to connect to addressing server");
 
             // Create the streams
             PrintWriter out = new PrintWriter(addressSocket.getOutputStream(), true);
@@ -261,7 +263,7 @@ public class ConnectionManager {
                 throw new IOException("No response from Addressing Server.");
             }
 
-            Client.debug(Client.DEBUG_NORMAL, "RECEIVED FROM SERVER: " + ackJson);
+            debug(DEBUG_NORMAL, "RECEIVED FROM SERVER: " + ackJson);
 
             // Deserialize the JSON into an AckMessage
             ObjectMapper mapper = new ObjectMapper();

@@ -241,6 +241,10 @@ public class ChatServer {
      *                     runtime
      */
     public static void main(String[] args) throws IOException {
+        String debugEnv = System.getenv().getOrDefault("CS_DEBUG_LEVEL", "2");
+        int debugLevel = Integer.parseInt(debugEnv);
+        setDebugLevel(debugLevel);
+        System.out.println("DEBUG SYSTEM INITIALIZED TO LEVEL: " + debugLevel);
         debug(DEBUG_BASIC, "Starting NIO Server...");
         debug(DEBUG_DETAILED, "Initializing handlers and selector...");
 
@@ -423,7 +427,7 @@ public class ChatServer {
 
         try {
             if (socketChannel.finishConnect()) {
-                debug(DEBUG_NORMAL, "Successfully connected to peer PID=" + ctx.peerPID);
+                debug(DEBUG_NORMAL, "Successfully connected to peer PID = " + ctx.peerPID);
                 key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
                 if (ctx.type == ConnectionType.SERVER && ctx.peerPID != PID) {

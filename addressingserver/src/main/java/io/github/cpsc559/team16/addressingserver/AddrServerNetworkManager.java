@@ -15,11 +15,14 @@ import java.util.function.Supplier;
 
 import io.github.cpsc559.team16.common.dto.ServerRole;
 import io.github.cpsc559.team16.common.exceptions.ConnectionClosedException;
+import io.github.cpsc559.team16.common.logging.DebugLogger;
 import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import static io.github.cpsc559.team16.common.messaging.MessageDeserializer.deserializeMessage;
 import io.github.cpsc559.team16.common.messaging.MessageTypes;
 import io.github.cpsc559.team16.common.messaging.Roles;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
+
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 /**
  * Manages the network interactions for the AddressingServer.
@@ -322,33 +325,42 @@ public class AddrServerNetworkManager {
     }
 
     /**
-     * Opens and binds a ServerSocketChannel to the specified port.
+     * Opens and binds a {@code ServerSocketChannel} to the specified port for a specific role.
      * <p>
-     * This method is used to create a listener channel that monitors incoming
-     * connection requests on a given port. The channel is set to non-blocking mode,
-     * allowing it to be used with a Selector for persistent asynchronous I/O
-     * operations.
+     * This method initializes the channel in non-blocking mode and registers it with the
+     * internal {@code Selector} for {@code OP_ACCEPT} events. The provided {@code connectionRole}
+     * is attached to the {@code SelectionKey} for later identification during the event loop.
      * </p>
      *
-     * @param port The port number to bind the channel to.
-     * @return The opened ServerSocketChannel.
-     * @throws IOException If an error occurs while opening or binding the channel.
+     * @param port           the port number to bind the channel to
+     * @param connectionRole a descriptive string (e.g., Roles.CHATSERVER) identifying the channel's purpose
+     * @return the opened and registered {@code ServerSocketChannel}
+     * @throws IOException if an error occurs during opening, binding, or registration
      */
-
-    public ServerSocketChannel openListenerChannel(int port) throws IOException {
+    public ServerSocketChannel openListenerChannel(int port, String connectionRole) throws IOException {
         try {
             ServerSocketChannel channel = ServerSocketChannel.open();
+
+            // Ensure the selector is not blocked during registration
             selector.wakeup();
+
             channel.configureBlocking(false);
             channel.socket().bind(new InetSocketAddress(port));
-            channel.register(selector, SelectionKey.OP_ACCEPT);
-            System.out.println("Listener channel opened on port " + port);
+
+            // Register the channel and ATTACH the role string to the SelectionKey
+            // NOTE: this will be replaced by an NIOChannel in the main event loop on the server channels
+            channel.register(selector, SelectionKey.OP_ACCEPT, connectionRole);
+
+            DebugLogger.debug(DEBUG_BASIC, connectionRole + " listener channel opened on port " + port);
+
             return channel;
         } catch (IOException e) {
-            System.err.println("Failed to open listener channel on port " + port + ": " + e.getMessage());
+            DebugLogger.debug(DEBUG_BASIC, "Failed to open " + connectionRole + " listener channel on port " + port + ": " + e.getMessage());
             throw e;
         }
     }
+
+
 
     /**
      * Opens all listener channels required for normal operation and health
@@ -372,10 +384,10 @@ public class AddrServerNetworkManager {
      */
     public void openListenerChannels(int clientPort, int peerPort, int chatServerPort) throws IOException {
         try {
-            openListenerChannel(clientPort);
-            this.peerListenerChannel = openListenerChannel(peerPort);
-            this.chatServerListenerChannel = openListenerChannel(chatServerPort);
-            this.healthCheckListenerChannel = openListenerChannel(5050); // static port for health checks
+            openListenerChannel(clientPort, Roles.CLIENT);
+            this.peerListenerChannel = openListenerChannel(peerPort, Roles.REPLICA);
+            this.chatServerListenerChannel = openListenerChannel(chatServerPort, Roles.CHATSERVER);
+            this.healthCheckListenerChannel = openListenerChannel(5050, "HEALTH_CHECK"); // static port for health checks
         } catch (IOException e) {
             System.err.println("Failed to open a listener channel. Exiting main event loop.");
             throw e; // Throw the error so we can catch it in the main method of AddressingServer and
@@ -522,9 +534,10 @@ public class AddrServerNetworkManager {
                         if (channel == null)
                             continue;
 
-                        channel.configureBlocking(false); // switched to non-blocking
+                        channel.configureBlocking(false);
 
-                        if (listenerSC.equals(healthCheckListenerChannel)) {
+                        // Use the attachment to identify the "HEALTH_CHECK" role
+                        if ("HEALTH_CHECK".equals(key.attachment())) {
                             try {
                                 String response = this.config.getPID() + "\n";
                                 ByteBuffer buffer = ByteBuffer.wrap(response.getBytes());
@@ -532,15 +545,17 @@ public class AddrServerNetworkManager {
                                     channel.write(buffer);
                                 }
                                 channel.close();
+                                DebugLogger.debug(DEBUG_EXTREME, "PONG - responded to Health Check...");
                             } catch (IOException e) {
-                                System.err.println("Failed to respond to ping: " + e.getMessage());
+                                DebugLogger.debug(DEBUG_BASIC, "Failed to respond to ping: " + e.getMessage());
                             }
                             continue;
                         }
 
                         NIOMessageChannel nioChannel = new NIOMessageChannel(channel);
-                        channel.register(selector, SelectionKey.OP_READ, nioChannel); // attach nioChannel for handshake
-                        selector.wakeup(); // ensure the selector sees the new registration
+                        // Attach nioChannel to the new SocketChannel's key for the handshake phase
+                        channel.register(selector, SelectionKey.OP_READ, nioChannel);
+                        selector.wakeup();
                     }
 
                     else if (key.isReadable()) {

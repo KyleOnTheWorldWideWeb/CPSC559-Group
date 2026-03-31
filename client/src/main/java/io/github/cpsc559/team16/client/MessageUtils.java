@@ -1,6 +1,7 @@
 package io.github.cpsc559.team16.client;
 
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 /**
  * Utility class for creating and sending messages in the chat client.
@@ -32,7 +33,7 @@ public class MessageUtils {
      * @return A new ClientServerMessage with a unique ID and current timestamp
      */
     public ClientServerMessage createMessage(String msgContents, String receiver) {
-        Client.debug(Client.DEBUG_DETAILED, "Creating message for receiver: " + receiver);
+        debug(DEBUG_DETAILED, "Creating message for receiver: " + receiver);
         return new ClientServerMessage(client.getUsername(), receiver, client.getNextSendCounter(), msgContents);
     }
 
@@ -48,11 +49,11 @@ public class MessageUtils {
      */
     public void sendMessage(ClientServerMessage msg) {
         try {
-            Client.debug(Client.DEBUG_LOW_LEVEL, "Sending message: " + msg.toJson());
+            debug(DEBUG_LOW_LEVEL, "Sending message: " + msg.toJson());
             System.out.println("Sent" + msg.toJson());
             client.getOut().println(msg.toJson());
         } catch (Exception e) {
-            Client.debug(Client.DEBUG_NORMAL, "Error sending message: " + e.getMessage());
+            debug(DEBUG_NORMAL, "Error sending message: " + e.getMessage());
             client.getMessageQueue().add(msg);
             client.getConnectionManager().reconnect();
         }

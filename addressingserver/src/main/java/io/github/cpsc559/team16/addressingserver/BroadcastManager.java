@@ -242,21 +242,28 @@ public class BroadcastManager {
      *
      * @param senderPID the PID of the primary server sending the updates.
      * @param nioChannel the channel over which to send the records.
+     * @param records the map of PIDs to AddrServerRecords to be synchronized.
      */
     public void sendAllAddrServerRecordsToReplica(Long senderPID, NIOMessageChannel nioChannel,
-                                         Map<Long, AddrServerRecord> registry) throws IOException {
-        for (AddrServerRecord record : registry.values()) {
+                                                  Map<Long, AddrServerRecord> records) throws IOException {
+        // Safety Guard: Ensure records is not null and not empty
+        if (records == null || records.isEmpty()) {
+            debug(DEBUG_NORMAL, "No AddrServerRecords found to synchronize with REPLICA PID: " + nioChannel.getServerPID());
+            return;
+        }
+
+        for (AddrServerRecord record : records.values()) {
             UpdateMessage<AddrServerRecord> message = UpdateMessage.asRecordPrimaryToReplica(senderPID, record);
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
-                System.err.println("Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
+                debug(DEBUG_BASIC, "Failed to serialize UpdateMessage<AddrServerRecord>: " + e.getMessage());
             } catch (IOException ioe) {
-                System.err.println("Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
+                debug(DEBUG_BASIC, "Failed to send UpdateMessage<AddrServerRecord>: " + ioe.getMessage());
                 throw ioe;
             }
         }
-        System.out.println("Done sending all AddrServerRecords to REPLICA with PID: " + nioChannel.getServerPID());
+        debug(DEBUG_NORMAL, "Done sending all " + records.size() + " AddrServerRecords to REPLICA with PID: " + nioChannel.getServerPID());
     }
 
     /**
@@ -272,22 +279,26 @@ public class BroadcastManager {
      *
      * @param senderPID  the PID of the (primary) server sending the updates.
      * @param nioChannel  the channel over which to send the records.
-     * @param registry a {@code HashMap} containing all {@code ChatServerRecord} entries.
+     * @param records a {@code HashMap} containing all {@code ChatServerRecord} entries.
      */
     public void sendAllChatServerRecordsToReplica(Long senderPID, NIOMessageChannel nioChannel,
-                                         Map<Long, ChatServerRecord> registry) throws IOException {
-        for (ChatServerRecord record : registry.values()) {
+                                                  Map<Long, ChatServerRecord> records) throws IOException {
+        if (records == null || records.isEmpty()) {
+            debug(DEBUG_DETAILED, "No ChatServerRecords found to synchronize with REPLICA PID: " + nioChannel.getServerPID());
+            return;
+        }
+        for (ChatServerRecord record : records.values()) {
             UpdateMessage<ChatServerRecord> message = UpdateMessage.csRecordPrimaryToReplica(senderPID, record);
             try {
                 nioChannel.sendMessage(message.toJson());
             } catch (JsonProcessingException e) {
-                System.err.println("Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
+                debug(DEBUG_BASIC, "Failed to serialize UpdateMessage<ChatServerRecord>: " + e.getMessage());
             } catch (IOException ioe) {
-                System.err.println("Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
+                debug(DEBUG_BASIC, "Failed to send UpdateMessage<ChatServerRecord>: " + ioe.getMessage());
                 throw ioe;
             }
         }
-        System.out.println("Done sending all ChatServerRecords to REPLICA with PID: " + nioChannel.getServerPID());
+        debug(DEBUG_DETAILED, "Done sending all " + records.size() + " ChatServerRecords to REPLICA with PID: " + nioChannel.getServerPID());
     }
 
 
@@ -427,7 +438,7 @@ public class BroadcastManager {
      */
     public void sendAddrServerPidsToReplica(Long senderPID, NIOMessageChannel nioChannel,
                                             Set<Long> activePids) throws IOException {
-        if (activePids == null || nioChannel == null) {
+        if (activePids == null || activePids.isEmpty() || nioChannel == null) {
             debug(DEBUG_BASIC, "[Broadcast Manager] Aborting PID sync: records or channel is null.");
             return;
         }
@@ -437,7 +448,7 @@ public class BroadcastManager {
 
         try {
             nioChannel.sendMessage(message.toJson());
-            debug(DEBUG_NORMAL, String.format("Successfully synced %d Peer PIDs to REPLICA (PID: %d)",
+            debug(DEBUG_DETAILED, String.format("Successfully synced %d Peer PIDs to REPLICA (PID: %d)",
                     activePids.size(), nioChannel.getServerPID()));
 
         } catch (JsonProcessingException e) {
@@ -464,7 +475,7 @@ public class BroadcastManager {
      */
     public void sendChatServerPidsToReplica(Long senderPID, NIOMessageChannel nioChannel,
                                             Set<Long> activePids) throws IOException {
-        if (activePids == null || nioChannel == null) {
+        if (activePids == null || activePids.isEmpty() || nioChannel == null) {
             debug(DEBUG_BASIC, "[Broadcast Manager] Aborting ChatServer PID sync: records or channel is null.");
             return;
         }
@@ -474,7 +485,7 @@ public class BroadcastManager {
 
         try {
             nioChannel.sendMessage(message.toJson());
-            debug(DEBUG_NORMAL, String.format("Successfully synced %d ChatServer PIDs to REPLICA (PID: %d)",
+            debug(DEBUG_DETAILED, String.format("Successfully synced %d ChatServer PIDs to REPLICA (PID: %d)",
                     activePids.size(), nioChannel.getServerPID()));
 
         } catch (JsonProcessingException e) {

@@ -15,6 +15,7 @@ services:
     restart: on-failure
     environment:
       # Defaults to hardcoded values if no .env file is present
+      - AS_DEBUG_LEVEL={AS_DEBUG_LEVEL:-3}
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
       - AS_REPLICA_PORT=${AS_REPLICA_PORT:-49801}
       - AS_CHATSERVER_PORT=${AS_CHATSERVER_PORT:-49802}
@@ -56,6 +57,7 @@ services:
       - 30100-30200:2424
       - 30201-30300:2425
     environment:
+      - CS_DEBUG_LEVEL={CS_DEBUG_LEVEL:-3}
       - CS_CLIENT_PORT=${CS_CLIENT_PORT:-2424}
       - CS_PEER_PORT=${CS_PEER_PORT:-2425}
       - DEBUG_LEVEL=${DEBUG_LEVEL:-1}
@@ -73,6 +75,7 @@ services:
     ports:
       - "30301:30000"
     environment:
+      - CLIENT_DEBUG_LEVEL=${CLIENT_DEBUG_LEVEL:-3}
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
       - CLIENT_PORT=${CLIENT_PORT:-3000}
     networks:

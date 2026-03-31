@@ -5,7 +5,7 @@ import java.util.List;
 import org.jline.reader.LineReader;
 
 import io.github.cpsc559.team16.common.utilities.ClientServerMessage;
-
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 
 /**
  * A thread responsible for managing and updating the user interface in the
@@ -197,7 +197,7 @@ public class OutputThread extends Thread {
                     render();
                 } catch (InterruptedException e) {
                     if (!client.isTerminated()) {
-                        Client.debug(Client.DEBUG_NORMAL, "Output thread interrupted");
+                        debug(DEBUG_NORMAL, "Output thread interrupted");
                     }
                     break;
                 } catch (Exception e) {
@@ -205,7 +205,7 @@ public class OutputThread extends Thread {
                 }
             }
         } catch (Exception e) {
-            Client.debug(Client.DEBUG_NORMAL, "Output thread error: " + e.getMessage());
+            debug(DEBUG_NORMAL, "Output thread error: " + e.getMessage());
         } finally {
             client.getShutdownLatch().countDown();
         }

@@ -489,13 +489,13 @@ public class RegistrationCoordinator {
             if (role.equals(Roles.CHATSERVER)) {
                 chatServerManager.getChannels().put(channel, nioChannel);
                 ackMessage = AckMessage.chatServerSynchronized(genMID.nextID(), primaryPID, targetPID);
-                System.out.printf("Synchronization with REPLICA (PID %d) confirmed, sending ACK.%n", targetPID);
+                System.out.printf("Synchronization with ChatServer (PID %d) confirmed, sending ACK.%n", targetPID);
             }
             else {
                 // Add the channel to PeerManager since it is a persistent connection.
                 peerManager.getPeerChannels().put(channel, nioChannel);
                 ackMessage = AckMessage.replicaSynchronized(genMID.nextID(), primaryPID, targetPID);
-                System.out.printf("Synchronization with ChatServer (PID %d) confirmed, sending ACK.%n", targetPID);
+                System.out.printf("Synchronization with REPLICA (PID %d) confirmed, sending ACK.%n", targetPID);
             }
             try {
                 nioChannel.sendMessage(ackMessage.toJson());

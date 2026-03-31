@@ -1,5 +1,6 @@
 package io.github.cpsc559.team16.common.logging;
 
+
 /**
  * Utility class for controlling verbosity of server logs.
  * Moved from ChatServer to provide centralized logging across the system.
@@ -23,9 +24,26 @@ public class DebugLogger {
      * }</pre>
      * </p>
      */
-    public static final int DEBUG_LEVEL = Integer.parseInt(System.getenv().getOrDefault("DEBUG_LEVEL", "5"));
+    private static int currentDebugLevel = 1;
 
-    // Debug level constants
+    /**
+     * Sets the active debug level for this specific JVM instance.
+     */
+    public static void setDebugLevel(int level) {
+        currentDebugLevel = level;
+    }
+
+    /*
+     * Debug level constants:
+     * Defaults to 1 (BASIC) if not specified.
+     * Levels:
+     * 0 - No debug output (production mode)
+     * 1 - Basic info: startup, shutdown, major events
+     * 2 - Normal operation details: connections, requests
+     * 3 - Detailed flow: entering methods, decision points
+     * 4 - Low-level operations: byte-level I/O, parsing
+     * 5 - Extreme detail: everything, for deep debugging
+     */
 
     /**
      * Debug level: No debug output. Use in production mode where logs are minimal.
@@ -73,7 +91,7 @@ public class DebugLogger {
      * @param message the message to log
      */
     public static void debug(int level, String message) {
-        if (level <= DEBUG_LEVEL) {
+        if (level <= currentDebugLevel) {
             String prefix = switch (level) {
                 case 1 -> "[BASIC] ";
                 case 2 -> "[NORMAL] ";

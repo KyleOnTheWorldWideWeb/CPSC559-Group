@@ -14,6 +14,7 @@ import io.github.cpsc559.team16.common.messaging.BaseAddrServerMessage;
 import io.github.cpsc559.team16.common.messaging.ElectionMessage;
 import io.github.cpsc559.team16.common.utilities.NIOMessageChannel;
 
+import static io.github.cpsc559.team16.common.logging.DebugLogger.*;
 /**
  * <h1>LeaderElectionManager</h1>
  * <p>
@@ -102,6 +103,7 @@ public class LeaderElectionManager {
      */
     private volatile boolean midElection = false;
 
+    private Thread activeElectionThread = null;
 
     //==========================================================================
     // Constructors and Election State Management
@@ -238,9 +240,15 @@ public class LeaderElectionManager {
      * @param senderPID The PID of the announced leader.
      */
     private void handleLeaderAnnouncement(Long senderPID) {
-        System.out.println("LEM: Received leader announcement from PID: " + senderPID);
+        debug(DEBUG_NORMAL, "LEM: Received leader announcement from PID: " + senderPID);
         leaderAnnouncementReceived = true;
         running = false;
+
+        // Interrupt the sleeping election thread so it doesn't attempt to promote itself
+        if (activeElectionThread != null && activeElectionThread.isAlive()) {
+            activeElectionThread.interrupt();
+        }
+
         setMidElection(false);
         followNewLeader(senderPID);
     }
@@ -283,17 +291,18 @@ public class LeaderElectionManager {
      * </p>
      */
     public void initiateElection() {
+
         // GUARD: Check the election lock, if it's false, lock it and continue, return otherwise.
         if (!electionLock.compareAndSet(false, true)) {
             return;
         }
         setMidElection(true);
-        new Thread(() -> {
+        activeElectionThread = new Thread(() -> {
             System.out.println("LEM: Initiating election...");
             try {
-
+                if (leaderAnnouncementReceived) return;
                 if (!running) {
-                    System.out.println("LEM: started runnning... [" + new Date().getTime() + "]");
+                    debug(DEBUG_NORMAL, "LEM: started running... [" + new Date().getTime() + "]");
                     this.running = true;
                     this.bullyResponseReceived = false;
                     this.leaderAnnouncementReceived = false;
@@ -316,15 +325,16 @@ public class LeaderElectionManager {
 
                     // If no higher PID exists, declare self as leader.
                     if (!higherPIDExists) {
-                        System.out.println("LEM: No higher PID found. Declaring self as leader.");
+                        if (leaderAnnouncementReceived) return;
+                        debug(DEBUG_NORMAL, "LEM: No higher PID found. Declaring self as leader.");
                         assumeLeadership();
                     } else {
-                        System.out.println("LEM: Waiting for bullys from higher PIDs... for " + bullyResponseTimeout + "ms");
+                        debug(DEBUG_NORMAL,"LEM: Waiting for bullys from higher PIDs... for " + bullyResponseTimeout + "ms");
                         // Wait for a "Bully" response; if none, declare self as leader.
                         Thread.sleep(bullyResponseTimeout);
                         // Check to see if a leader announcement was received while sleeping.
                         if (leaderAnnouncementReceived) {
-                            System.out.println("LEM: Leader was announced during wait. PID " + getSelfPID() + " aborting promotion.");
+                            debug(DEBUG_NORMAL,"LEM: Leader was announced during wait. PID " + getSelfPID() + " aborting promotion.");
                             return;
                         }
                         if (!bullyResponseReceived) {
@@ -343,11 +353,14 @@ public class LeaderElectionManager {
                 }
             } catch (InterruptedException e) {
                 System.err.println("Interrupted while waiting for response during election.");
+                this.running = false;
             } finally {
                 setMidElection(false);
                 electionLock.set(false);
+                activeElectionThread = null;
             }
-        }).start();
+        });
+        activeElectionThread.start();
     }
 
     /**
@@ -367,6 +380,10 @@ public class LeaderElectionManager {
      * </p>
      */
     public void assumeLeadership() {
+        if (leaderAnnouncementReceived) {
+            debug(DEBUG_BASIC, "assumeLeadership aborted: LeaderAnnouncement was already received.");
+            return;
+        }
         this.running = false;
         // Shut down the Replica request coordinator (used for replication by replicas, not the primary)
         server.getNetworkManager().shutdownCoordinatorRequest();
