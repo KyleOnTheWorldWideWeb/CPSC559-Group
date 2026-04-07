@@ -8,6 +8,7 @@ import java.net.Socket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.github.cpsc559.team16.common.logging.DebugLogger;
 import io.github.cpsc559.team16.common.messaging.AckMessage;
 import io.github.cpsc559.team16.common.messaging.AckObjectTypes;
 import io.github.cpsc559.team16.common.messaging.RegisterMessage;
@@ -82,42 +83,50 @@ public class ConnectionManager {
      *                     server,
      *                     the chat server, or during the message exchange.
      */
-    @SuppressWarnings("resource")
     public void connect() throws IOException {
-        if (!client.isTerminated()) {
-            try {
-                debug(DEBUG_NORMAL, "trying to connect to server");
+        if (client.isTerminated()) return;
+        try {
+            debug(DEBUG_NORMAL, "Attempting to connect to the PRIMARY addressing server...");
 
-                // Establish server connection
-                String[] substrings = null;
-                while (substrings == null) {
-                    substrings = registerWithAddressingServer();
-                    Thread.sleep(1000); // pause 1s before retrying
-                    // System.out.println("read");
+            // Establish server connection
+            String[] substrings = registerWithAddressingServer();
+            int retryCount = 0;
+            while (substrings == null&& !client.isTerminated()) {
+                retryCount++;
+                debug(DEBUG_NORMAL, "PRIMARY connection failed... (Attempt " + retryCount + ")");
+                if (DebugLogger.getDebugLevel() < DEBUG_BASIC) {
+                    System.out.print("\r[STATUS] Searching for an available chat room... (Attempt " + retryCount + ")");
                 }
-                Long serverPid = Long.parseLong(substrings[0]);
-                String chatServerAddress = substrings[1];
-                int chatServerPort = Integer.parseInt(substrings[2]);
-
-                // Step 2: Connect to chat server
-                debug(DEBUG_NORMAL, "Connecting to chat server at " + chatServerAddress + ":" + chatServerPort);
-                client.setChatServer(new Socket(chatServerAddress, chatServerPort));
-                client.setOut(new PrintWriter(client.getChatServer().getOutputStream(), true)); // autoFlush = true
-                client.setIn(new BufferedReader(new InputStreamReader(client.getChatServer().getInputStream())));
-                client.setConnected(true);
-
-                ClientServerMessage registration = new ClientServerMessage(client.getUsername(), "server", -1, "");
-                registration.setCommand("REGISTER");
-                client.getOut().println(registration.toJson());
-
-                debug(DEBUG_BASIC, "Successfully connected to chat server");
-                // System.out.println("CONNECTED");
-            } catch (IOException e) {
-                debug(DEBUG_BASIC, "Connection error: " + e.getMessage());
-                throw e;
-            } catch (Exception e) {
-                System.err.println("Error parsing chat server address: " + e.getMessage());
+                Thread.sleep(5000); // pause 5s before retrying
+                substrings = registerWithAddressingServer();
             }
+            System.out.println();
+            if (client.isTerminated()) return;
+            Long serverPid = Long.parseLong(substrings[0]);
+            String chatServerAddress = substrings[1];
+            int chatServerPort = Integer.parseInt(substrings[2]);
+
+            // Step 2: Connect to chat server
+            debug(DEBUG_NORMAL, "Attempting connection to chat server at " + chatServerAddress + ":" + chatServerPort);
+            client.setChatServer(new Socket(chatServerAddress, chatServerPort));
+            client.setOut(new PrintWriter(client.getChatServer().getOutputStream(), true)); // autoFlush = true
+            client.setIn(new BufferedReader(new InputStreamReader(client.getChatServer().getInputStream())));
+            client.setConnected(true);
+
+            ClientServerMessage registration = new ClientServerMessage(client.getUsername(), "server", -1, "");
+            registration.setCommand("REGISTER");
+            client.getOut().println(registration.toJson());
+
+            debug(DEBUG_BASIC, "Successfully connected to chat server");
+            if (DebugLogger.getDebugLevel() < DEBUG_BASIC) {
+                System.out.print("Connection successful - entering chatroom...\n");
+            }
+            Thread.sleep(400);
+        } catch (IOException e) {
+            debug(DEBUG_BASIC, "Connection error: " + e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            System.err.println("Error parsing chat server address: " + e.getMessage());
         }
     }
 
@@ -287,7 +296,7 @@ public class ConnectionManager {
                 return substrings;
 
             } else {
-                System.out.println("ACK message indicated there were no chat servers available.");
+                debug(DEBUG_NORMAL, "Registration ACK from PRIMARY indicated there are chat servers available (NoHost).");
                 return null;
             }
         }

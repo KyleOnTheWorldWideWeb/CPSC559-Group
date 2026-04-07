@@ -158,7 +158,7 @@ class AddressingServerHandler implements ConnectionHandler {
             ChatServer.setRegistered(true);
             key.selector().wakeup(); // Wake up the selector to check the registered flag
 
-            debug(DEBUG_BASIC, "[ADDR_SERVER] Registration successful — assigned PID: " + newID);
+            debug(DEBUG_BASIC, String.format("\n[ADDR_SERVER] Registration successful — assigned PID: %d\n", newID));
         } catch (NumberFormatException e) {
             debug(DEBUG_BASIC, "[ADDR_SERVER] Failed to parse PID from ACK payload: " + message.getPayload());
         }

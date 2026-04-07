@@ -432,7 +432,7 @@ public class AddressingServer {
 
         this.chatServerRegistry = new ChatServerRegistry();
         this.chatServerManager = new ChatServerManager(chatServerRegistry);
-        this.clientManager = new ClientManager(chatServerRegistry);
+        this.clientManager = new ClientManager(chatServerRegistry, chatServerManager);
 
         this.addrServerRegistry = new AddrServerRegistry(this);
         this.peerManager = new PeerManager(this);

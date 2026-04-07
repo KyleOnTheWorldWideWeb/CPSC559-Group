@@ -333,8 +333,6 @@ public class ChatServer {
             }
         }
 
-        debug(DEBUG_BASIC, String.format("Chat Server registered with assigned PID: %d", PID));
-
         // Begin Heartbeat monitoring (it has a built-in delay to account for network initialization).
         Thread heartbeatThread = new Thread(new HeartbeatMonitor(connectedPeers));
         heartbeatThread.setDaemon(true);

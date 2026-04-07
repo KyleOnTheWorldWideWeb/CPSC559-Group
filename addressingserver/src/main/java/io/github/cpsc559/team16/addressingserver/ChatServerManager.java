@@ -289,4 +289,7 @@ public class ChatServerManager {
     }
 
 
+    public boolean hasActiveConnection(Long pid) {
+        return this.getChannelByPID(pid) != null;
+    }
 }

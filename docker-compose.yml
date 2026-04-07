@@ -8,14 +8,14 @@ services:
   # Service for the initial Primary Addressing Server
   addressingserver:
     image: addressing-server:dev
-    profiles: [ "addressingserver", "main-single" ]
+    profiles: [ "addressingserver", "all" ]
     build:
       context: .
       dockerfile: Dockerfile.addressingserver
     restart: on-failure
     environment:
       # Defaults to hardcoded values if no .env file is present
-      - AS_DEBUG_LEVEL={AS_DEBUG_LEVEL:-3}
+      - AS_DEBUG_LEVEL=${AS_DEBUG_LEVEL:-3}
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
       - AS_REPLICA_PORT=${AS_REPLICA_PORT:-49801}
       - AS_CHATSERVER_PORT=${AS_CHATSERVER_PORT:-49802}
@@ -31,12 +31,6 @@ services:
       - chat_network
     volumes:
       - ./data:/shared
-#    healthcheck:
-#      test: [ "CMD", "sh", "/healthcheck.sh" ]
-#      interval: 30s
-#      timeout: 10s
-#      retries: 3
-#    restart: on-failure
 
   # Service for Replica addressing servers
   addressingserver-backup:
@@ -49,7 +43,7 @@ services:
 
   chatserver:
     image: chat-server:dev
-    profiles: [ "chatserver" ]
+    profiles: [ "chatserver", "all"]
     build:
       context: .
       dockerfile: Dockerfile.chatserver
@@ -57,7 +51,7 @@ services:
       - 30100-30200:2424
       - 30201-30300:2425
     environment:
-      - CS_DEBUG_LEVEL={CS_DEBUG_LEVEL:-3}
+      - CS_DEBUG_LEVEL=${CS_DEBUG_LEVEL:-3}
       - CS_CLIENT_PORT=${CS_CLIENT_PORT:-2424}
       - CS_PEER_PORT=${CS_PEER_PORT:-2425}
       - DEBUG_LEVEL=${DEBUG_LEVEL:-1}
@@ -68,10 +62,12 @@ services:
 
   client:
     image: client:dev
-    profiles: [ "client" ]
+    profiles: [ "client", "all" ]
     build:
       context: .
       dockerfile: Dockerfile.client
+      tags:
+        - "client:dev"
     ports:
       - "30301:30000"
     environment:

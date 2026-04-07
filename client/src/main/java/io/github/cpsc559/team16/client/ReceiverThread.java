@@ -148,7 +148,6 @@ public class ReceiverThread extends Thread {
                                 }
                             }
                             if (msg.getCommand().equals("REGISTER")) {
-                                debug(DEBUG_BASIC, "Successfully registered with username: " + msg.getSender());
                                 client.getAwaitingAck()
                                         .removeIf(pendingMsg -> pendingMsg.getMessageId().equals(msg.getMessageId()));
 
@@ -187,6 +186,7 @@ public class ReceiverThread extends Thread {
                                     displayedMessageIds.add(msg.getMessageId());
                                 }
                             } else {
+                                debug(DEBUG_BASIC, "Received chat message from " + msg.getSender());
                                 client.getMsgLog().add(msg);
                                 if (!displayedMessageIds.contains(msg.getMessageId())) {
                                     client.getDisplayLog().add(msg);

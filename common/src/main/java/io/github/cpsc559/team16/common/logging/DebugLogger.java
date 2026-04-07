@@ -33,6 +33,10 @@ public class DebugLogger {
         currentDebugLevel = level;
     }
 
+    public static int getDebugLevel() {
+        return currentDebugLevel;
+    }
+
     /*
      * Debug level constants:
      * Defaults to 1 (BASIC) if not specified.

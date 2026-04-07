@@ -107,8 +107,8 @@ public class InputThread extends Thread {
          * </ul>
          * </p>
          */
-        @Override
-        public void run() {
+    public void run() {
+        try {
             while (!client.isTerminated()) {
                 try {
                     String msgContents = lineReader.readLine();
@@ -165,14 +165,22 @@ public class InputThread extends Thread {
                     }
                 } catch (UserInterruptException e) {
                     if (!client.isTerminated()) {
-                        debug(DEBUG_NORMAL, "Input interrupted");
+                        debug(DEBUG_NORMAL, "[INPUT THREAD] Input interrupted");
+                    } else {
+                        debug(DEBUG_BASIC, "User interrupted input (Ctrl+C).");
                     }
+                    client.shutdown();
                     break;
                 } catch (Exception e) {
                     debug(DEBUG_NORMAL, "Input thread error: " + e.getMessage());
                     break;
                 }
             }
+        } finally {
+            // Moved outside the while loop so it only fires ONCE upon thread exit
+            debug(DEBUG_DETAILED, "InputThread releasing shutdown latch.");
             client.getShutdownLatch().countDown();
         }
+    }
+
     }

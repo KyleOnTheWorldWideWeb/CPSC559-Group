@@ -418,28 +418,40 @@ public class Client {
      *                              connection.
      */
     public void run() {
-        debug(DEBUG_BASIC, "Starting client...");
+        debug(DEBUG_BASIC, "Starting main execution loop...");
         terminate = false;
 
         // Stage 1: Discovery Phase
-        int discoveryAttempts = 0;
+        int discoveryAttempts = 1;
         while (!terminate && !refreshPrimaryDetails()) {
             discoveryAttempts++;
-            debug(DEBUG_BASIC, "Waiting for Addressing Server network details (Attempt " + discoveryAttempts + ")...");
+
+            // Developer output
+            debug(DEBUG_NORMAL, "Resolving PRIMARY addressing server network configuration... Attempt " + discoveryAttempts);
+            // User output
+            if (DebugLogger.getDebugLevel() < DEBUG_BASIC) {
+                System.out.print("\r[STATUS] Network discovery... (Attempt " + discoveryAttempts + ") [Ctrl+C to Quit]");
+            }
+
             try {
                 Thread.sleep(2000);
             } catch (InterruptedException e) {
                 terminate = true;
+                Thread.currentThread().interrupt();
             }
         }
-        if (terminate) return;
+        if (terminate) {
+            System.out.println("\n[SYSTEM] Discovery cancelled. Shutting down...");
+            return;
+        }
+        System.out.println();
         debug(DEBUG_BASIC, "Found PRIMARY Addressing Server at " + primaryHostAddress + ":" + asPort);
 
         // Stage 2: Connection Phase
         try {
             connectionManager.connect();
             // Initialize and start worker threads
-            debug(DEBUG_DETAILED, "Creating client threads");
+            debug(DEBUG_DETAILED, "Creating client threads...");
             inputThread = new InputThread(this, lineReader);
             outputThread = new OutputThread(this, lineReader);
             senderThread = new SenderThread(this);
@@ -450,7 +462,7 @@ public class Client {
             senderThread.start();
             receiverThread.start();
 
-            debug(DEBUG_BASIC, "Client threads started successfully");
+            debug(DEBUG_DETAILED, "Client threads started successfully.");
 
             // Main application loop
             while (!terminate) {
@@ -578,17 +590,27 @@ public class Client {
         // Signal shutdown to all threads
         shutdownThreads();
 
+        // Close the socket so that the receiver thread is interrupted.
         try {
+            if (chatServer != null && !chatServer.isClosed()) {
+                chatServer.close();
+                chatServer = null;
+                debug(DEBUG_DETAILED, "Socket closed to unblock receiver");
+            }
+        } catch (IOException e) {
+            debug(DEBUG_DETAILED, "Error closing socket: " + e.getMessage());
+        }
+
+        try {
+            if (lineReader != null) {
+                lineReader.getTerminal().close();
+            }
+
             // Wait for all threads to complete (with timeout)
             if (!shutdownLatch.await(5, TimeUnit.SECONDS)) {
                 debug(DEBUG_NORMAL, "Shutdown timeout - forcing exit");
             }
 
-            // Clean up resources
-            if (chatServer != null) {
-                chatServer.close();
-                chatServer = null;
-            }
             if (in != null) {
                 in.close();
                 in = null;
@@ -597,17 +619,15 @@ public class Client {
                 out.close();
                 out = null;
             }
-            if (lineReader != null) {
-                lineReader.getTerminal().close();
-            }
             debug(DEBUG_NORMAL, "All resources closed");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             debug(DEBUG_NORMAL, "Shutdown interrupted");
         } catch (IOException e) {
-            debug(DEBUG_NORMAL, "Error during shutdown: " + e.getMessage());
+            debug(DEBUG_NORMAL, "Cleanup error: " + e.getMessage());
         }
     }
+
 
     /**
      * Main entry point for the client application.
@@ -650,11 +670,10 @@ public class Client {
      * @param args Command line arguments (not used in this implementation).
      */
     public static void main(String[] args) {
-        String debugEnv = System.getenv().getOrDefault("CLIENT_DEBUG_LEVEL", "2");
+        String debugEnv = System.getenv().getOrDefault("CLIENT_DEBUG_LEVEL", "0");
         int debugLevel = Integer.parseInt(debugEnv);
         setDebugLevel(debugLevel);
-        System.out.println("DEBUG SYSTEM INITIALIZED TO LEVEL: " + debugLevel);
-        debug(DEBUG_BASIC, "Starting client application");
+        debug(DEBUG_BASIC, "DEBUG SYSTEM INITIALIZED TO LEVEL: " + debugLevel);
 
         // Initialize terminal for username input
         Terminal terminal = null;
@@ -664,8 +683,20 @@ public class Client {
             terminal = TerminalBuilder.builder().system(true).build();
             lineReader = LineReaderBuilder.builder().terminal(terminal).build();
 
-            // Prompt the user for a username
-            System.out.print("Enter your username: ");
+            // Print splash and prompt the user for their username
+            System.out.println("================================================================");
+            System.out.println("  DISTRIBUTED CHAT SYSTEM v1.0.4 - [Client Node]                ");
+            System.out.println("================================================================");
+
+            try {
+                System.out.print("Initializing Chat Client...");
+                Thread.sleep(400);
+                System.out.println(" DONE");
+
+                System.out.print("Please enter your username: ");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             username = lineReader.readLine().trim();
 
             // If no username is provided, fall back to "Anonymous"
@@ -678,7 +709,6 @@ public class Client {
         } catch (Exception e) {
             debug(DEBUG_BASIC, "Error reading username, using default: Anonymous");
         }
-
 
         debug(DEBUG_NORMAL, String.format("Client configuration - Username: %s", username));
 

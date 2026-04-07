@@ -12,9 +12,11 @@ import java.util.Optional;
 public class ClientManager {
 
     private ChatServerRegistry registry;
+    private final ChatServerManager chatServerManager;
 
-    public ClientManager(ChatServerRegistry registry) {
+    public ClientManager(ChatServerRegistry registry, ChatServerManager chatServerManager) {
         this.registry = registry;
+        this.chatServerManager = chatServerManager;
     }
 
     /**
@@ -28,7 +30,9 @@ public class ClientManager {
         return registry.getRecords().values().stream()
                 .peek(server -> System.out.printf("Checking server PID %d — Status: %s, ClientCount: %d, isFull: %b%n",
                         server.getPID(), server.getStatus(), server.getClientCount(), server.isFull()))
-                .filter(server -> server.getStatus() == ChatServerRecord.ServerStatus.ACTIVE && !server.isFull())
+                .filter(server -> server.getStatus() == ChatServerRecord.ServerStatus.ACTIVE
+                        && !server.isFull()
+                        && chatServerManager.hasActiveConnection(server.getPID()))
                 .findFirst()
                 .flatMap(server -> {
                     int previousCount = server.getClientCount();

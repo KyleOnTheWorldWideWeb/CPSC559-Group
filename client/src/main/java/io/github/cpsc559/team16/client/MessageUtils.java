@@ -49,9 +49,9 @@ public class MessageUtils {
      */
     public void sendMessage(ClientServerMessage msg) {
         try {
-            debug(DEBUG_LOW_LEVEL, "Sending message: " + msg.toJson());
-            System.out.println("Sent" + msg.toJson());
-            client.getOut().println(msg.toJson());
+            String json = msg.toJson();
+            debug(DEBUG_DETAILED, "Outbound JSON: " + json);
+            client.getOut().println(json);
         } catch (Exception e) {
             debug(DEBUG_NORMAL, "Error sending message: " + e.getMessage());
             client.getMessageQueue().add(msg);

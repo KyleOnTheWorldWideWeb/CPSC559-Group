@@ -433,7 +433,6 @@ public class LeaderElectionManager {
         Long myPid = this.config.getPID();
         ConnectionCleanupManager cleanupMgr = this.server.getCleanupManager();
 
-        // Now both follow the same pattern
         this.server.getPeerManager().auditRegistryConnections(myPid, cleanupMgr);
         this.server.getChatServerManager().auditRegistryConnections(myPid, cleanupMgr);
     }
