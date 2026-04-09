@@ -73,7 +73,6 @@ services:
     environment:
       - CLIENT_DEBUG_LEVEL=${CLIENT_DEBUG_LEVEL:-3}
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
-      - CLIENT_PORT=${CLIENT_PORT:-3000}
     networks:
       - chat_network
     tty: true

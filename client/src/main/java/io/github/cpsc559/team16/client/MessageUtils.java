@@ -58,5 +58,25 @@ public class MessageUtils {
             client.getConnectionManager().reconnect();
         }
     }
+
+    /**
+     * Posts a system message to the client's display log.
+     * <p>
+     * This method appends a formatted system notification to the display log,
+     * which is then rendered by the {@link OutputThread} on the next UI refresh.
+     * The message is prefixed with "[SYSTEM]" to distinguish it from regular
+     * chat messages. Access to the display log is synchronized to prevent
+     * concurrent modification by other threads.
+     * </p>
+     *
+     * @param message the message content to display to the user
+     */
+    public void postSystemMessage(String message) {
+        synchronized (client.getDisplayLog()) {
+            ClientServerMessage msg = new ClientServerMessage("System", "all", -1, String.format("[SYSTEM] %s", message));
+            msg.setCommand("INFO");
+            client.getDisplayLog().add(msg);
+        }
+    }
     
 }

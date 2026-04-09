@@ -381,6 +381,9 @@ public class Client {
         this.messageUtils = new MessageUtils(this);
     }
 
+
+
+
     /**
      * Starts the client application. This method performs the following steps:
      * <ol>
@@ -693,7 +696,7 @@ public class Client {
                 Thread.sleep(400);
                 System.out.println(" DONE");
 
-                System.out.print("Please enter your username: ");
+                System.out.print("\nPlease enter your username: ");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -716,4 +719,7 @@ public class Client {
         Client client = new Client(username, terminal, lineReader);
         client.run();
     }
+
+
+
 }

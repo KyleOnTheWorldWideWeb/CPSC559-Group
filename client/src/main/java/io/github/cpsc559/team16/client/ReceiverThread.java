@@ -157,7 +157,7 @@ public class ReceiverThread extends Thread {
 
                                     // Add a success message to both logs
                                     ClientServerMessage successMsg = new ClientServerMessage("System", "all", -1,
-                                            "Successfully registered with username: " + msg.getSender());
+                                            "Username: " + msg.getSender() + "\n-------------------\n");
                                     successMsg.setCommand("INFO");
                                     client.getMsgLog().add(successMsg);
                                     if (!displayedMessageIds.contains(successMsg.getMessageId())) {

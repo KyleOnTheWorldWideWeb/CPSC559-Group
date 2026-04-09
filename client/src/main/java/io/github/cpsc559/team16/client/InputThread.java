@@ -110,6 +110,14 @@ public class InputThread extends Thread {
     public void run() {
         try {
             while (!client.isTerminated()) {
+                while (!client.isConnected()) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
                 try {
                     String msgContents = lineReader.readLine();
                     if (msgContents == null) {

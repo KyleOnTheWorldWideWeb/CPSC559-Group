@@ -138,7 +138,7 @@ public class OutputThread extends Thread {
             System.out.flush();
 
             // 3) Print header / status
-            System.out.println("=== Chat Client ===");
+            System.out.println("\n=== Chat Room ===");
             System.out.println("Status: " + (client.isConnected() ? "Connected" : "Disconnected"));
             System.out.println("-------------------");
 

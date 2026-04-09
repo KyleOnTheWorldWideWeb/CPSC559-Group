@@ -39,16 +39,19 @@ public class ConnectionManager {
      * Tracks the number of reconnection attempts made by the client.F
      * It is reset after a successful reconnection.
      */
-    public int reconnectTries = 0;
+    private int reconnectTries = 0;
     public int getReconnectTries() {
         return reconnectTries;
     }
 
+    private boolean inChatSession = false;
     /**
      * The maximum number of reconnection attempts allowed.
      * If this limit is reached, the client will stop attempting to reconnect.
      */
     public static final int MAX_RECONNECT_TRIES = 5;
+
+
 
     public ConnectionManager(Client client) {
         this.client = client;
@@ -113,13 +116,26 @@ public class ConnectionManager {
             client.setIn(new BufferedReader(new InputStreamReader(client.getChatServer().getInputStream())));
             client.setConnected(true);
 
+            // Send the registration message
             ClientServerMessage registration = new ClientServerMessage(client.getUsername(), "server", -1, "");
             registration.setCommand("REGISTER");
             client.getOut().println(registration.toJson());
 
-            debug(DEBUG_BASIC, "Successfully connected to chat server");
-            if (DebugLogger.getDebugLevel() < DEBUG_BASIC) {
-                System.out.print("Connection successful - entering chatroom...\n");
+            // Display message to client while connecting
+            if (DebugLogger.getDebugLevel() < DEBUG_BASIC && !inChatSession) {
+                try {
+                    System.out.print("Connecting to chatroom...");
+                    while (!client.isConnected()) {
+                        Thread.sleep(500);
+                    }
+                    System.out.println(" DONE\n");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                inChatSession = true;
+            }
+            else {
+                debug(DEBUG_BASIC, "Successfully connected to chat server.");
             }
             Thread.sleep(400);
         } catch (IOException e) {
@@ -174,12 +190,15 @@ public class ConnectionManager {
         debug(DEBUG_BASIC, "Starting reconnection process");
         client.setConnected(false);
 
+        client.getMessageUtils().postSystemMessage("[SYSTEM] Disconnected - please wait while the system attempts to reconnect...");
+
         while (reconnectTries < MAX_RECONNECT_TRIES) {
             try {
                 debug(DEBUG_NORMAL, "Reconnection attempt " + (reconnectTries + 1) + " of " + MAX_RECONNECT_TRIES);
                 connect();
                 reconnectTries = 0; // Reset counter on successful connection
                 debug(DEBUG_BASIC, "Reconnection successful");
+                client.getMessageUtils().postSystemMessage("[SYSTEM] Connection re-established.");
                 return;
             } catch (Exception e) {
                 reconnectTries++;
@@ -199,15 +218,10 @@ public class ConnectionManager {
         } catch (IOException e) {
             debug(DEBUG_BASIC, "Unable to connect to any chat server. Client shutdown.");
             // Add user-friendly error message to display log
-            synchronized (client.getDisplayLog()) {
-                ClientServerMessage errorMsg = new ClientServerMessage("System", "all", -1,
-                        "ERROR: No chat servers are currently available. Please try again later.");
-                errorMsg.setCommand("INFO");
-                client.getDisplayLog().add(errorMsg);
-            }
+            client.getMessageUtils().postSystemMessage("[SYSTEM] No chat servers are currently available. Please try again later.");
             // Give the OutputThread time to display the message
             try {
-                Thread.sleep(2000);
+                Thread.sleep(4000);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
             }
@@ -296,12 +310,10 @@ public class ConnectionManager {
                 return substrings;
 
             } else {
-                debug(DEBUG_NORMAL, "Registration ACK from PRIMARY indicated there are chat servers available (NoHost).");
+                debug(DEBUG_NORMAL, "Registration ACK from PRIMARY indicated there are no chat servers available (NoHost).");
                 return null;
             }
         }
     }
-
-
     
 }
