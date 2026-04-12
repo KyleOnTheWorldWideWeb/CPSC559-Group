@@ -68,10 +68,8 @@ services:
       dockerfile: Dockerfile.client
       tags:
         - "client:dev"
-    ports:
-      - "30301:30000"
     environment:
-      - CLIENT_DEBUG_LEVEL=${CLIENT_DEBUG_LEVEL:-3}
+      - CLIENT_DEBUG_LEVEL=${CLIENT_DEBUG_LEVEL:-0}
       - AS_CLIENT_PORT=${AS_CLIENT_PORT:-49800}
     networks:
       - chat_network

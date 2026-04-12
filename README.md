@@ -1,10 +1,30 @@
 
 ## DISTRIBUTED IRC-STYLE CHAT SYSTEM
 
-
-A fault-tolerant, horizontally scalable chat system built in Java (JDK 21),
+A fault-tolerant and scalable chat system built in Java (JDK 21),
 deployed via Docker. Designed around distributed systems principles including
 gossip-based replication, dynamic client routing, and automatic failure recovery.
+
+### Client GUI
+![Alice and Bob demonstrating fault-tolerant 
+messaging across several chat servers](docs/images/chat_log_example.jpg)
+
+
+### Background
+
+This project originated as a five-person university group project. I was solely responsible for the
+Addressing Server module and the inter-process communication protocol — including the full
+messaging layer, service discovery, replica synchronization, and consistency guarantees.
+The original leader election logic was implemented by a teammate. My other partners
+implemented the Chat Server and Client modules.
+
+After the course ended, I branched the repository and personally invested 60+ hours
+stabilizing the system — resolving fundamental bugs in leader election and failover recovery, 
+while also making significant improvements to the Chat Server and Client modules.
+
+The core architecture and feature set are unchanged from before,
+as my goal was to deliver a version that works correctly and reliably,
+fully realizing the original design.
 
 
 
@@ -13,10 +33,19 @@ gossip-based replication, dynamic client routing, and automatic failure recovery
 ---------------------------------------------------------
 
 This project implements a multi-server IRC-style chat platform where no single
-server is a point of failure. Clients connect through a centralized addressing
+server represents a point of failure. Clients connect through a centralized addressing
 layer that routes them to available chat servers. Chat servers replicate messages
-between each other automatically, and the system recovers from node failures
-without direct operator intervention.
+between each other, and the system recovers from node failures
+automatically.
+
+Both the chat server and addressing server layers scale horizontally — additional nodes 
+can be spun up to increase capacity and integrate into the live network 
+without requiring any configuration.
+
+The entire system is containerized through Docker — with Gradle handling 
+dependency resolution and builds inside the container. As a result, Docker is the 
+only prerequisite to run the system on any platform.
+
 
 ### Architecture
 
@@ -30,15 +59,22 @@ Addressing Servers
 high availability and state persistence.
 
 Chat Servers
-- Accept client connections and persist chat logs locally
+- Accept client connections and persist chat logs locally.
 - Propagate messages to peer servers using a gossip-based push-pull
-protocol with vector timestamp ordering
+protocol with vector timestamp ordering.
 
 Clients
-- Connect via a command-line styled GUI
-- Automatically reconnect and resend unacknowledged messages on
-server failure
+- Connect via a command-line style GUI.
+- Automatically reconnect to the network and resend unacknowledged messages
+when a disconnection occurs.
 
+### System Architecture Diagram
+
+---------------------------------------------------------
+
+![Steady-state diagram showing: four Chat Servers, 
+three Addressing Servers (one primary) and three clients connected 
+via the network layer](docs/images/steady-state_system_architecture.jpg)
 
 ### Key Technical Features
 
@@ -65,6 +101,7 @@ Vector timestamps maintain message ordering across all nodes without requiring a
 Used in conjunction with a gossip-based push-pull protocol, messages are efficiently 
 propagated across chat servers — ensuring a consistent view of the chat log without 
 relying on a centralized broadcast or coordinator.
+
 
 #### Message Delivery Guarantees
 
@@ -111,6 +148,11 @@ purging any nodes that failed to synchronize within a set window.
 This ensures the system transitions to a new leader with minimal disruption while 
 maintaining the integrity of the network.
 
+#### Deployable On Any Machine Running Docker
+Gradle is used in conjunction with Docker to automatically pull the dependencies 
+required to build the image for each service: addressingserver, chatserver, client.
+Individual docker containers are then spun up for process using these images, meaning that
+any platform capable of running Docker can run each component of the system.
 
 ### Tech Stack
 
@@ -123,32 +165,56 @@ maintaining the integrity of the network.
 ### How to Run the System
 
 ---------------------------------------------------------
+#### Prerequisites
+- Docker
+- Make (optional, for convenience commands)
 
-###### Build the images
 
-- Open a terminal and navigate to the systems root directory
+#### Setting the granularity of system logging
 
+- Each service has its own 'debug level' with a range of [0,5] — with a setting of five 
+providing the most verbose system reporting.
+    - These are defined as environment variables in the root directory's .env file.
+    - A setting of zero is recommended for the Client service if you intend to use the 
+     client as a chatroom.
+
+
+#### Start the network (primary addressing server, two replicas, and two chat servers)
+
+***With Make:***
 ```bash
-docker compose build
+make full-network-build
 ```
 
-
-###### Spin up the primary addressing server and two replicas:
+***Without Make:***
 ```bash
-docker compose --profile addressingserver --profile addressingserver-backup --scale addressingserver-backup=2 up --build
+# Build images for each service
+docker compose build --no-cache
+
+# Spin up the containers
+docker compose --profile all up -d --no-deps --scale addressingserver-backup=2 --scale chatserver=2 --scale client=0
 ```
 
-- Deploy two chat servers:
+#### Connecting to the chatroom
+
+Each client uses an interactive terminal for its GUI. Open a new terminal, navigate to
+the root directory, and run:
+
 ```bash
-docker compose --profile chatserver up -d --scale chatserver=2
+docker compose run --rm client
 ```
 
-- Each client uses an interactive terminal for its GUI; to initiate a chat-room with two participants open two terminals
-  and enter the following command in each:
-```bash
-docker compose run client
-```
+### Known Limitations
 
+Service discovery is implemented via a shared Docker volume;
+only the Primary Addressing Server has write access,
+while all other services read from it to locate the Primary during startup and failover.
+Writes are performed atomically using a write-and-rename pattern,
+preventing dirty reads after leader elections. 
+
+The current constraint is that the shared volume requires all nodes to run within the same 
+Docker network — in a production multi-host environment this would be replaced with a 
+DNS A record or an external service discovery layer.
 
 --------------------------------------------------------------------------------
 DESIGN DOCUMENT
