@@ -1,16 +1,23 @@
 
 ## DISTRIBUTED IRC-STYLE CHAT SYSTEM
 
+---------------------------------------------------------
+
 A fault-tolerant and scalable chat system built in Java (JDK 21),
 deployed via Docker. Designed around distributed systems principles including
 gossip-based replication, dynamic client routing, and automatic failure recovery.
 
 ### Client GUI
+
+---------------------------------------------------------
+
 ![Alice and Bob demonstrating fault-tolerant 
 messaging across several chat servers](docs/images/chat_log_example.jpg)
 
 
 ### Background
+
+---------------------------------------------------------
 
 This project originated as a five-person university group project. I was solely responsible for the
 Addressing Server module and the inter-process communication protocol — including the full
@@ -74,7 +81,7 @@ when a disconnection occurs.
 
 ![Steady-state diagram showing: four Chat Servers, 
 three Addressing Servers (one primary) and three clients connected 
-via the network layer](docs/images/steady-state_system_architecture.jpg)
+via the network layer](docs/images/steady-state_system_architecture_445x573.jpg)
 
 ### Key Technical Features
 
@@ -215,14 +222,3 @@ preventing dirty reads after leader elections.
 The current constraint is that the shared volume requires all nodes to run within the same 
 Docker network — in a production multi-host environment this would be replaced with a 
 DNS A record or an external service discovery layer.
-
---------------------------------------------------------------------------------
-DESIGN DOCUMENT
---------------------------------------------------------------------------------
-
-A full system design document including sequence diagrams, architecture
-diagrams, and fault tolerance specifications is available at:
-
-[Add link to PDF once updated and improved]
-
-================================================================================
