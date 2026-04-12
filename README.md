@@ -17,20 +17,25 @@ messaging across several chat servers](docs/images/chat_log_example.jpg)
 
 ---------------------------------------------------------
 
-This project originated as a five-person university group project. I was solely responsible for the
-Addressing Server module and the inter-process communication protocol — including the full
-messaging layer, service discovery, replica synchronization, and consistency guarantees.
-The original leader election logic was implemented by a teammate. My other partners
-implemented the Chat Server and Client modules.
+
+This project originated as a five-person university group project for CPSC 559
+(Distributed Systems). My core responsibilities were:
+
+- The entire Addressing Server module (excluding LeaderElectionManager)
+- The inter-process communication protocol — including the full messaging layer,
+  service discovery, replica synchronization, and consistency guarantees
+- The common module (all classes except ChatLog and ChatLogUpdate)
+
+My teammates implemented the Chat Server and Client modules, as well as the original 
+LeaderElectionManager class (which I substantially reworked in this fork).
 
 After the course ended, I branched the repository and personally invested 60+ hours
 stabilizing the system — resolving fundamental bugs in leader election and failover recovery, 
 while also making significant improvements to the Chat Server and Client modules.
 
 The core architecture and feature set are unchanged from before,
-as my goal was to deliver a version that works correctly and reliably,
-fully realizing the original design.
-
+as my goal was to fully realize the original design by
+delivering a version that works correctly and reliably.
 
 
 ### Overview
@@ -79,7 +84,7 @@ when a disconnection occurs.
 
 ![Steady-state diagram showing: four Chat Servers, 
 three Addressing Servers (one primary) and three clients connected 
-via the network layer](docs/images/steady-state_system_architecture_445x573.jpg)
+via the network layer](docs/images/steady-state_system_architecture_487x695.jpg)
 
 ### Key Technical Features
 
