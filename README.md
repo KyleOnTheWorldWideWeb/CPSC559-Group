@@ -1,7 +1,6 @@
 
 ## DISTRIBUTED IRC-STYLE CHAT SYSTEM
 
----------------------------------------------------------
 
 A fault-tolerant and scalable chat system built in Java (JDK 21),
 deployed via Docker. Designed around distributed systems principles including
